@@ -10,11 +10,8 @@
 
 import type { NextRequest } from "next/server";
 import { bytesDeMiniatura } from "@/lib/google";
+import { tamanoPermitido } from "@/lib/miniaturas";
 import { archivoAutorizado } from "@/lib/permisos";
-
-/** Tamaños que aceptamos. Lista cerrada para que nadie pida imágenes enormes. */
-const TAMANOS = [220, 400, 800, 1200] as const;
-const TAMANO_POR_DEFECTO = 400;
 
 const sinDetalle = (mensaje: string, codigo: number) =>
   new Response(mensaje, { status: codigo, headers: { "Content-Type": "text/plain" } });
@@ -22,8 +19,7 @@ const sinDetalle = (mensaje: string, codigo: number) =>
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/miniatura/[fileId]">) {
   const { fileId } = await ctx.params;
 
-  const pedido = Number(req.nextUrl.searchParams.get("px"));
-  const px = (TAMANOS as readonly number[]).includes(pedido) ? pedido : TAMANO_POR_DEFECTO;
+  const px = tamanoPermitido(req.nextUrl.searchParams.get("px"));
 
   // Autorización antes que nada. Si no está dentro de una carpeta que
   // administramos, se responde igual que si no existiera: no confirmamos

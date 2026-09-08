@@ -101,3 +101,34 @@ estudio ya usa.
   almacenamiento de Supabase; son unos 24 MB al mes y son descartables.
 - **Autorización por persona.** `permisos.ts` todavía no sabe quién está
   mirando, porque no hay usuarios. Es lo primero que se suma cuando existan.
+
+---
+
+## 8. La llave se normaliza siempre, venga como venga.
+
+La misma llave privada llega de dos formas distintas según dónde corra la
+aplicación:
+
+- **En la máquina**, desde `.env.local` entre comillas, con saltos de línea de
+  verdad. Next los interpreta al leer el archivo.
+- **En Netlify**, pegada en un panel web, donde lo normal es escribirla en una
+  sola línea con la secuencia `\n` escrita literalmente.
+
+`normalizarLlave()` contempla las dos. Convertir es inofensivo cuando no hay
+nada que convertir, así que se hace siempre y no según el entorno.
+
+**Por qué está anotado:** este bug estuvo en el código y no se notaba, porque en
+la máquina funcionaba igual. Hubiera aparecido recién en el primer despliegue,
+con un error de Google que no explica nada. Lo delató un aviso del linter sobre
+un import sin usar.
+
+## 9. Las pruebas verifican el caso que rompe, no el que anda.
+
+La primera versión de la prueba de la llave pasaba sin probar nada: ponía
+saltos de línea reales y esperaba saltos de línea reales. Confirmaba que la
+función no hacía daño, no que hiciera su trabajo.
+
+Ahora usa `String.raw` para construir una llave con la secuencia `\n` literal
+—la forma que llega desde Netlify— y verifica que las dos formas terminen
+idénticas. Una prueba que solo confirma el camino feliz da confianza falsa, que
+es peor que no tener prueba.

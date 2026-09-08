@@ -2,6 +2,8 @@
 // Todo esto corre SOLO en el servidor: la llave nunca llega al navegador.
 
 import crypto from "node:crypto";
+import { credencialesDeGoogle } from "@/lib/entorno";
+import { urlConTamano } from "@/lib/miniaturas";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DRIVE = "https://www.googleapis.com/drive/v3";
@@ -20,11 +22,7 @@ export async function tokenDeGoogle(): Promise<string> {
   const ahora = Math.floor(Date.now() / 1000);
   if (cache && cache.vence > ahora + 60) return cache.token;
 
-  const email = process.env.GOOGLE_SA_EMAIL;
-  const llave = process.env.GOOGLE_SA_KEY?.replace(/\n/g, "\n");
-  if (!email || !llave) {
-    throw new Error("Faltan GOOGLE_SA_EMAIL o GOOGLE_SA_KEY en las variables de entorno.");
-  }
+  const { email, llave } = credencialesDeGoogle();
 
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = b64url(
@@ -96,9 +94,6 @@ export async function moverArchivo(fileId: string, desde: string, hacia: string)
   return data;
 }
 
-// Pide una miniatura más grande que la de 220px que viene por defecto.
-export const miniatura = (link: string | undefined, px = 400) =>
-  link ? link.replace(/=s\d+$/, "") + `=s${px}` : null;
 
 export type MetadatosArchivo = {
   id: string;
@@ -131,7 +126,7 @@ export async function bytesDeMiniatura(
   px: number
 ): Promise<{ bytes: ArrayBuffer; tipo: string }> {
   const token = await tokenDeGoogle();
-  const url = link.replace(/=s\d+(-c)?$/, "") + `=s${px}`;
+  const url = urlConTamano(link, px);
 
   const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
   if (!r.ok) throw new Error(`Google devolvió ${r.status} al pedir la miniatura.`);
