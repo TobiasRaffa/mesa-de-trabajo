@@ -132,3 +132,46 @@ Ahora usa `String.raw` para construir una llave con la secuencia `\n` literal
 —la forma que llega desde Netlify— y verifica que las dos formas terminen
 idénticas. Una prueba que solo confirma el camino feliz da confianza falsa, que
 es peor que no tener prueba.
+
+## 10. La máquina de estados vive aparte de todo lo demás.
+
+`src/dominio/pieza.ts` no sabe nada de Drive, ni de la base de datos, ni de
+React. Recibe una pieza y un evento, y devuelve la pieza nueva o el motivo por
+el que no se puede.
+
+Está separada porque es la única parte que no puede estar mal. Las pantallas se
+rediseñan y la base de datos se cambia, pero si estas reglas fallan el portal
+miente sobre en qué estado está un trabajo — que es justo lo que vino a
+arreglar.
+
+Devuelve un motivo en vez de fallar en silencio, así una pantalla puede
+explicar por qué un botón no está disponible en lugar de esconderlo.
+
+### Las cuatro reglas que no se pueden romper
+
+1. **Aprobar es inmediato y por pieza.** No espera al cierre de la ronda ni a
+   las demás piezas de la entrega. Es lo que permite publicar un posteo el
+   jueves con el resto del mes todavía en revisión.
+2. **Los pedidos de cambio esperan al cierre.** La agencia recibe la devolución
+   completa de una vez, no de a goteo.
+3. **El plazo avisa, no decide.** No existe un evento de vencimiento: que se
+   cumpla el plazo dispara un aviso, nunca un cambio de estado.
+4. **Nada se aprueba solo.** La única forma de llegar a «final» es que una
+   persona apruebe.
+
+## 11. Las pruebas se prueban rompiendo el código a propósito.
+
+Escritas las pruebas de la máquina de estados, se rompieron tres reglas a mano
+para ver si alguna prueba fallaba. Dos las detectaron. **La tercera no.**
+
+Se podía hacer que cerrar la ronda aprobara todo lo que el cliente no había
+decidido —o sea, romper la regla más importante— y las 61 pruebas seguían en
+verde. El agujero era justamente donde más dolía.
+
+Ahora hay un grupo entero de pruebas dedicado a eso, incluida una que recorre
+todos los estados con todos los eventos que no son «aprobar» y verifica que
+ninguno pueda terminar en «final».
+
+**La costumbre que queda:** después de escribir pruebas de algo importante,
+romper el código a propósito y confirmar que fallan. Un conjunto de pruebas en
+verde no significa nada hasta que se comprueba que sabe ponerse en rojo.
