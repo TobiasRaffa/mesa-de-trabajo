@@ -10,6 +10,6 @@ export default defineConfig({
     // Por ahora todo lo que probamos corre en el servidor. Cuando haya
     // componentes que probar se agrega un entorno de navegador aparte.
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "supabase/**/*.test.ts"],
   },
 });

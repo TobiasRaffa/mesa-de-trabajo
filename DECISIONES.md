@@ -228,3 +228,38 @@ persona. El link no necesita repetirlo.
 
 Además, las páginas del portal van con `referrer: no-referrer`, así la
 dirección no viaja a ningún sitio que se abra desde adentro.
+
+## 14. El filtro por cliente se aplica por construcción, no por memoria.
+
+El link apunta a un proyecto, el proyecto pertenece a un cliente, y ese cliente
+tiene su tag. Comprobar el tag contra *ese* cliente y servir *ese* proyecto es
+toda la regla. No hace falta nada más.
+
+Lo que sí hace falta es que la regla no se pueda olvidar. En vez de acordarse
+de escribir «y que sea de este cliente» en cada consulta del portal, las
+consultas salen de una función que ya lo trae puesto: **no se puede omitir el
+filtro porque no se escribe**.
+
+Se descartó una alternativa más elaborada —darle al cliente un permiso firmado
+y que la base de datos rechazara todo lo demás— porque para un portal que hace
+un puñado de consultas era más maquinaria de la que compraba. Si el portal
+crece mucho, se puede agregar después sin cambiar nada de lo anterior.
+
+La base igual hace su parte donde sale gratis: un link con proyecto lleva una
+restricción compuesta que **impide guardar la fila** si ese proyecto no es de
+ese cliente. No es un comentario pidiendo cuidado: es una fila rechazada.
+
+## 15. Las migraciones se verifican sin base de datos.
+
+Sin Docker no se puede levantar Postgres localmente, así que el esquema se
+escribiría a ciegas y el primer error aparecería a mitad de una migración, con
+la base ya medio construida.
+
+`supabase/migraciones.test.ts` se lo pasa al **analizador de verdad de
+Postgres**, compilado a WebAssembly. Corre con `npm test`, tarda medio segundo
+y no necesita nada instalado.
+
+No verifica que las tablas tengan sentido — eso es trabajo nuestro. Verifica
+que ninguna migración tenga un error de escritura, y cuando lo tiene dice la
+línea. También comprueba que estén numeradas en orden y sin repetir, porque se
+aplican por nombre.
