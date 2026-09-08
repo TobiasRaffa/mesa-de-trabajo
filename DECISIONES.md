@@ -263,3 +263,27 @@ No verifica que las tablas tengan sentido — eso es trabajo nuestro. Verifica
 que ninguna migración tenga un error de escritura, y cuando lo tiene dice la
 línea. También comprueba que estén numeradas en orden y sin repetir, porque se
 aplican por nombre.
+
+## 16. «Nada se borra» dejó de ser una promesa.
+
+En `002_accesos.sql` no hay una sola política de borrado. No es un olvido: con
+las reglas de acceso activas, lo que no se abre queda cerrado, así que **la
+base de datos rechaza cualquier borrado, de cualquier tabla, para cualquiera**
+— incluida una administradora.
+
+Un proyecto que se cae pasa a «cancelado». Un link que ya no sirve se
+desactiva. Una aprobación no se toca nunca.
+
+Lo mismo con el registro de eventos y con las decisiones: se leen y se agregan,
+pero no hay política de actualización. Nadie puede reescribir la historia, que
+es lo único que hace que un registro sirva para algo.
+
+## 17. El alcance de una persona se decide en una sola función.
+
+`ve_proyecto(id)` contesta si alguien puede ver un proyecto, y casi todas las
+reglas de acceso la usan. Hoy dice: el equipo ve todo, un colaborador externo
+solo lo que se le asignó.
+
+Cambiarla ahí cambia el alcance en todo el sistema a la vez. Es el equivalente
+en la base de datos de tener los permisos en un solo módulo del código: si la
+regla estuviera copiada en cada tabla, alcanzaría con olvidarse en una.
