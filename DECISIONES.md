@@ -175,3 +175,56 @@ ninguno pueda terminar en «final».
 **La costumbre que queda:** después de escribir pruebas de algo importante,
 romper el código a propósito y confirmar que fallan. Un conjunto de pruebas en
 verde no significa nada hasta que se comprueba que sabe ponerse en rojo.
+
+## 12. El portal y la administración no se tocan, y lo verifica una herramienta.
+
+```
+src/
+  dominio/   las reglas del negocio, sin lados
+  lib/       plomería (Drive, entorno), sin lados
+  portal/    lo que ve el cliente
+  admin/     lo que ve la agencia
+```
+
+Los dos mundos pueden usar `dominio` y `lib`. Lo que no pueden es tocarse entre
+ellos: **comparten información a través de la base de datos, no llamándose
+funciones**.
+
+Y no es una convención que haya que recordar. Está escrito como regla en
+`eslint.config.mjs`, así que si alguien la cruza no compila:
+
+| Quién intenta qué | Resultado |
+|---|---|
+| `portal/` importa de `admin/` | error |
+| `admin/` importa de `portal/` | error |
+| `dominio/` importa de `lib/` o de cualquier mundo | error |
+
+Las tres se probaron escribiendo el archivo que las viola y confirmando que el
+linter las rechaza.
+
+**Por qué el dominio tampoco puede importar nada:** si dependiera de Drive o de
+la base de datos, dejaría de poder probarse sin infraestructura — y eso es todo
+su valor. Lo que necesite de afuera se le pasa como parámetro.
+
+**Una sola aplicación y no dos.** Dos despliegues separados darían un poco más
+de aislamiento, a cambio de duplicar configuración, mantenimiento y costos. Con
+la frontera vigilada por herramientas y las reglas de acceso en la base de
+datos, el aislamiento que importa ya está. Y si alguna vez hiciera falta
+separarlas de verdad, mover `portal/` a su propio proyecto es mecánico, porque
+ya no depende de nada del otro lado.
+
+## 13. La dirección del cliente no dice de quién es.
+
+El link es `/t/<token al azar>` y nada más. Sin nombre de cliente ni de
+proyecto adentro.
+
+La tentación es hacerlo legible —`/cafeotono/K7fP2…`— para que se reconozca en
+WhatsApp. Pero como el segundo factor es el tag del cliente, **poner su nombre
+en la dirección es escribir la clave al lado de la cerradura**: quien reciba el
+link reenviado lee el nombre y prueba lo obvio.
+
+El mensaje de WhatsApp igual va a decir de qué se trata, porque lo escribe una
+persona. El link no necesita repetirlo.
+
+Además, las páginas del portal van con `referrer: no-referrer`, así la
+dirección no viaja a ningún sitio que se abra desde adentro.
