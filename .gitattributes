@@ -1,0 +1,3 @@
+# Normaliza los finales de línea. Sin esto, en Windows cada archivo aparece
+# modificado entero al cambiarle una línea, y las diferencias se vuelven ilegibles.
+* text=auto eol=lf
