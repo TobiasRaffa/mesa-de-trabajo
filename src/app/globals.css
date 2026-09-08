@@ -1,8 +1,124 @@
 @import "tailwindcss";
 
-/* Por ahora un solo tema, claro. Cuando se diseñen las pantallas de verdad
-   decidimos si vale la pena soportar el modo oscuro del sistema. */
+/* Tailwind descubre solo qué archivos mirar, pero se saltea las carpetas con
+   paréntesis o corchetes -- que en Next son justamente los grupos de rutas,
+   `(portal)`, y las rutas dinámicas, `[token]`. Sin esta línea, las clases que
+   solo se usan ahí no se generan: la pantalla se ve a medio armar y nada avisa.
+   Se lo decimos explícitamente. */
+@source "../";
+
+/* ============================================================================
+   Sistema visual
+   ============================================================================
+
+   Una regla manda sobre todas las demás: **lo más fuerte de la pantalla tiene
+   que ser el trabajo del cliente**, no la aplicación. Los bocetos son piezas
+   de diseño con sus propios colores; si la interfaz compite, la pieza pierde.
+
+   De ahí salen las decisiones:
+
+     · Neutros apenas girados al azul, en vez de grises puros. Un gris puro al
+       lado de una pieza cálida se ve sucio.
+     · Un solo acento, para lo que se puede tocar.
+     · Los colores de estado (esperando, aprobado, con cambios) son señales,
+       no decoración: no se usan para nada más.
+     · Tipografía del sistema. En un teléfono con datos móviles, una fuente
+       que hay que descargar es texto que tarda en aparecer. Esto es una
+       herramienta, no un folleto.
+   ============================================================================ */
+
+@theme {
+  /* Neutros ------------------------------------------------------------- */
+  --color-papel: #fafaf8;
+  --color-lienzo: #ffffff;
+  --color-hueco: #f2f3f0;
+  --color-tinta: #16181d;
+  --color-tinta-suave: #3d424e;
+  --color-apagado: #666d7c;
+  --color-linea: #e2e3df;
+  --color-linea-tenue: #eeefeb;
+
+  /* Acento: lo que se puede tocar --------------------------------------- */
+  --color-acento: #0f5ea8;
+  --color-acento-hover: #0a4275;
+  --color-acento-tenue: #e4f0fa;
+
+  /* Estados: señales, no adorno ----------------------------------------- */
+  --color-espera: #b23a26;
+  --color-espera-tenue: #fbeae6;
+  --color-listo: #256b4e;
+  --color-listo-tenue: #e4f1ea;
+  --color-mirando: #0f5ea8;
+  --color-mirando-tenue: #e4f0fa;
+
+  /* Tipografía ---------------------------------------------------------- */
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* Una escala corta. Menos tamaños, más consistencia. */
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1.4;
+  --text-menudo: 0.8125rem;
+  --text-menudo--line-height: 1.45;
+  --text-normal: 0.9375rem;
+  --text-normal--line-height: 1.55;
+  --text-guia: 1.0625rem;
+  --text-guia--line-height: 1.5;
+  --text-titulo: 1.375rem;
+  --text-titulo--line-height: 1.2;
+  --text-grande: 1.75rem;
+  --text-grande--line-height: 1.15;
+
+  /* La altura mínima para que un dedo acierte sin pensar. */
+  --spacing-toque: 2.75rem;
+}
+
+/* ============================================================================
+   Base
+   ============================================================================ */
+
+html {
+  /* Sin esto, iOS agranda el texto al girar el teléfono. */
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
-  background: #ffffff;
-  color: #171717;
+  background: var(--color-papel);
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+  font-size: var(--text-normal);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+
+  /* Deja libres el borde del teléfono y la barra de gestos. */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Un contorno visible al navegar con teclado. Se ve solo cuando hace falta:
+   no aparece al tocar con el dedo ni al hacer clic. */
+:focus-visible {
+  outline: 2px solid var(--color-acento);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Nadie debería marearse por usar una herramienta de trabajo. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Los números de una columna tienen que alinearse. */
+.cifras {
+  font-variant-numeric: tabular-nums;
 }

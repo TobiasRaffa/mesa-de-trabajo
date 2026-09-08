@@ -287,3 +287,57 @@ solo lo que se le asignó.
 Cambiarla ahí cambia el alcance en todo el sistema a la vez. Es el equivalente
 en la base de datos de tener los permisos en un solo módulo del código: si la
 regla estuviera copiada en cada tabla, alcanzaría con olvidarse en una.
+
+## 18. Teléfono primero, y no como un ajuste posterior.
+
+El cliente abre el portal desde un link de WhatsApp: casi siempre va a estar en
+el teléfono. Así que las pantallas se diseñan para el teléfono y lo de la
+computadora se agrega después, no al revés.
+
+En la práctica:
+
+- Los botones miden al menos `--spacing-toque` (2,75rem), que es lo que mide un
+  dedo. Un botón más chico se falla, y en una pantalla donde se aprueba trabajo
+  fallar es caro.
+- Los botones de decisión van en una barra fija abajo: el pulgar llega sin
+  estirarse.
+- Esa barra respeta `env(safe-area-inset-bottom)`, así no queda debajo de la
+  barra de gestos del iPhone.
+- Nada depende de pasar el mouse por encima: en un teléfono no existe.
+
+## 19. Lo más fuerte de la pantalla es el trabajo, no la aplicación.
+
+Los bocetos son piezas de diseño con sus propios colores. Si la interfaz
+compite, la pieza pierde — y la pieza es lo que el cliente vino a mirar.
+
+De ahí sale todo el sistema visual: neutros apenas girados al azul (un gris
+puro al lado de una pieza cálida se ve sucio), un solo acento para lo que se
+puede tocar, y los colores de estado usados **solo** como señal. Si el verde de
+«aprobada» aparece también en un botón cualquiera, deja de significar algo.
+
+Tipografía del sistema, sin fuentes que descargar. En un teléfono con datos
+móviles, una fuente que hay que bajar es texto que tarda en aparecer. Esto es
+una herramienta, no un folleto.
+
+## 20. Hay que decirle a Tailwind dónde mirar.
+
+Tailwind descubre solo qué archivos escanear, pero **se saltea las carpetas con
+paréntesis o corchetes** — que en Next son justamente los grupos de rutas,
+`(portal)`, y las rutas dinámicas, `[token]`.
+
+O sea: exactamente donde vive el portal del cliente. Sin `@source "../"` en
+`globals.css`, las clases que solo se usan ahí no se generan, la pantalla se ve
+a medio armar y **nada avisa**: compila, no hay error, y el problema parece de
+diseño.
+
+Se descubrió porque una imagen que debía ser vertical salía como una tira de
+diecisiete píxeles de alto.
+
+## 21. Las fechas se guardan en universal y se muestran en Buenos Aires.
+
+Guardar en hora local sería cómodo hoy y un problema el día que alguien trabaje
+desde otro país, o que Argentina vuelva a mover los relojes.
+
+Y los días se cuentan **de calendario, no de veinticuatro horas**: si algo vence
+mañana a las nueve y son las once de la noche, para una persona eso es «un
+día», no «diez horas». Contar en horas diría «vence hoy», que es engañoso.
