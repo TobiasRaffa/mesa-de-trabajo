@@ -1,0 +1,9 @@
+# Netlify detecta Next.js solo y le pone el runtime que corresponde.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  # Sin esto Netlify elige su version por defecto, que puede no ser la que
+  # usamos para desarrollar. Fijarla evita que "anda en mi maquina" sea cierto.
+  NODE_VERSION = "22"
