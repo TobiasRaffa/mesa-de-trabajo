@@ -65,6 +65,23 @@ orden sin que nadie los acomode. No cuesta nada y no molesta a nadie.
 
 ## Parte 2 — El usuario robot
 
+> ### ✅ Hecho, con la cuenta de la agencia — 9/9/2026
+>
+> El robot ya existe y ya está conectado a la aplicación. Su correo es:
+>
+> ```
+> portal@mesa-de-trabajo-508117.iam.gserviceaccount.com
+> ```
+>
+> Proyecto de Google Cloud: `mesa-de-trabajo-508117`. La llave está guardada
+> fuera del proyecto, en `C:\Users\windows\claves\mesa-de-trabajo-agencia.json`.
+> Comprobado el 9/9/2026: la llave funciona y la Drive API está habilitada.
+>
+> **Falta solo el paso 7: compartirle las carpetas.** Hasta que eso pase, el
+> robot no ve nada —que es exactamente como tiene que ser—.
+>
+> Los pasos 1 a 6 quedan escritos abajo para cuando haya que rehacerlo.
+
 La aplicación no entra a Drive con la cuenta de nadie. Google deja crear un
 **usuario que no es una persona**: no tiene contraseña ni pantalla de login,
 tiene un archivito con una llave. Y tiene su propio correo, feo pero correo al
