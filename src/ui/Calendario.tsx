@@ -163,8 +163,8 @@ export function Calendario({ mes, piezas, onAbrir }: Props) {
                 aria-label={`${dia}: ${primera.nombre}, ${primera.paso}${
                   resto.length ? ` y ${resto.length} más` : ""
                 }`}
-                className="group flex min-h-24 flex-col overflow-hidden rounded-lg border border-linea bg-lienzo p-2 text-left
-                           transition-colors hover:border-acento"
+                className="group relative flex min-h-24 flex-col overflow-hidden rounded-lg border border-linea bg-lienzo p-2 text-left
+                           transition-all duration-150 hover:z-10 hover:scale-[1.12] hover:border-acento hover:shadow-lg"
               >
                 <span className="flex items-center justify-between">
                   <span
@@ -182,7 +182,7 @@ export function Calendario({ mes, piezas, onAbrir }: Props) {
                   <img
                     src={primera.miniatura}
                     alt=""
-                    className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
                 </span>
 

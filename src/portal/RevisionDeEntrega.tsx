@@ -26,7 +26,7 @@ import { aplicar, type Evento, type Pieza } from "@/dominio/pieza";
 import { Ampliada } from "@/ui/Ampliada";
 import { Boton, BotonEnlace } from "@/ui/Boton";
 import { Calendario, type PiezaEnCalendario } from "@/ui/Calendario";
-import { IconoCerrar, IconoDescargar, IconoEnviar } from "@/ui/Icono";
+import { IconoCerrar, IconoDescargar, IconoEditar, IconoEnviar } from "@/ui/Icono";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta, plazoEnPalabras } from "@/lib/fechas";
@@ -66,6 +66,8 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
   const [ampliada, setAmpliada] = useState<{ src: string; alt: string } | null>(null);
   const [confirmando, setConfirmando] = useState<null | { soloEsta?: string }>(null);
   const [descargas, setDescargas] = useState(false);
+  const [comentando, setComentando] = useState(false);
+  const [comentarioGeneral, setComentarioGeneral] = useState("");
   const [rechazo, setRechazo] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
@@ -211,6 +213,11 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Boton variante="contorno" onClick={() => setComentando(true)}>
+            <IconoEditar />
+            Comentario general
+          </Boton>
+
           <Boton
             variante="contorno"
             onClick={() => setDescargas(true)}
@@ -367,6 +374,19 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
         <Descargas piezas={aprobadas} onCerrar={() => setDescargas(false)} />
       )}
 
+      {comentando && (
+        <ComentarioGeneral
+          texto={comentarioGeneral}
+          onEscribir={setComentarioGeneral}
+          onCerrar={() => setComentando(false)}
+          onEnviar={() => {
+            setComentando(false);
+            setAviso("Le mandamos tu comentario al equipo.");
+            setComentarioGeneral("");
+          }}
+        />
+      )}
+
       {confirmando && (
         <Confirmacion
           proyecto={entrega.proyecto}
@@ -469,6 +489,61 @@ function Descargas({
           </li>
         ))}
       </ul>
+    </Ventana>
+  );
+}
+
+/**
+ * Un comentario sobre toda la entrega, no sobre una pieza.
+ *
+ * Existe porque no todo lo que el cliente quiere decir cabe adentro de una
+ * pieza: «el tono de toda la campaña quedó muy frío», «¿podemos correr todo una
+ * semana?». Sin este lugar, eso termina en un audio de WhatsApp y se pierde.
+ *
+ * Se manda solo, sin esperar a la revisión: no es una decisión sobre un
+ * trabajo, es algo que conviene que la agencia lea cuanto antes.
+ */
+function ComentarioGeneral({
+  texto,
+  onEscribir,
+  onCerrar,
+  onEnviar,
+}: {
+  texto: string;
+  onEscribir: (t: string) => void;
+  onCerrar: () => void;
+  onEnviar: () => void;
+}) {
+  return (
+    <Ventana
+      titulo="Comentario general"
+      bajada="Sobre toda la entrega, no sobre una pieza en particular."
+      onCerrar={onCerrar}
+      pie={
+        <div className="flex flex-col gap-3 sm:flex-row-reverse">
+          <Boton ancho onClick={onEnviar} disabled={texto.trim().length === 0}>
+            <IconoEnviar />
+            Enviar comentario
+          </Boton>
+          <Boton variante="contorno" ancho onClick={onCerrar}>
+            Volver
+          </Boton>
+        </div>
+      }
+    >
+      <textarea
+        value={texto}
+        onChange={(e) => onEscribir(e.target.value)}
+        rows={8}
+        autoFocus
+        placeholder="Lo que quieras decirle al equipo sobre el conjunto: el tono, las fechas, algo que se repite en varias piezas…"
+        className="w-full resize-y rounded-xl border border-linea bg-lienzo p-4 text-normal
+                   shadow-inner transition-colors placeholder:text-apagado
+                   focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
+      />
+      <p className="mt-3 text-menudo text-apagado">
+        Este comentario se manda solo, sin esperar a que termines la revisión.
+      </p>
     </Ventana>
   );
 }

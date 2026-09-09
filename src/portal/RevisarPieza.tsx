@@ -2,14 +2,14 @@
 
 // Una pieza, abierta para revisarla.
 //
-// Es una ventana y no un despliegue hacia abajo, y eso cambia el trabajo: se
-// abre desde el calendario o desde la lista, se resuelve, se cierra y se sigue
-// con la que viene — sin perder el lugar donde se estaba. Con el despliegue,
-// tocar un día del calendario mandaba al fondo de la página y había que subir
-// de nuevo para tocar el siguiente.
+// Es una ventana y no un despliegue hacia abajo: se abre desde el calendario o
+// desde la lista, se resuelve, se cierra y sigue la que viene — sin perder el
+// lugar donde se estaba. Trae el paso a la anterior y a la siguiente, que es
+// lo que permite hacer las doce de una sentada.
 //
-// Trae además el paso a la anterior y a la siguiente, que es lo que permite
-// hacer las doce de una sentada sin volver a la lista cada vez.
+// **La pieza tiene que verse sin desplazar.** Es lo que se vino a mirar: si
+// hay que buscarla moviendo la pantalla, la ventana falló. Por eso la imagen
+// se mide contra el alto de la pantalla y no contra su propia proporción.
 
 import { useState } from "react";
 import type { Evento, Pieza } from "@/dominio/pieza";
@@ -73,6 +73,9 @@ export function RevisarPieza({
   const hayAnterior = pieza.versiones.length > 1;
   const pendiente =
     !pieza.enviada && (pieza.estado === "entregada" || pieza.estado === "en_revision");
+  const pidiendoCambios = !pieza.enviada && pieza.estado === "cambios_marcados";
+
+  const srcGrande = urlDeMiniatura(pieza.driveFileId, 1200, pieza.modificado);
 
   const version = (indice: number) => {
     const v = pieza.versiones[indice];
@@ -91,7 +94,7 @@ export function RevisarPieza({
         role="dialog"
         aria-modal="true"
         aria-label={pieza.nombre}
-        className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:shadow-2xl"
+        className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[94vh] sm:max-w-6xl sm:rounded-2xl sm:shadow-2xl"
       >
         {/* ------------------------- Encabezado ------------------------- */}
         <header className="flex items-center gap-3 border-b border-linea bg-lienzo px-4 py-3 sm:px-6">
@@ -130,8 +133,9 @@ export function RevisarPieza({
 
         {/* --------------------------- Cuerpo --------------------------- */}
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8">
-            {/* La pieza */}
+          <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-10">
+            {/* La pieza. Medida contra la pantalla, no contra su proporción:
+                así entra siempre sin tener que desplazar. */}
             <div className="flex flex-col gap-3">
               {comparando && hayAnterior ? (
                 <Comparador
@@ -143,21 +147,16 @@ export function RevisarPieza({
               ) : (
                 <button
                   type="button"
-                  onClick={() =>
-                    onAmpliar(
-                      urlDeMiniatura(pieza.driveFileId, 1200, pieza.modificado),
-                      pieza.nombre
-                    )
-                  }
+                  onClick={() => onAmpliar(srcGrande, pieza.nombre)}
                   aria-label={`Ver ${pieza.nombre} en grande`}
-                  className="group relative grid aspect-[4/5] w-full place-items-center overflow-hidden
-                             rounded-xl border border-linea bg-lienzo"
+                  className="group relative grid h-[38vh] w-full place-items-center overflow-hidden
+                             rounded-xl border border-linea bg-lienzo sm:h-[46vh] lg:h-[58vh]"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={urlDeMiniatura(pieza.driveFileId, 1200, pieza.modificado)}
+                    src={srcGrande}
                     alt={pieza.nombre}
-                    className="absolute inset-0 h-full w-full object-contain"
+                    className="absolute inset-0 h-full w-full object-contain p-2"
                   />
                 </button>
               )}
@@ -166,12 +165,7 @@ export function RevisarPieza({
                 <Boton
                   variante="contorno"
                   tamano="chico"
-                  onClick={() =>
-                    onAmpliar(
-                      urlDeMiniatura(pieza.driveFileId, 1200, pieza.modificado),
-                      pieza.nombre
-                    )
-                  }
+                  onClick={() => onAmpliar(srcGrande, pieza.nombre)}
                 >
                   <IconoAmpliar />
                   Ver en grande
@@ -185,14 +179,16 @@ export function RevisarPieza({
                     aria-pressed={comparando}
                   >
                     <IconoComparar />
-                    {comparando ? "Ver solo la última" : `Comparar con la v${pieza.versiones.length - 1}`}
+                    {comparando
+                      ? "Ver solo la última"
+                      : `Comparar con la v${pieza.versiones.length - 1}`}
                   </Boton>
                 )}
               </div>
             </div>
 
             {/* Las decisiones */}
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-6">
               <Seguimiento
                 ronda={pieza.ronda}
                 rondasIncluidas={pieza.rondasIncluidas}
@@ -212,21 +208,48 @@ export function RevisarPieza({
                 </p>
               )}
 
-              {!pieza.enviada && pieza.estado === "cambios_marcados" && (
-                <div className="flex flex-col gap-2">
-                  <label
-                    htmlFor={`pedido-${pieza.id}`}
-                    className="text-menudo font-semibold text-tinta"
-                  >
-                    Qué habría que cambiar
-                  </label>
+              {pidiendoCambios && (
+                <div className="flex flex-col gap-3">
+                  {/* El título de lo que hay que escribir, con su propio peso y
+                      separado del camino de arriba: es la tarea de la pantalla. */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <label htmlFor={`pedido-${pieza.id}`} className="text-titulo font-semibold tracking-tight">
+                      Qué habría que cambiar
+                    </label>
+
+                    {/* Editar y descartar viven arriba del cuadro, que es lo
+                        que gobiernan. Abajo quedan las acciones que mandan la
+                        pieza a algún lado. */}
+                    <div className="flex flex-wrap gap-2">
+                      {!pieza.editando && (
+                        <Boton
+                          variante="contorno"
+                          tamano="chico"
+                          onClick={() => onEvento({ tipo: "pedir_cambios" }, { editando: true })}
+                        >
+                          <IconoEditar />
+                          Editar cambios
+                        </Boton>
+                      )}
+                      <Boton
+                        variante="sutil"
+                        tamano="chico"
+                        onClick={() =>
+                          onEvento({ tipo: "descartar_cambios" }, { pedido: "", editando: false })
+                        }
+                      >
+                        <IconoDeshacer />
+                        Descartar
+                      </Boton>
+                    </div>
+                  </div>
 
                   {pieza.editando ? (
                     <textarea
                       id={`pedido-${pieza.id}`}
                       value={pieza.pedido}
                       onChange={(e) => onEscribir(e.target.value)}
-                      rows={7}
+                      rows={8}
                       autoFocus
                       placeholder="Escribí lo que haya que ajustar. Podés guardarlo y volver más tarde a seguir."
                       className="w-full resize-y rounded-xl border border-linea bg-lienzo p-4 text-normal
@@ -234,9 +257,8 @@ export function RevisarPieza({
                                  focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
                     />
                   ) : (
-                    // Ya guardado: se lee, no se toca. Para cambiarlo hay que
-                    // decidir cambiarlo.
-                    <p className="min-h-36 whitespace-pre-wrap rounded-xl border border-linea-tenue bg-hueco/60 p-4 text-normal">
+                    // Ya guardado: se lee, no se toca.
+                    <p className="min-h-40 whitespace-pre-wrap rounded-xl border border-linea-tenue bg-hueco/60 p-4 text-normal">
                       {pieza.pedido.trim() || (
                         <span className="text-apagado">Todavía no escribiste nada.</span>
                       )}
@@ -281,46 +303,20 @@ export function RevisarPieza({
               </>
             )}
 
-            {!pieza.enviada && pieza.estado === "cambios_marcados" && pieza.editando && (
+            {pidiendoCambios && pieza.editando && (
               <>
-                <Boton
-                  variante="sutil"
-                  tamano="chico"
-                  onClick={() =>
-                    onEvento({ tipo: "descartar_cambios" }, { pedido: "", editando: false })
-                  }
-                >
-                  <IconoDeshacer />
-                  Descartar cambios
-                </Boton>
+                <span className="hidden sm:block" />
                 <Boton variante="principal" onClick={onGuardar}>
                   Guardar y seguir después
                 </Boton>
               </>
             )}
 
-            {!pieza.enviada && pieza.estado === "cambios_marcados" && !pieza.editando && (
+            {pidiendoCambios && !pieza.editando && (
               <>
-                <div className="flex flex-wrap gap-2">
-                  <Boton
-                    variante="contorno"
-                    tamano="chico"
-                    onClick={() => onEvento({ tipo: "pedir_cambios" }, { editando: true })}
-                  >
-                    <IconoEditar />
-                    Editar cambios
-                  </Boton>
-                  <Boton
-                    variante="sutil"
-                    tamano="chico"
-                    onClick={() =>
-                      onEvento({ tipo: "descartar_cambios" }, { pedido: "", editando: false })
-                    }
-                  >
-                    <IconoDeshacer />
-                    Descartar
-                  </Boton>
-                </div>
+                <Boton variante="sutil" tamano="chico" onClick={onCerrar}>
+                  Dejar esta para después
+                </Boton>
                 <Boton variante="principal" onClick={onEnviarEsta}>
                   <IconoEnviar />
                   Enviar revisión
@@ -348,7 +344,7 @@ export function RevisarPieza({
 
             {pieza.enviada && (
               <>
-                <span />
+                <span className="hidden sm:block" />
                 {pieza.estado === "final" && (
                   <BotonEnlace
                     href={`/api/archivo/${pieza.driveFileId}`}

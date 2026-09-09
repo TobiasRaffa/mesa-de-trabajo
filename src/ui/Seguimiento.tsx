@@ -86,11 +86,12 @@ export function Seguimiento({
         </>
       )}
 
-      {/* Solo cuando queda poco margen. Antes de eso es un dato que no le sirve
-          a nadie, y decirlo suena a advertencia. */}
-      {!aprobada && quedan <= 1 && (
+      {/* Cuando ya no quedan rondas incluidas sí hay algo que decir, porque
+          cambia lo que se puede hacer. Que sea la última no hace falta
+          aclararlo: se lee del camino. */}
+      {!aprobada && quedan <= 0 && (
         <span className="ml-1 rounded-md bg-espera-tenue px-2 py-0.5 text-micro font-semibold text-espera">
-          {quedan === 1 ? "última incluida" : "sin rondas incluidas"}
+          sin rondas incluidas
         </span>
       )}
     </div>

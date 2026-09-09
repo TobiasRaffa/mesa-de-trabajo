@@ -34,7 +34,10 @@ export default async function Entrega() {
 
       <RevisionDeEntrega entrega={entrega} />
 
-      {entrega.comentarios.length > 0 && (
+      {/* Se quitó la lista de comentarios anteriores: aparecía suelta al pie,
+          sin decir de quién era ni a qué pieza correspondía. Lo que el cliente
+          escribió vive dentro de cada pieza, que es donde tiene sentido. */}
+      {false && entrega.comentarios.length > 0 && (
         <section className="mt-10 border-t border-linea-tenue py-8">
           <h2 className="text-micro uppercase tracking-[0.18em] text-apagado">
             Lo que anotaron antes
