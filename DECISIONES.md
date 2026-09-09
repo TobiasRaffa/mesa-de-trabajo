@@ -576,3 +576,38 @@ de avance contra el texto que dice lo mismo.
 Todo aguantó. Pero el valor no está en el resultado: está en que las dos
 revisiones buscan cosas distintas. Leer encuentra lo que está mal escrito;
 usar encuentra lo que está mal pensado. Ninguna de las dos ve lo de la otra.
+
+## 39. Comparar versiones: dos juntas en la computadora, alternadas en el teléfono.
+
+Contesta la pregunta que hace todo cliente que pidió un cambio: «¿qué cambió?».
+Contestarla de memoria es incómodo para los dos lados; contestarla mal es una
+vuelta perdida.
+
+En pantalla grande van una al lado de la otra, que es como se compara de
+verdad. En un teléfono no entran dos imágenes útiles al mismo tiempo —quedarían
+dos estampillas—, así que se alternan con dos pestañas. El ojo compara igual,
+recordando, y cada imagen se ve al tamaño que sirve.
+
+**No son dos diseños.** Es el mismo componente: lo que cambia es cuántas
+muestra a la vez.
+
+## 40. La vista de calendario es una marca de la entrega.
+
+Doce posteos con fecha no se leen como una lista: se leen como un mes. Pero eso
+vale para los clientes de abono y no para una campaña suelta, así que es una
+marca que se elige al armar la entrega —`entregas.vista`— y no una función
+aparte con su propia pantalla.
+
+Va en la entrega y no en el proyecto porque un mismo cliente puede tener la
+grilla de septiembre, que es un mes, y una campaña de packaging, que es una
+lista, dentro del mismo proyecto.
+
+**La fecha se carga a mano.** Se descartó sacarla del nombre del archivo
+—`01_lunes-08.jpg`— porque esa convención se rompe la primera vez que alguien
+nombra un archivo distinto, y la rotura sería silenciosa: la pieza no
+aparecería en el calendario y nadie sabría por qué. Cargar doce fechas es un
+minuto; perseguir un posteo que no aparece es una tarde.
+
+El calendario no reemplaza la lista: la acompaña. Tocar un día abre la pieza en
+la lista de abajo y la trae a la vista — sin ese arrastre, en el teléfono la
+pieza se abre fuera de pantalla y parece que el toque no hizo nada.

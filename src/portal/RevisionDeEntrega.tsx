@@ -22,12 +22,14 @@ import { useEffect, useState } from "react";
 import { aplicar, type Evento, type Pieza } from "@/dominio/pieza";
 import { Ampliada } from "@/ui/Ampliada";
 import { Boton } from "@/ui/Boton";
+import { Calendario, type PiezaEnCalendario } from "@/ui/Calendario";
+import { Comparador } from "@/ui/Comparador";
 import { Estado } from "@/ui/Estado";
 import { Seguimiento } from "@/ui/Seguimiento";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
-import { plazoEnPalabras } from "@/lib/fechas";
+import { fechaCorta, plazoEnPalabras } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
-import type { EntregaEjemplo } from "@/portal/datos/ejemplo";
+import type { EntregaEjemplo, VersionEjemplo } from "@/portal/datos/ejemplo";
 
 type EnPantalla = Pieza & {
   id: string;
@@ -36,6 +38,10 @@ type EnPantalla = Pieza & {
   modificado?: string;
   /** Lo que el cliente escribió. Se guarda aunque todavía no se envíe. */
   pedido: string;
+  /** De la más vieja a la más nueva. La última es la que se está mirando. */
+  versiones: VersionEjemplo[];
+  /** Cuándo sale publicada. Solo en entregas con vista de calendario. */
+  publicaEl?: Date;
   /** Ya viajó a la agencia, sola o con el resto. */
   enviada: boolean;
   /**
@@ -80,6 +86,16 @@ function Descargar({ pieza }: { pieza: EnPantalla }) {
 const miniatura = (p: EnPantalla, px: number) =>
   urlDeMiniatura(p.driveFileId, px, p.modificado);
 
+/** Prepara una de las vueltas anteriores para mostrarla al lado de la actual. */
+function versionComparable(pieza: EnPantalla, indice: number) {
+  const version = pieza.versiones[indice];
+  return {
+    numero: version.numero,
+    src: urlDeMiniatura(version.driveFileId, 800, version.modificado),
+    pie: `Entregada el ${fechaCorta(version.entregadaEl)}`,
+  };
+}
+
 export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
   const [piezas, setPiezas] = useState<EnPantalla[]>(() =>
     entrega.piezas.map((p) => ({
@@ -91,13 +107,16 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
       ronda: p.ronda,
       rondasIncluidas: entrega.rondasIncluidas,
       rondasExtra: entrega.rondasExtra,
+      versiones: p.versiones,
+      publicaEl: p.publicaEl,
       pedido: "",
       enviada: false,
       editando: false,
     }))
   );
   const [abierta, setAbierta] = useState<string | null>(null);
-  const [ampliada, setAmpliada] = useState<EnPantalla | null>(null);
+  const [ampliada, setAmpliada] = useState<{ src: string; alt: string } | null>(null);
+  const [comparando, setComparando] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<null | { soloEsta?: string }>(null);
   const [rechazo, setRechazo] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -209,6 +228,23 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
     (p) => !p.enviada && (p.estado === "final" || p.estado === "cambios_marcados")
   );
   const aprobadasParaBajar = piezas.filter((p) => p.estado === "final");
+  const conFecha = piezas.filter((p) => p.publicaEl);
+
+  /** Cómo se ve una pieza en el calendario. */
+  const enElCalendario = (p: EnPantalla): PiezaEnCalendario => ({
+    id: p.id,
+    nombre: p.nombre,
+    publicaEl: p.publicaEl!,
+    miniatura: miniatura(p, 220),
+    tono:
+      p.estado === "final"
+        ? "listo"
+        : p.estado === "cambios_marcados"
+          ? "mirando"
+          : p.estado === "cancelada"
+            ? "quieto"
+            : "espera",
+  });
 
   const resueltas = piezas.length - sinDecidir.length;
   const avance = piezas.length === 0 ? 0 : Math.round((resueltas / piezas.length) * 100);
@@ -242,6 +278,25 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
         </div>
       </div>
 
+      {entrega.vista === "calendario" && conFecha.length > 0 && (
+        <div className="mt-8">
+          <Calendario
+            mes={conFecha[0].publicaEl!}
+            piezas={conFecha.map(enElCalendario)}
+            onAbrir={(id) => {
+              setAbierta(id);
+              // Sin esto, en el teléfono se abre la pieza fuera de la vista y
+              // parece que el toque no hizo nada.
+              requestAnimationFrame(() =>
+                document
+                  .getElementById(`pieza-${id}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" })
+              );
+            }}
+          />
+        </div>
+      )}
+
       {aviso && (
         <p className="mt-6 rounded-lg border border-listo/20 bg-listo-tenue px-5 py-4 text-normal text-listo">
           {aviso}
@@ -256,7 +311,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
             (pieza.estado === "entregada" || pieza.estado === "en_revision");
 
           return (
-            <li key={pieza.id}>
+            <li key={pieza.id} id={`pieza-${pieza.id}`}>
               {/* ------------------------- La fila ------------------------- */}
               <button
                 type="button"
@@ -301,9 +356,19 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                 <div className="mb-6 grid gap-8 rounded-xl bg-hueco/50 p-5 sm:p-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-10">
                   {/* La pieza, entera y ampliable. */}
                   <div className="flex flex-col gap-3">
+                    {comparando === pieza.id && pieza.versiones.length > 1 ? (
+                      <Comparador
+                        nombre={pieza.nombre}
+                        antes={versionComparable(pieza, pieza.versiones.length - 2)}
+                        ahora={versionComparable(pieza, pieza.versiones.length - 1)}
+                        onAmpliar={(src, alt) => setAmpliada({ src, alt })}
+                      />
+                    ) : (
                     <button
                       type="button"
-                      onClick={() => setAmpliada(pieza)}
+                      onClick={() =>
+                        setAmpliada({ src: miniatura(pieza, 1200), alt: pieza.nombre })
+                      }
                       aria-label={`Ver ${pieza.nombre} en grande`}
                       className="group relative grid aspect-[4/5] place-items-center overflow-hidden rounded-lg border border-linea bg-lienzo"
                     >
@@ -318,13 +383,34 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                         className="absolute inset-0 h-full w-full bg-lienzo object-contain transition-transform group-hover:scale-[1.02]"
                       />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setAmpliada(pieza)}
-                      className="self-start text-menudo text-acento underline underline-offset-4 hover:text-acento-hover"
-                    >
-                      Ver en grande
-                    </button>
+                    )}
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAmpliada({ src: miniatura(pieza, 1200), alt: pieza.nombre })
+                        }
+                        className="text-menudo text-acento underline underline-offset-4 hover:text-acento-hover"
+                      >
+                        Ver en grande
+                      </button>
+
+                      {/* Comparar solo existe si hay con qué comparar. */}
+                      {pieza.versiones.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setComparando(comparando === pieza.id ? null : pieza.id)
+                          }
+                          aria-pressed={comparando === pieza.id}
+                          className="text-menudo text-acento underline underline-offset-4 hover:text-acento-hover"
+                        >
+                          {comparando === pieza.id
+                            ? "Ver solo la última"
+                            : `Comparar con la v${pieza.versiones.length - 1}`}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Las decisiones. */}
@@ -609,8 +695,8 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
 
       {ampliada && (
         <Ampliada
-          src={miniatura(ampliada, 1200)}
-          alt={ampliada.nombre}
+          src={ampliada.src}
+          alt={ampliada.alt}
           onCerrar={() => setAmpliada(null)}
         />
       )}
