@@ -611,3 +611,51 @@ minuto; perseguir un posteo que no aparece es una tarde.
 El calendario no reemplaza la lista: la acompaña. Tocar un día abre la pieza en
 la lista de abajo y la trae a la vista — sin ese arrastre, en el teléfono la
 pieza se abre fuera de pantalla y parece que el toque no hizo nada.
+
+## 41. Un enlace subrayado no es un botón.
+
+«Ver en grande» y «Comparar con la v1» eran texto azul subrayado en medio de
+una fila de botones. Se leían como un texto que alguien se olvidó de terminar,
+y eso es exactamente lo que hace que una aplicación parezca una página web
+armada de apuro.
+
+Ahora hay cinco variantes de botón, y cada una dice algo distinto sobre lo que
+va a pasar:
+
+| | Cuándo |
+|---|---|
+| `principal` | El camino que se propone. Lleno, con el acento. |
+| `aprobar` | El acto que cierra una pieza. Verde, porque es un final. |
+| `contorno` | Una acción real, pero no la propuesta. |
+| `fantasma` | Acciones de apoyo: ampliar, comparar, cerrar. |
+| `sutil` | Lo que existe pero no se quiere invitar. |
+
+Y ocho iconos dibujados a mano, no una librería. Son ocho formas: traer una
+librería entera para eso es peso que el cliente paga en el teléfono. Comparten
+caja y grosor de trazo, que es lo que hace que se vean de la misma familia.
+
+## 42. Cada pieza se revisa en una ventana.
+
+Antes se desplegaba hacia abajo. Tocar un día del calendario mandaba al fondo
+de la página y había que subir de nuevo para tocar el siguiente — lo que
+convertía «revisar doce posteos» en doce viajes.
+
+Ahora se abre una ventana: se resuelve, se cierra y se sigue con la que viene,
+sin perder el lugar. Y trae el paso a la anterior y a la siguiente, que es lo
+que permite hacer las doce de una sentada.
+
+## 43. Lo que el cliente vino a hacer va arriba.
+
+Descargar lo aprobado y enviar la revisión son las dos cosas por las que abrió
+el portal. Estaban al final de la página, después de todas las piezas. Ahora
+están arriba a la derecha, junto al avance, desde el primer segundo.
+
+## 44. El calendario cambia de forma, y no es capricho.
+
+En una computadora, la grilla del mes se lee de un vistazo. En un teléfono,
+siete columnas dejan celdas de cuarenta píxeles donde no entra ni la palabra
+«Boceto» — y **el estado en palabras es justo lo que hace falta**: un punto de
+color no dice nada, hay que aprenderse qué significa cada uno.
+
+Así que en el teléfono es una agenda: los días con trabajo, uno abajo del otro,
+con lugar para decir las cosas por su nombre. Mismo componente, dos formas.

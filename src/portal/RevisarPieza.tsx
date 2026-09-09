@@ -1,0 +1,370 @@
+"use client";
+
+// Una pieza, abierta para revisarla.
+//
+// Es una ventana y no un despliegue hacia abajo, y eso cambia el trabajo: se
+// abre desde el calendario o desde la lista, se resuelve, se cierra y se sigue
+// con la que viene — sin perder el lugar donde se estaba. Con el despliegue,
+// tocar un día del calendario mandaba al fondo de la página y había que subir
+// de nuevo para tocar el siguiente.
+//
+// Trae además el paso a la anterior y a la siguiente, que es lo que permite
+// hacer las doce de una sentada sin volver a la lista cada vez.
+
+import { useState } from "react";
+import type { Evento, Pieza } from "@/dominio/pieza";
+import { Boton, BotonEnlace } from "@/ui/Boton";
+import { Comparador } from "@/ui/Comparador";
+import { Seguimiento } from "@/ui/Seguimiento";
+import {
+  IconoAmpliar,
+  IconoAprobar,
+  IconoCerrar,
+  IconoComparar,
+  IconoDescargar,
+  IconoDeshacer,
+  IconoEditar,
+  IconoEnviar,
+  IconoFlecha,
+} from "@/ui/Icono";
+import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import { fechaCorta } from "@/lib/fechas";
+import { urlDeMiniatura } from "@/lib/miniaturas";
+import type { VersionEjemplo } from "@/portal/datos/ejemplo";
+
+export type PiezaAbierta = Pieza & {
+  id: string;
+  nombre: string;
+  driveFileId: string;
+  modificado?: string;
+  versiones: VersionEjemplo[];
+  publicaEl?: Date;
+  pedido: string;
+  enviada: boolean;
+  editando: boolean;
+};
+
+type Props = {
+  pieza: PiezaAbierta;
+  posicion: { actual: number; total: number };
+  onIr: (paso: -1 | 1) => void;
+  onCerrar: () => void;
+  onEvento: (evento: Evento, extra?: Partial<PiezaAbierta>) => void;
+  onEscribir: (texto: string) => void;
+  onGuardar: () => void;
+  onEnviarEsta: () => void;
+  onAmpliar: (src: string, alt: string) => void;
+};
+
+export function RevisarPieza({
+  pieza,
+  posicion,
+  onIr,
+  onCerrar,
+  onEvento,
+  onEscribir,
+  onGuardar,
+  onEnviarEsta,
+  onAmpliar,
+}: Props) {
+  const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
+  const [comparando, setComparando] = useState(false);
+
+  const hayAnterior = pieza.versiones.length > 1;
+  const pendiente =
+    !pieza.enviada && (pieza.estado === "entregada" || pieza.estado === "en_revision");
+
+  const version = (indice: number) => {
+    const v = pieza.versiones[indice];
+    return {
+      numero: v.numero,
+      src: urlDeMiniatura(v.driveFileId, 1200, v.modificado),
+      pie: `Entregada el ${fechaCorta(v.entregadaEl)}`,
+    };
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-stretch justify-center bg-tinta/50 sm:items-center sm:p-6">
+      <div
+        ref={marco}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={pieza.nombre}
+        className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[92vh] sm:max-w-5xl sm:rounded-2xl sm:shadow-2xl"
+      >
+        {/* ------------------------- Encabezado ------------------------- */}
+        <header className="flex items-center gap-3 border-b border-linea bg-lienzo px-4 py-3 sm:px-6">
+          <div className="min-w-0 flex-1">
+            <p className="text-micro uppercase tracking-[0.18em] text-apagado">
+              Pieza {posicion.actual} de {posicion.total}
+              {pieza.publicaEl && ` · sale el ${fechaCorta(pieza.publicaEl)}`}
+            </p>
+            <h2 className="truncate text-guia font-semibold tracking-tight">{pieza.nombre}</h2>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <Boton
+              variante="fantasma"
+              tamano="chico"
+              onClick={() => onIr(-1)}
+              disabled={posicion.total < 2}
+              aria-label="Pieza anterior"
+            >
+              <IconoFlecha className="rotate-180" />
+            </Boton>
+            <Boton
+              variante="fantasma"
+              tamano="chico"
+              onClick={() => onIr(1)}
+              disabled={posicion.total < 2}
+              aria-label="Pieza siguiente"
+            >
+              <IconoFlecha />
+            </Boton>
+            <Boton variante="fantasma" tamano="chico" onClick={onCerrar} aria-label="Cerrar">
+              <IconoCerrar />
+            </Boton>
+          </div>
+        </header>
+
+        {/* --------------------------- Cuerpo --------------------------- */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-8">
+            {/* La pieza */}
+            <div className="flex flex-col gap-3">
+              {comparando && hayAnterior ? (
+                <Comparador
+                  nombre={pieza.nombre}
+                  antes={version(pieza.versiones.length - 2)}
+                  ahora={version(pieza.versiones.length - 1)}
+                  onAmpliar={onAmpliar}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAmpliar(
+                      urlDeMiniatura(pieza.driveFileId, 1200, pieza.modificado),
+                      pieza.nombre
+                    )
+                  }
+                  aria-label={`Ver ${pieza.nombre} en grande`}
+                  className="group relative grid aspect-[4/5] w-full place-items-center overflow-hidden
+                             rounded-xl border border-linea bg-lienzo"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={urlDeMiniatura(pieza.driveFileId, 1200, pieza.modificado)}
+                    alt={pieza.nombre}
+                    className="absolute inset-0 h-full w-full object-contain"
+                  />
+                </button>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <Boton
+                  variante="contorno"
+                  tamano="chico"
+                  onClick={() =>
+                    onAmpliar(
+                      urlDeMiniatura(pieza.driveFileId, 1200, pieza.modificado),
+                      pieza.nombre
+                    )
+                  }
+                >
+                  <IconoAmpliar />
+                  Ver en grande
+                </Boton>
+
+                {hayAnterior && (
+                  <Boton
+                    variante={comparando ? "principal" : "contorno"}
+                    tamano="chico"
+                    onClick={() => setComparando(!comparando)}
+                    aria-pressed={comparando}
+                  >
+                    <IconoComparar />
+                    {comparando ? "Ver solo la última" : `Comparar con la v${pieza.versiones.length - 1}`}
+                  </Boton>
+                )}
+              </div>
+            </div>
+
+            {/* Las decisiones */}
+            <div className="flex flex-col gap-5">
+              <Seguimiento
+                ronda={pieza.ronda}
+                rondasIncluidas={pieza.rondasIncluidas}
+                rondasExtra={pieza.rondasExtra}
+                aprobada={pieza.estado === "final"}
+              />
+
+              {pieza.enviada && (
+                <p className="rounded-xl bg-hueco px-4 py-3 text-normal text-tinta-suave">
+                  Ya se lo mandamos al equipo.
+                </p>
+              )}
+
+              {!pieza.enviada && pieza.estado === "final" && (
+                <p className="rounded-xl bg-listo-tenue px-4 py-3 text-normal text-listo">
+                  Aprobada. Va a salir tal cual está.
+                </p>
+              )}
+
+              {!pieza.enviada && pieza.estado === "cambios_marcados" && (
+                <div className="flex flex-col gap-2">
+                  <label
+                    htmlFor={`pedido-${pieza.id}`}
+                    className="text-menudo font-semibold text-tinta"
+                  >
+                    Qué habría que cambiar
+                  </label>
+
+                  {pieza.editando ? (
+                    <textarea
+                      id={`pedido-${pieza.id}`}
+                      value={pieza.pedido}
+                      onChange={(e) => onEscribir(e.target.value)}
+                      rows={7}
+                      autoFocus
+                      placeholder="Escribí lo que haya que ajustar. Podés guardarlo y volver más tarde a seguir."
+                      className="w-full resize-y rounded-xl border border-linea bg-lienzo p-4 text-normal
+                                 shadow-inner transition-colors placeholder:text-apagado
+                                 focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
+                    />
+                  ) : (
+                    // Ya guardado: se lee, no se toca. Para cambiarlo hay que
+                    // decidir cambiarlo.
+                    <p className="min-h-36 whitespace-pre-wrap rounded-xl border border-linea-tenue bg-hueco/60 p-4 text-normal">
+                      {pieza.pedido.trim() || (
+                        <span className="text-apagado">Todavía no escribiste nada.</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {pieza.estado === "extra_pedida" && (
+                <p className="rounded-xl bg-acento-tenue px-4 py-3 text-normal text-acento">
+                  Le pedimos al equipo una revisión adicional. Te avisamos cuando la habiliten.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ---------------------------- Pie ----------------------------- */}
+        <footer className="border-t border-linea bg-lienzo px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {pendiente && (
+              <>
+                <Boton variante="sutil" tamano="chico" onClick={onCerrar}>
+                  Dejar esta para después
+                </Boton>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Boton
+                    variante="contorno"
+                    onClick={() => onEvento({ tipo: "pedir_cambios" }, { editando: true })}
+                  >
+                    <IconoEditar />
+                    Pedir cambios
+                  </Boton>
+                  <Boton
+                    variante="aprobar"
+                    onClick={() => onEvento({ tipo: "aprobar", por: "cliente" })}
+                  >
+                    <IconoAprobar />
+                    Aprobar
+                  </Boton>
+                </div>
+              </>
+            )}
+
+            {!pieza.enviada && pieza.estado === "cambios_marcados" && pieza.editando && (
+              <>
+                <Boton
+                  variante="sutil"
+                  tamano="chico"
+                  onClick={() =>
+                    onEvento({ tipo: "descartar_cambios" }, { pedido: "", editando: false })
+                  }
+                >
+                  <IconoDeshacer />
+                  Descartar cambios
+                </Boton>
+                <Boton variante="principal" onClick={onGuardar}>
+                  Guardar y seguir después
+                </Boton>
+              </>
+            )}
+
+            {!pieza.enviada && pieza.estado === "cambios_marcados" && !pieza.editando && (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  <Boton
+                    variante="contorno"
+                    tamano="chico"
+                    onClick={() => onEvento({ tipo: "pedir_cambios" }, { editando: true })}
+                  >
+                    <IconoEditar />
+                    Editar cambios
+                  </Boton>
+                  <Boton
+                    variante="sutil"
+                    tamano="chico"
+                    onClick={() =>
+                      onEvento({ tipo: "descartar_cambios" }, { pedido: "", editando: false })
+                    }
+                  >
+                    <IconoDeshacer />
+                    Descartar
+                  </Boton>
+                </div>
+                <Boton variante="principal" onClick={onEnviarEsta}>
+                  <IconoEnviar />
+                  Enviar revisión
+                </Boton>
+              </>
+            )}
+
+            {!pieza.enviada && pieza.estado === "final" && (
+              <>
+                <BotonEnlace
+                  href={`/api/archivo/${pieza.driveFileId}`}
+                  download
+                  variante="contorno"
+                  tamano="chico"
+                >
+                  <IconoDescargar />
+                  Descargar original
+                </BotonEnlace>
+                <Boton variante="principal" onClick={onEnviarEsta}>
+                  <IconoEnviar />
+                  Enviar revisión
+                </Boton>
+              </>
+            )}
+
+            {pieza.enviada && (
+              <>
+                <span />
+                {pieza.estado === "final" && (
+                  <BotonEnlace
+                    href={`/api/archivo/${pieza.driveFileId}`}
+                    download
+                    variante="contorno"
+                    tamano="chico"
+                  >
+                    <IconoDescargar />
+                    Descargar original
+                  </BotonEnlace>
+                )}
+              </>
+            )}
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
