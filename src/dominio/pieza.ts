@@ -147,7 +147,15 @@ export function aplicar(pieza: Pieza, evento: Evento): Resultado {
       return si({ ...pieza, estado: "en_revision" });
 
     case "aprobar":
-      if (pieza.estado !== "entregada" && pieza.estado !== "en_revision") {
+      // Se puede aprobar incluso una pieza donde ya se habían marcado cambios,
+      // mientras la ronda siga abierta: nada salió todavía hacia la agencia,
+      // así que cambiar de opinión no rompe nada. Si no se pudiera, el cliente
+      // quedaría atrapado por un clic.
+      if (
+        pieza.estado !== "entregada" &&
+        pieza.estado !== "en_revision" &&
+        pieza.estado !== "cambios_marcados"
+      ) {
         return no("Solo se puede aprobar una pieza que esté en revisión.");
       }
       // Regla 1: es inmediato. No espera el cierre de la ronda.

@@ -62,6 +62,22 @@ describe("regla 1 — aprobar es inmediato y por pieza", () => {
     expect(aplicar(entregada(), APROBAR)).toMatchObject({ ok: true });
   });
 
+  it("se puede aprobar algo donde ya se habían marcado cambios", () => {
+    // Mientras la ronda siga abierta nada salió hacia la agencia. Si no se
+    // pudiera, un clic dejaría al cliente atrapado.
+    const conCambios = recorrer(enRevision(), { tipo: "pedir_cambios" });
+    expect(aplicar(conCambios, APROBAR)).toMatchObject({
+      ok: true,
+      pieza: { estado: "final" },
+    });
+  });
+
+  it("arrepentirse no consume una ronda", () => {
+    const conCambios = recorrer(enRevision(), { tipo: "pedir_cambios" });
+    const aprobada = recorrer(conCambios, APROBAR);
+    expect(aprobada.ronda).toBe(0);
+  });
+
   it("cerrar la ronda no toca una pieza ya aprobada", () => {
     const aprobada = recorrer(enRevision(), APROBAR);
     const despues = recorrer(aprobada, { tipo: "cerrar_revision" });

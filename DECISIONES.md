@@ -367,3 +367,46 @@ hacer nada y dejar al cliente adivinando.
 Hoy los cambios viven solo en el navegador y al recargar se pierden. Cuando
 exista la base, lo único que cambia es dónde se guarda el resultado — las
 reglas ya están donde tienen que estar.
+
+## 23. Guardar no es enviar, y la pantalla lo dice con todas las letras.
+
+Un cliente puede revisar tres piezas hoy, cerrar el navegador y seguir mañana.
+Son dos actos distintos y merecen dos botones distintos, en dos lugares
+distintos:
+
+| | Dónde | Qué hace |
+|---|---|---|
+| **Guardar y seguir después** | dentro de la pieza | Deja el trabajo esperando. La agencia no se entera. |
+| **Enviar revisión a la agencia** | en la barra de abajo | El único momento en que la agencia recibe algo. |
+
+Debajo de la caja de texto dice, literalmente, «esto todavía no llegó a la
+agencia». No alcanza con que el sistema esté bien: el cliente tiene que
+entender qué pasó cuando apretó.
+
+## 24. Las piezas empiezan cerradas.
+
+Doce posteos abiertos a la vez son un muro, sobre todo en un teléfono. Se abre
+una, se resuelve, se cierra sola y sigue la que viene. La lista siempre deja
+ver cuánto falta, y en la fila cerrada se lee el pedido que quedó escrito.
+
+## 25. Enviar pide confirmación, con el resumen a la vista.
+
+Enviar es lo único que la agencia ve y no se deshace. Antes de que ocurra
+aparece un resumen: qué aprobó, qué mandó a cambiar con el texto de cada
+pedido, y —en rojo— qué quedó sin revisar.
+
+Si alguna pieza tiene cambios pedidos pero sin explicar, el resumen lo marca.
+Un pedido de cambios en blanco es una vuelta perdida para los dos lados.
+
+## 26. Aprobar es definitivo; pedir cambios es un borrador.
+
+No son simétricos, y la asimetría es a propósito.
+
+Aprobar libera la pieza en el momento: el equipo puede publicarla el jueves
+aunque el resto siga en revisión. Como tiene consecuencia inmediata, no se
+deshace — para eso está el permiso de reabrir, que es de una administradora y
+queda registrado.
+
+Pedir cambios, en cambio, no salió a ningún lado hasta que se envía la
+revisión. Así que mientras tanto se puede editar el texto, o cambiar de opinión
+y aprobar. Si no se pudiera, un clic dejaría al cliente atrapado.
