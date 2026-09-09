@@ -34,7 +34,7 @@ export function Estado({ estado }: { estado: EstadoPieza }) {
 
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-micro font-medium ${ESTILOS[info.tono]}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-3 py-1 text-micro font-semibold tracking-wide ${ESTILOS[info.tono]}`}
     >
       {info.texto}
     </span>

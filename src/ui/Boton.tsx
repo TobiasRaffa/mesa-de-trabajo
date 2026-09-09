@@ -30,7 +30,8 @@ export function Boton({
     <button
       {...resto}
       className={[
-        "min-h-toque px-4 rounded-md text-normal font-semibold",
+        "min-h-toque px-5 rounded-lg text-normal font-semibold",
+        "inline-flex items-center justify-center gap-2",
         "transition-colors disabled:opacity-40 disabled:pointer-events-none",
         ESTILOS[variante],
         ancho ? "w-full" : "",

@@ -165,10 +165,40 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
     (p) => !p.enviada && (p.estado === "final" || p.estado === "cambios_marcados")
   );
 
+  const resueltas = piezas.length - sinDecidir.length;
+  const avance = piezas.length === 0 ? 0 : Math.round((resueltas / piezas.length) * 100);
+
   return (
     <>
+      {/* Cuánto falta, a la vista desde el primer segundo. Una lista larga sin
+          medida de avance se siente interminable aunque no lo sea. */}
+      <div className="mt-6 flex flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-4">
+          <p className="text-menudo text-tinta-suave">
+            <span className="font-semibold text-tinta">
+              {resueltas} de {piezas.length}
+            </span>{" "}
+            resueltas
+          </p>
+          <p className="text-menudo text-apagado">{plazoEnPalabras(entrega.vence)}</p>
+        </div>
+        <div
+          className="h-1.5 overflow-hidden rounded-full bg-hueco"
+          role="progressbar"
+          aria-valuenow={avance}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Piezas resueltas"
+        >
+          <div
+            className="h-full rounded-full bg-acento transition-[width] duration-300"
+            style={{ width: `${avance}%` }}
+          />
+        </div>
+      </div>
+
       {aviso && (
-        <p className="mt-6 rounded-lg bg-listo-tenue px-5 py-4 text-normal text-listo">
+        <p className="mt-6 rounded-lg border border-listo/20 bg-listo-tenue px-5 py-4 text-normal text-listo">
           {aviso}
         </p>
       )}
@@ -223,14 +253,14 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
 
               {/* ------------------------ Desplegada ----------------------- */}
               {estaAbierta && (
-                <div className="grid gap-8 pb-12 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-12">
+                <div className="mb-6 grid gap-8 rounded-xl bg-hueco/50 p-5 sm:p-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-10">
                   {/* La pieza, entera y ampliable. */}
                   <div className="flex flex-col gap-3">
                     <button
                       type="button"
                       onClick={() => setAmpliada(pieza)}
                       aria-label={`Ver ${pieza.nombre} en grande`}
-                      className="group relative grid aspect-[4/5] place-items-center overflow-hidden rounded-lg border border-linea bg-hueco"
+                      className="group relative grid aspect-[4/5] place-items-center overflow-hidden rounded-lg border border-linea bg-lienzo"
                     >
                       <span className="px-6 text-center text-micro text-apagado">
                         {pieza.nombre}
@@ -240,7 +270,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                       <img
                         src={miniatura(pieza, 800)}
                         alt={pieza.nombre}
-                        className="absolute inset-0 h-full w-full bg-hueco object-contain transition-transform group-hover:scale-[1.02]"
+                        className="absolute inset-0 h-full w-full bg-lienzo object-contain transition-transform group-hover:scale-[1.02]"
                       />
                     </button>
                     <button
@@ -309,7 +339,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                           ) : (
                             /* Ya guardado: se lee, no se toca. Para cambiarlo
                                hay que decidir cambiarlo. */
-                            <p className="mt-3 min-h-32 whitespace-pre-wrap rounded-lg border border-linea bg-hueco p-4 text-normal">
+                            <p className="mt-3 min-h-32 whitespace-pre-wrap rounded-lg border border-linea bg-lienzo p-4 text-normal">
                               {pieza.pedido.trim() || (
                                 <span className="text-apagado">Todavía no escribiste nada.</span>
                               )}
@@ -478,6 +508,25 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
           </div>
         </div>
       </div>
+
+      {/* Solo mientras esto sea una prueba: sin base de datos, el trabajo queda
+          en el navegador y no hay forma de volver al principio. Desaparece el
+          día que los datos vengan del servidor. */}
+      <p className="mt-10 text-center text-menudo text-apagado lg:mt-6">
+        Esto es una prueba y lo que hacés queda guardado en este navegador.{" "}
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              localStorage.removeItem(BORRADOR);
+            } catch {}
+            location.reload();
+          }}
+          className="underline underline-offset-4 hover:text-tinta"
+        >
+          Volver a empezar
+        </button>
+      </p>
 
       {ampliada && (
         <Ampliada

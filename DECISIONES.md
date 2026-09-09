@@ -476,3 +476,33 @@ en color y en negrita, lo recorrido en gris, y lo que falta apenas dibujado.
 
 Sigue siendo información y no reproche. Pero información que nadie ve no es
 información.
+
+## 33. Cabeceras de seguridad, que no cuestan nada.
+
+Next no pone ninguna por su cuenta. Sin esto, la aplicación sale a internet sin
+defensas gratuitas.
+
+| Cabecera | Por qué |
+|---|---|
+| `frame-ancestors 'none'` | La más importante acá. Sin ella, cualquiera puede meter el portal en un marco invisible y hacer que un cliente **apruebe un trabajo creyendo que hace otra cosa**. Es el ataque más plausible contra una pantalla cuyo botón principal aprueba trabajo. |
+| `Referrer-Policy: no-referrer` | El link del cliente lleva su token. Sin esto viaja a cualquier sitio que se abra desde adentro. |
+| `X-Content-Type-Options: nosniff` | Si decimos que algo es una imagen, el navegador nunca lo trata como código. |
+| `base-uri` y `form-action` | Que nadie reescriba a dónde apuntan las direcciones ni a dónde se manda un formulario. |
+| `Permissions-Policy` | Cámara, micrófono y ubicación apagados: nada de eso hace falta para revisar bocetos. |
+| `Strict-Transport-Security` | Solo en producción. En la máquina de desarrollo haría que localhost dejara de abrir. |
+
+La política de contenido es **parcial a propósito**: falta `script-src`, que es
+la parte más valiosa, pero exige firmar cada script que Next genera y romperlo
+es fácil. Lo que está puesto no puede romper nada y ya cierra las puertas más
+grandes. Endurecerlo es una tarea aparte, para cuando la aplicación esté quieta.
+
+## 34. Se probó rompiéndola, no leyéndola.
+
+`scratchpad/sondear.mjs` golpea la ruta de miniaturas con saltos de directorio,
+identificadores de cinco mil caracteres, comillas, etiquetas de script, tamaños
+absurdos, parámetros repetidos y métodos no permitidos. Y revisa que el HTML no
+filtre la dirección de Google, el correo de la cuenta de servicio, la llave
+privada, el identificador de la carpeta ni rutas del disco.
+
+Todo dio bien. Pero el valor no está en el resultado sino en tener el sondeo:
+la próxima vez que se toque esa ruta, se vuelve a correr.
