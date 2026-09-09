@@ -10,6 +10,7 @@
 import { useActionState } from "react";
 import { guardarCarpeta } from "@/app/(admin)/gestion/acciones";
 import type { CarpetaEnGestion } from "@/admin/datos/carpetas";
+import { ChatDeCarpeta } from "@/admin/ChatDeCarpeta";
 
 export function FilaDeCarpeta({ carpeta }: { carpeta: CarpetaEnGestion }) {
   const [estado, enviar, esperando] = useActionState(guardarCarpeta, null);
@@ -71,6 +72,12 @@ export function FilaDeCarpeta({ carpeta }: { carpeta: CarpetaEnGestion }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <ChatDeCarpeta
+          carpetaId={carpeta.id}
+          nombre={carpeta.nombre}
+          cuantos={carpeta.mensajes}
+        />
+
         {/* Mostrar u ocultar */}
         <form action={enviar}>
           <input type="hidden" name="carpetaId" value={carpeta.id} />

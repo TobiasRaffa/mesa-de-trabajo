@@ -2,6 +2,12 @@
 
 // La conversación entre el cliente y el equipo.
 //
+// Vive en `ui` y no en uno de los dos mundos porque **es la misma pantalla de
+// los dos lados**: el cliente la abre desde el portal, la agencia desde la app
+// de gestión. Lo único que cambia es quién es «yo», que decide de qué lado va
+// cada burbuja. Tener dos copias sería la forma segura de que un día se vean
+// distinto.
+//
 // Reemplaza al «comentario general», que era un cuadro de texto que se mandaba
 // y desaparecía. Una entrega no se resuelve con un mensaje suelto: se resuelve
 // hablando —«¿podemos correr todo una semana?», «sí, pero el jueves no llega»—
@@ -22,16 +28,9 @@ import { useEffect, useRef, useState } from "react";
 import { Boton } from "@/ui/Boton";
 import { IconoCerrar, IconoEnviar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import type { Mensaje } from "@/lib/conversaciones";
 
-export type Mensaje = {
-  id: string;
-  /** Quién habla. `sistema` no es nadie: es un aviso de la aplicación. */
-  de: "cliente" | "agencia" | "sistema";
-  quien: string;
-  texto: string;
-  /** En ISO, para que sobreviva a `JSON.stringify`. */
-  cuando: string;
-};
+export type { Mensaje };
 
 // En 24 horas: es como se escribe y se dice la hora en Argentina. El formato
 // que sale por omisión —«05:31 P. M.»— se lee como traducido de otro lado.
@@ -51,11 +50,22 @@ function cuandoEnPalabras(iso: string): string {
 type Props = {
   carpeta: string;
   mensajes: Mensaje[];
+  /** De qué lado del mostrador está quien mira esta pantalla. */
+  yo: "cliente" | "agencia";
   onEnviar: (texto: string) => void;
   onCerrar: () => void;
+  /** Se está esperando al servidor. */
+  enviando?: boolean;
 };
 
-export function Conversacion({ carpeta, mensajes, onEnviar, onCerrar }: Props) {
+export function Conversacion({
+  carpeta,
+  mensajes,
+  yo,
+  onEnviar,
+  onCerrar,
+  enviando = false,
+}: Props) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
   const [texto, setTexto] = useState("");
   const final = useRef<HTMLDivElement>(null);
@@ -105,13 +115,13 @@ export function Conversacion({ carpeta, mensajes, onEnviar, onCerrar }: Props) {
         <div className="min-h-0 flex-1 overflow-y-auto bg-papel px-5 py-5">
           {mensajes.length === 0 ? (
             <p className="mx-auto max-w-sm py-10 text-center text-normal text-apagado">
-              Todavía no hablaron por acá. Lo que escribas queda junto a esta carpeta, no
+              Todavía no hablaron por acá. Lo que se escriba queda junto a esta carpeta, no
               perdido en un chat con todo mezclado.
             </p>
           ) : (
             <ul className="flex flex-col gap-4">
               {mensajes.map((mensaje) => (
-                <Burbuja key={mensaje.id} mensaje={mensaje} />
+                <Burbuja key={mensaje.id} mensaje={mensaje} yo={yo} />
               ))}
             </ul>
           )}
@@ -124,14 +134,18 @@ export function Conversacion({ carpeta, mensajes, onEnviar, onCerrar }: Props) {
             onChange={(e) => setTexto(e.target.value)}
             rows={3}
             autoFocus
-            placeholder="Escribile al equipo…"
+            placeholder={yo === "cliente" ? "Escribile al equipo…" : "Escribile al cliente…"}
             className="w-full resize-y border border-linea bg-lienzo p-3 text-normal
                        transition-colors placeholder:text-apagado
                        focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
           />
           <div className="mt-3 flex items-center justify-between gap-3">
-            <p className="text-menudo text-apagado">Contesta una persona del equipo.</p>
-            <Boton onClick={enviar} disabled={texto.trim().length === 0}>
+            <p className="text-menudo text-apagado">
+              {yo === "cliente"
+                ? "Contesta una persona del equipo."
+                : "Le escribís al cliente."}
+            </p>
+            <Boton onClick={enviar} disabled={enviando || texto.trim().length === 0}>
               <IconoEnviar />
               Enviar
             </Boton>
@@ -142,7 +156,7 @@ export function Conversacion({ carpeta, mensajes, onEnviar, onCerrar }: Props) {
   );
 }
 
-function Burbuja({ mensaje }: { mensaje: Mensaje }) {
+function Burbuja({ mensaje, yo }: { mensaje: Mensaje; yo: "cliente" | "agencia" }) {
   // Un aviso de la aplicación no es alguien hablando: va centrado, en gris y
   // sin burbuja, para que se lea como lo que es.
   if (mensaje.de === "sistema") {
@@ -158,7 +172,7 @@ function Burbuja({ mensaje }: { mensaje: Mensaje }) {
     );
   }
 
-  const mio = mensaje.de === "cliente";
+  const mio = mensaje.de === yo;
 
   return (
     <li className={`flex ${mio ? "justify-end" : "justify-start"}`}>

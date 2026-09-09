@@ -19,11 +19,17 @@ En el escritorio hay tres accesos directos:
 
 | | |
 |---|---|
-| **Mesa de trabajo — ENCENDER** | Prende el servidor y abre el portal. Es el primero que hay que tocar. |
+| **Mesa de trabajo — ENCENDER** | Prende el servidor y abre el portal del cliente |
+| **Mesa de trabajo — ENCENDER gestion** | Prende el servidor y abre donde configurás vos |
 | **Mesa de trabajo — Portal del cliente** | Lo que ve el cliente |
 | **Mesa de trabajo — Administración** | Donde configurás vos |
 
-Se toca **ENCENDER**, se espera unos segundos y el navegador se abre solo. Se
+Los dos que dicen **ENCENDER** hacen lo mismo con el servidor: cambian solo en
+qué pantalla abren. Da igual cuál toques primero; si el servidor ya está
+prendido, el segundo lo reusa.
+
+Se toca uno de los **ENCENDER**, se espera unos segundos y el navegador se abre
+solo. Se
 abre también una ventana negra con letras: **esa ventana es el servidor y tiene
 que quedar abierta**. Si la cerrás, la aplicación deja de responder.
 
@@ -62,10 +68,14 @@ En **Administración** (`/gestion`):
 - **Ocultar o mostrar cada carpeta.** Una carpeta nueva de Drive aparece sola y
   se muestra; ocultarla es la acción deliberada.
 - **Pasarla a calendario o a lista.**
+- **Hablar con el cliente.** Cada carpeta tiene su conversación. El cliente
+  escribe desde el portal y vos contestás desde acá; el número al lado del
+  botón dice cuántos mensajes hay.
 
-Lo que elegís queda guardado en `datos/ajustes.json`, al lado de la
-aplicación. Se puede abrir con el Bloc de notas y se puede copiar. Cuando
-tengamos base de datos, se muda solo.
+Lo que elegís queda guardado al lado de la aplicación, en la carpeta `datos`:
+los ajustes en `ajustes.json` y las conversaciones en `conversaciones.json`.
+Se pueden abrir con el Bloc de notas y se pueden copiar. Cuando tengamos base
+de datos, se mudan solos y las pantallas no cambian.
 
 > Esa pantalla **todavía no pide usuario ni contraseña**. Alcanza mientras la
 > aplicación corre en tu computadora y no está en internet. Antes de subirla
@@ -94,3 +104,24 @@ sería mentir sobre qué se está aprobando.
 
 `Entregas finales` no es un trabajo: no aparece como carpeta para revisar y no
 se configura. Es a donde va lo aprobado.
+
+
+---
+
+## La conversación con el cliente
+
+Cada carpeta tiene su propio chat. No es un chat con todo mezclado: lo que se
+habla de «Banners» queda en «Banners».
+
+| Quién | Desde dónde |
+|---|---|
+| El cliente | El portal, botón **Hablar con el equipo** |
+| Vos | Administración, botón **Conversación** en cada carpeta |
+
+Los mensajes se guardan **en el servidor**, así que el ida y vuelta funciona de
+verdad entre las dos pantallas. Mientras el chat está abierto se actualiza solo
+cada pocos segundos: no hace falta recargar.
+
+> **Del otro lado siempre hay una persona.** La aplicación no contesta, no
+> sugiere respuestas y no resume lo que dijo nadie. Si alguna vez parece
+> contestar sola, algo se rompió y hay que avisar.

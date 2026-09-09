@@ -969,3 +969,60 @@ título dejó de decir «Las piezas» para decir el nombre de la carpeta.
 La barra de la izquierda queda con lo que identifica —el cliente, arriba y
 grande; las carpetas— y con los botones **al fondo**: son el final del
 recorrido, no el principio.
+
+## 65. La conversación se guarda en el servidor, no en el navegador.
+
+Una conversación necesita **dos lados**: el cliente escribe desde el portal y
+la agencia contesta desde la app de gestión. Guardada en el navegador, cada uno
+hablaba solo.
+
+Va a `datos/conversaciones.json`, con el mismo renombre atómico que los
+ajustes, y todo pasa por `src/lib/conversaciones.ts`. Mudarlo a Supabase es
+cambiar el cuerpo de tres funciones.
+
+Dos decisiones de forma:
+
+- **Leer es una ruta, escribir es una acción.** Las acciones de servidor se
+  despachan de a una por cliente, así que usarlas para preguntar cada pocos
+  segundos le pondría un tapón a todo lo demás. Preguntar es `GET
+  /api/conversacion/[carpetaId]`; escribir es una acción.
+- **Se pregunta cada seis segundos, y solo con el chat abierto.** Es cuando
+  importa enterarse rápido. Cerrado, el número del botón se actualiza al
+  abrirlo y alcanza.
+
+## 66. Quién habla lo fija la acción, no el formulario.
+
+Hay **dos** acciones para escribir —`escribirComoCliente` en el portal,
+`escribirComoAgencia` en gestión— y cada una tiene el lado puesto adentro,
+fijo.
+
+Con una sola acción y un parámetro `de`, cualquiera podría mandar un POST
+desde el portal diciendo ser la agencia y ponerle palabras en la boca al
+equipo. Una acción de servidor es un endpoint público: que el botón solo se
+dibuje de un lado no protege nada.
+
+Las dos validan que la carpeta exista de verdad adentro de la del cliente
+(`src/lib/carpetas.ts`), y la ruta de lectura también: sin eso, alguien podría
+probar identificadores hasta adivinar una conversación ajena. Contesta 404,
+no 403, por lo mismo de siempre.
+
+El panel es uno solo, en `src/ui/Conversacion.tsx`, y lo usan los dos mundos
+—es la misma pantalla vista desde los dos lados del mostrador—. Lo único que
+cambia es quién es «yo», que decide de qué lado va cada burbuja. Dos copias
+serían la forma segura de que un día se vean distinto.
+
+## 67. Una regla de `.gitignore` sin anclar se comió un archivo.
+
+`datos/` parecía apuntar a la carpeta de ajustes de la raíz. En realidad
+`git` la aplica a **cualquier** carpeta llamada `datos` en todo el árbol, así
+que también tapó `src/admin/datos` y `src/portal/datos`, que son código
+fuente.
+
+Consecuencia real: `src/admin/datos/carpetas.ts` se creó y **nunca se
+commiteó**. No hubo error, no hubo aviso; `git status` simplemente no lo
+mostraba. Se descubrió al notar que un archivo modificado no aparecía en el
+estado.
+
+Ahora es `/datos/`, con la barra adelante, que ancla la regla a la raíz. Vale
+la pena revisar con `git status --ignored` cada vez que se agrega una regla:
+lo que se ignora de más no avisa nunca.

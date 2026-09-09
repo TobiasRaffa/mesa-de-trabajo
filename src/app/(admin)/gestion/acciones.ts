@@ -17,8 +17,9 @@
 // está en internet. Antes de subirla, esto necesita login.
 
 import { revalidatePath } from "next/cache";
-import { idsDeCarpetasReales } from "@/admin/datos/carpetas";
+import { esCarpetaDelCliente, idsDeCarpetasReales } from "@/lib/carpetas";
 import { esCarpetaReservada, guardarAjustesDe, type Vista } from "@/lib/ajustesDeCarpeta";
+import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
 
 export type Resultado = { ok: true } | { ok: false; motivo: string };
 
@@ -52,4 +53,44 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
   // La pantalla se vuelve a dibujar con lo guardado, en el mismo viaje.
   revalidatePath("/gestion");
   return { ok: true as const };
+}
+
+// ---------------------------------------------------------------------------
+
+export type RespuestaDeChat =
+  | { ok: true; mensajes: Mensaje[] }
+  | { ok: false; motivo: string };
+
+/**
+ * La agencia le contesta al cliente.
+ *
+ * Es la gemela de `escribirComoCliente`, del otro lado del mostrador. Están
+ * separadas a propósito: **quién habla lo fija la acción, no el formulario**.
+ * Con una sola acción y un parámetro, cualquiera podría mandar un POST desde
+ * el portal diciendo ser la agencia.
+ *
+ * Y lo de siempre: acá contesta una persona. Esta función guarda lo que
+ * alguien escribió y nada más.
+ */
+export async function escribirComoAgencia(
+  carpetaId: string,
+  texto: string
+): Promise<RespuestaDeChat> {
+  if (!(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no está adentro de la del cliente." };
+  }
+
+  const limpio = String(texto ?? "").trim();
+  if (!limpio) return { ok: false, motivo: "El mensaje está vacío." };
+  if (limpio.length > LARGO_MAXIMO) {
+    return { ok: false, motivo: "El mensaje es demasiado largo." };
+  }
+
+  try {
+    // El nombre queda fijo hasta que existan los usuarios y los roles.
+    const mensajes = await agregarMensaje(carpetaId, "agencia", "El equipo", limpio);
+    return { ok: true, mensajes };
+  } catch {
+    return { ok: false, motivo: "No pudimos guardar el mensaje. Probá de nuevo." };
+  }
 }

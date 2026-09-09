@@ -40,5 +40,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Ajustes de la agencia: son de esta maquina, no del proyecto.
-datos/
+# Ajustes y conversaciones de la agencia: son de esta maquina, no del
+# proyecto. La barra del principio ancla la regla a la raiz: sin ella
+# `datos/` tapa TAMBIEN src/admin/datos y src/portal/datos, que son
+# codigo fuente. Paso: asi se perdio un archivo sin que nada avisara.
+/datos/

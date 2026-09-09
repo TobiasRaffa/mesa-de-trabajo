@@ -30,7 +30,9 @@ import {
   IconoEditar,
   IconoEnviar,
 } from "@/ui/Icono";
-import { Conversacion, type Mensaje } from "@/portal/Conversacion";
+import { Conversacion } from "@/ui/Conversacion";
+import type { Mensaje } from "@/lib/conversaciones";
+import { escribirComoCliente } from "@/portal/acciones";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta } from "@/lib/fechas";
@@ -48,8 +50,6 @@ type EnPantalla = PiezaAbierta;
  */
 const claveDelBorrador = (carpetaId: string) => `mesa-de-trabajo:borrador:${carpetaId}`;
 
-/** Dónde queda la conversación de esta carpeta, hasta que exista la base. */
-const claveDeLaCharla = (carpetaId: string) => `mesa-de-trabajo:charla:${carpetaId}`;
 
 /** Un identificador para un cambio recién escrito. */
 function nuevoId(): string {
@@ -125,6 +125,7 @@ function Revision({
   const [vista, setVista] = useState<"mes" | "semana" | "lista">("mes");
   const [conversando, setConversando] = useState(false);
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
+  const [enviandoMensaje, setEnviandoMensaje] = useState(false);
   const [rechazo, setRechazo] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
@@ -165,49 +166,58 @@ function Revision({
     }
   }, [BORRADOR]);
 
-  // La conversación, hasta que exista dónde guardarla de verdad. Cuando esté
-  // Supabase, esto pasa a ser una consulta y la pantalla no cambia.
+  /**
+   * La conversación vive en el servidor, no en este navegador.
+   *
+   * Tiene que ser así porque tiene dos lados: el cliente escribe acá y la
+   * agencia contesta desde la app de gestión. Se pregunta al abrir la pantalla
+   * y cada tanto mientras el chat está abierto, que es cuando importa
+   * enterarse rápido de lo que dijo el otro.
+   */
   useEffect(() => {
-    try {
-      const crudo = localStorage.getItem(claveDeLaCharla(carpeta.id));
-      if (!crudo) return;
-      const guardados = JSON.parse(crudo) as unknown;
-      if (!Array.isArray(guardados)) return;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setMensajes(
-        guardados.filter(
-          (m): m is Mensaje =>
-            typeof m?.id === "string" &&
-            typeof m?.texto === "string" &&
-            typeof m?.cuando === "string" &&
-            (m.de === "cliente" || m.de === "agencia" || m.de === "sistema")
-        )
-      );
-    } catch {}
-  }, [carpeta.id]);
+    let vivo = true;
+
+    async function traer() {
+      try {
+        const r = await fetch(`/api/conversacion/${carpeta.id}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const { mensajes: llegaron } = (await r.json()) as { mensajes: Mensaje[] };
+        // Si la pantalla ya se desmontó, guardar sería escribir en el aire.
+        if (vivo) setMensajes(llegaron);
+      } catch {
+        // Sin conexión no se rompe nada: se sigue viendo lo último que llegó.
+      }
+    }
+
+    traer();
+    // Preguntar cada seis segundos solo mientras el chat está abierto. Con el
+    // chat cerrado, el número del botón se actualiza al abrirlo y alcanza.
+    if (!conversando) return;
+    const cada = setInterval(traer, 6000);
+    return () => {
+      vivo = false;
+      clearInterval(cada);
+    };
+  }, [carpeta.id, conversando]);
 
   /**
    * Manda un mensaje al equipo.
    *
    * **No hay respuesta automática, ni la va a haber.** La aplicación anota lo
    * que se dijo; contestar es de una persona. Si algún día esto genera una
-   * respuesta, se rompió la regla más vieja del proyecto.
+   * respuesta solo, se rompió la regla más vieja del proyecto.
    */
-  function enviarMensaje(texto: string) {
-    const siguiente: Mensaje[] = [
-      ...mensajes,
-      {
-        id: nuevoId(),
-        de: "cliente",
-        quien: "Vos",
-        texto,
-        cuando: new Date().toISOString(),
-      },
-    ];
-    setMensajes(siguiente);
+  async function enviarMensaje(texto: string) {
+    setEnviandoMensaje(true);
     try {
-      localStorage.setItem(claveDeLaCharla(carpeta.id), JSON.stringify(siguiente));
-    } catch {}
+      const r = await escribirComoCliente(carpeta.id, texto);
+      if (r.ok) setMensajes(r.mensajes);
+      else setRechazo(r.motivo);
+    } catch {
+      setRechazo("No pudimos mandar el mensaje. Probá de nuevo.");
+    } finally {
+      setEnviandoMensaje(false);
+    }
   }
 
   function guardarEnElNavegador(siguientes: EnPantalla[]) {
@@ -347,9 +357,21 @@ function Revision({
           <h1 className="text-grande font-extrabold leading-none tracking-tighter">
             {datos.cliente.nombre}
           </h1>
-          <p className="mt-2 text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
-            Mesa de trabajo
-          </p>
+          {/* Debajo del nombre, la puerta a la carpeta entera del cliente en
+              Drive. Ocupa el lugar donde antes había un rótulo que no servía
+              para nada. */}
+          {datos.cliente.enlaceDrive && (
+            <a
+              href={datos.cliente.enlaceDrive}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="mt-3 inline-flex min-h-toque items-center gap-2 border-2 border-lienzo/35 px-4
+                         text-menudo font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
+            >
+              <IconoDrive />
+              Abrir en Drive
+            </a>
+          )}
         </div>
 
         {/* Las carpetas que la agencia dejó a la vista. */}
@@ -441,20 +463,6 @@ function Revision({
           </button>
         </div>
 
-        {/* El link es de la carpeta que se está mirando, no del cliente
-            entero: lleva a lo mismo que hay en pantalla. Abre en Drive y
-            solo funciona para quien ya tenga acceso desde su cuenta. */}
-        {carpeta.enlaceDrive && (
-          <a
-            href={carpeta.enlaceDrive}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex min-h-toque items-center gap-2 text-menudo font-semibold
-                       text-lienzo/60 underline underline-offset-4 transition-colors hover:text-lienzo"
-          >
-            Abrir «{carpeta.nombre}» en Drive
-          </a>
-        )}
       </aside>
 
       {/* ============================ El trabajo ========================== */}
@@ -501,7 +509,7 @@ function Revision({
           </div>
         </div>
 
-        {(hayCalendario || sinDecidir.length > 0) && (
+        {(hayCalendario || carpeta.enlaceDrive) && (
           <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
             {hayCalendario ? (
               <div
@@ -524,10 +532,18 @@ function Revision({
                 ))}
               </div>
             ) : (
-              <p className="text-menudo text-apagado">
-                Te {sinDecidir.length === 1 ? "queda" : "quedan"} {sinDecidir.length}{" "}
-                {sinDecidir.length === 1 ? "pieza" : "piezas"} sin mirar.
-              </p>
+              carpeta.enlaceDrive && (
+                <a
+                  href={carpeta.enlaceDrive}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="inline-flex min-h-toque items-center gap-2 border-2 border-tinta px-4
+                             text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
+                >
+                  <IconoDrive />
+                  Abrir en Drive
+                </a>
+              )
             )}
 
             {hayCalendario && vista !== "lista" && (
@@ -685,6 +701,8 @@ function Revision({
         <Conversacion
           carpeta={carpeta.nombre}
           mensajes={mensajes}
+          yo="cliente"
+          enviando={enviandoMensaje}
           onEnviar={enviarMensaje}
           onCerrar={() => setConversando(false)}
         />
