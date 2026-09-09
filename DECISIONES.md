@@ -506,3 +506,33 @@ privada, el identificador de la carpeta ni rutas del disco.
 
 Todo dio bien. Pero el valor no está en el resultado sino en tener el sondeo:
 la próxima vez que se toque esa ruta, se vuelve a correr.
+
+## 35. El archivo original se reenvía, no se junta.
+
+`/api/archivo/[fileId]` conecta el caño de Drive con la respuesta al cliente y
+deja pasar los bytes. No los carga en memoria primero.
+
+Con una miniatura de veinte kilos daría igual. Con un archivo de diseño de
+trescientos megas, juntarlo antes de reenviarlo es la forma más rápida de
+tumbar el servidor — y en un servicio que cobra por memoria, de gastar plata
+sin motivo.
+
+Pasa por el servidor y no por un enlace directo a Drive por tres razones: la
+estructura de Drive no llega al navegador, todo el acceso queda detrás de una
+sola puerta, y **el cliente no necesita tener permiso sobre la carpeta**. Se
+lleva su archivo sin que nadie le comparta nada.
+
+## 36. El nombre de un archivo puede ser un ataque.
+
+Un nombre con un salto de línea, metido tal cual en la cabecera que dice cómo
+se llama la descarga, **permite inyectar otras cabeceras**. Por eso
+`cabeceraDeDescarga()` limpia siempre: saltos de línea, comillas y separadores
+de ruta.
+
+Y manda el nombre en dos formas: una simple para navegadores viejos y otra
+codificada que respeta acentos. Sin la segunda, «Diseño otoño.jpg» baja como
+«Dise_o oto_o.jpg».
+
+Nueve pruebas cubren la función, incluidas las de inyección. Es una función de
+diez líneas que toca datos que vienen de afuera: exactamente donde conviene
+gastar pruebas.

@@ -48,6 +48,26 @@ type EnPantalla = Pieza & {
 
 const BORRADOR = "mesa-de-trabajo:borrador";
 
+/**
+ * El enlace para bajarse el archivo original.
+ *
+ * Es un enlace y no un botón porque eso es: lleva a un recurso. Así el
+ * navegador puede abrirlo en otra pestaña, copiar la dirección o reanudar una
+ * descarga cortada, cosas que un botón con JavaScript rompe sin necesidad.
+ */
+function Descargar({ pieza }: { pieza: EnPantalla }) {
+  return (
+    <a
+      href={`/api/archivo/${pieza.driveFileId}`}
+      download
+      className="inline-flex min-h-toque items-center gap-2 rounded-lg border border-linea
+                 bg-lienzo px-5 text-normal font-semibold text-tinta transition-colors hover:bg-hueco"
+    >
+      Descargar original
+    </a>
+  );
+}
+
 const miniatura = (p: EnPantalla, px: number) =>
   `/api/miniatura/${p.driveFileId}?px=${px}&v=${encodeURIComponent(p.modificado ?? "")}`;
 
@@ -164,6 +184,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
   const paraEnviar = piezas.filter(
     (p) => !p.enviada && (p.estado === "final" || p.estado === "cambios_marcados")
   );
+  const aprobadasParaBajar = piezas.filter((p) => p.estado === "final");
 
   const resueltas = piezas.length - sinDecidir.length;
   const avance = piezas.length === 0 ? 0 : Math.round((resueltas / piezas.length) * 100);
@@ -292,13 +313,21 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                     />
 
                     {pieza.enviada && (
-                      <p className="text-guia text-tinta-suave">Ya se lo mandamos al equipo.</p>
+                      <>
+                        <p className="text-guia text-tinta-suave">
+                          {pieza.estado === "final"
+                            ? "Aprobada y cerrada."
+                            : "Ya se lo mandamos al equipo."}
+                        </p>
+                        {pieza.estado === "final" && <Descargar pieza={pieza} />}
+                      </>
                     )}
 
                     {!pieza.enviada && pieza.estado === "final" && (
                       <>
                         <p className="text-guia text-listo">Aprobada. Va a salir tal cual está.</p>
-                        <div>
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                          <Descargar pieza={pieza} />
                           <Boton
                             variante="principal"
                             onClick={() => setConfirmando({ soloEsta: pieza.id })}
@@ -508,6 +537,34 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
           </div>
         </div>
       </div>
+
+      {aprobadasParaBajar.length > 0 && (
+        <section className="mt-10 rounded-xl border border-linea bg-lienzo p-5 sm:p-6">
+          <h2 className="text-micro uppercase tracking-[0.18em] text-apagado">
+            Listo para llevarte
+          </h2>
+          <p className="mt-2 text-menudo text-tinta-suave">
+            Los archivos originales de lo aprobado. Podés bajarlos cuando quieras.
+          </p>
+          <ul className="mt-5 flex flex-col divide-y divide-linea-tenue">
+            {aprobadasParaBajar.map((pieza) => (
+              <li
+                key={pieza.id}
+                className="flex flex-wrap items-center justify-between gap-4 py-3"
+              >
+                <span className="text-normal font-semibold">{pieza.nombre}</span>
+                <a
+                  href={`/api/archivo/${pieza.driveFileId}`}
+                  download
+                  className="text-menudo font-semibold text-acento underline underline-offset-4 hover:text-acento-hover"
+                >
+                  Descargar original
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Solo mientras esto sea una prueba: sin base de datos, el trabajo queda
           en el navegador y no hay forma de volver al principio. Desaparece el

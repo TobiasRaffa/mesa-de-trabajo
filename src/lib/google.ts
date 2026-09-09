@@ -136,3 +136,21 @@ export async function bytesDeMiniatura(
     tipo: r.headers.get("content-type") ?? "image/jpeg",
   };
 }
+
+/**
+ * Abre el archivo original de Drive para pasárselo al navegador.
+ *
+ * Devuelve la respuesta cruda y no los bytes a propósito: un archivo de diseño
+ * puede pesar cientos de megas, y cargarlo entero en memoria para después
+ * reenviarlo es la forma más rápida de tumbar el servidor. Quien llame se
+ * queda con `.body`, que es un caño, y lo conecta con la respuesta al cliente
+ * sin que nada se junte en el medio.
+ */
+export async function abrirArchivo(fileId: string): Promise<Response> {
+  const token = await tokenDeGoogle();
+  const url = `${DRIVE}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;
+
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  if (!r.ok) throw new Error(`Google devolvió ${r.status} al pedir el archivo.`);
+  return r;
+}
