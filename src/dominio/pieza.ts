@@ -54,6 +54,8 @@ export type Evento =
   | { tipo: "aprobar"; por: string }
   /** El cliente pide cambios. Se guardan hasta que cierre la ronda. */
   | { tipo: "pedir_cambios" }
+  /** Se arrepiente del pedido de cambios y vuelve a dejarla sin decidir. */
+  | { tipo: "descartar_cambios" }
   /** Se acabaron las rondas: el cliente (o la agencia) pide una más. */
   | { tipo: "pedir_revision_extra" }
   /** Una administradora habilita esa revisión. Suma una ronda. */
@@ -171,6 +173,15 @@ export function aplicar(pieza: Pieza, evento: Evento): Resultado {
         return no("Se agotaron las rondas incluidas. Hay que pedir una revisión adicional.");
       }
       return si({ ...pieza, estado: "cambios_marcados" });
+
+    case "descartar_cambios":
+      if (pieza.estado !== "cambios_marcados") {
+        return no("No hay ningún pedido de cambios que descartar.");
+      }
+      // Vuelve a quedar sin decidir, no aprobada: descartar lo que escribí no
+      // es lo mismo que decir que está bien. Nada salió hacia la agencia, así
+      // que tampoco consume una ronda.
+      return si({ ...pieza, estado: "en_revision" });
 
     case "pedir_revision_extra":
       if (pieza.estado !== "entregada" && pieza.estado !== "en_revision") {

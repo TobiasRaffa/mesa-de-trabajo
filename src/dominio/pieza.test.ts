@@ -101,6 +101,36 @@ describe("regla 2 — los pedidos de cambio esperan al cierre de la ronda", () =
   });
 });
 
+describe("descartar un pedido de cambios", () => {
+  it("deja la pieza sin decidir, no aprobada", () => {
+    // Descartar lo que escribí no es lo mismo que decir que está bien.
+    const conCambios = recorrer(enRevision(), { tipo: "pedir_cambios" });
+    const p = recorrer(conCambios, { tipo: "descartar_cambios" });
+    expect(p.estado).toBe("en_revision");
+    expect(p.estado).not.toBe("final");
+  });
+
+  it("no consume una ronda", () => {
+    const conCambios = recorrer(enRevision(), { tipo: "pedir_cambios" });
+    expect(recorrer(conCambios, { tipo: "descartar_cambios" }).ronda).toBe(0);
+  });
+
+  it("después de descartar se puede volver a decidir cualquier cosa", () => {
+    const vuelta = recorrer(
+      enRevision(),
+      { tipo: "pedir_cambios" },
+      { tipo: "descartar_cambios" }
+    );
+    expect(aplicar(vuelta, APROBAR).ok).toBe(true);
+    expect(aplicar(vuelta, { tipo: "pedir_cambios" }).ok).toBe(true);
+  });
+
+  it("no se puede descartar donde no hay nada pedido", () => {
+    expect(aplicar(enRevision(), { tipo: "descartar_cambios" }).ok).toBe(false);
+    expect(aplicar(entregada(), { tipo: "descartar_cambios" }).ok).toBe(false);
+  });
+});
+
 describe("regla 3 — el plazo avisa, no decide", () => {
   it("no existe ningún evento que apruebe por vencimiento", () => {
     // La prueba es la ausencia: si alguien agrega un evento de vencimiento que
@@ -110,6 +140,7 @@ describe("regla 3 — el plazo avisa, no decide", () => {
       "abrir",
       "aprobar",
       "pedir_cambios",
+      "descartar_cambios",
       "pedir_revision_extra",
       "habilitar_extra",
       "cerrar_revision",
@@ -117,7 +148,7 @@ describe("regla 3 — el plazo avisa, no decide", () => {
       "cancelar",
     ];
     expect(eventos).not.toContain("vencer");
-    expect(eventos).toHaveLength(9);
+    expect(eventos).toHaveLength(10);
   });
 
   it("una pieza esperando al cliente se queda esperando para siempre", () => {
@@ -167,6 +198,7 @@ describe("nada se aprueba solo", () => {
       { tipo: "entregar" },
       { tipo: "abrir" },
       { tipo: "pedir_cambios" },
+      { tipo: "descartar_cambios" },
       { tipo: "pedir_revision_extra" },
       { tipo: "habilitar_extra" },
       { tipo: "cerrar_revision" },
@@ -304,6 +336,7 @@ describe("cancelar", () => {
       { tipo: "abrir" },
       APROBAR,
       { tipo: "pedir_cambios" },
+      { tipo: "descartar_cambios" },
       { tipo: "pedir_revision_extra" },
       { tipo: "habilitar_extra" },
       { tipo: "cerrar_revision" },

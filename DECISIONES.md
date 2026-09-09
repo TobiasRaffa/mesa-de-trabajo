@@ -410,3 +410,32 @@ queda registrado.
 Pedir cambios, en cambio, no salió a ningún lado hasta que se envía la
 revisión. Así que mientras tanto se puede editar el texto, o cambiar de opinión
 y aprobar. Si no se pudiera, un clic dejaría al cliente atrapado.
+
+## 27. La pieza se muestra entera, y se puede agrandar.
+
+`object-contain` y no `object-cover`. Recortar una pieza de diseño para que
+entre prolija en un recuadro puede cambiar lo que se está juzgando: un margen,
+un borde, dónde termina el texto. Si sobra espacio, sobra espacio.
+
+Y se abre a pantalla completa. Una miniatura no alcanza para decidir, y en el
+teléfono la diferencia entre revisar y adivinar es poder acercarse.
+
+## 28. Se puede enviar una pieza sola, pero no es lo que se propone.
+
+El botón grande de abajo manda la revisión completa. Dentro de cada pieza hay
+uno más chico que manda solo esa.
+
+La excepción existe porque a veces una pieza urge y el resto puede esperar. Pero
+sigue siendo la excepción: mandar de a una devuelve a la agencia el goteo de
+pedidos que este sistema vino a evitar. Por eso el de arriba es principal y el
+de adentro es secundario — la jerarquía visual dice cuál es el camino normal.
+
+## 29. «Descartar» descarta; no aprueba.
+
+El botón decía «Mejor está bien así» y aprobaba la pieza. Ahora dice
+«Descartar» y hace lo que dice: borra el pedido de cambios y deja la pieza sin
+decidir, para volver a elegir con calma.
+
+No es un detalle de redacción. Un botón que hace algo distinto de lo que dice
+es la forma más barata de perder la confianza de quien lo aprieta — sobre todo
+si lo que hace de más es aprobar un trabajo.

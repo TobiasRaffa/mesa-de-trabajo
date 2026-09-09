@@ -16,8 +16,10 @@ const ESTILOS: Record<Tono, string> = {
 
 /** Cómo se llama y de qué color va cada estado, del lado del cliente. */
 const PARA_EL_CLIENTE: Record<EstadoPieza, { texto: string; tono: Tono } | null> = {
-  // Lo que la agencia todavía está trabajando, el cliente no lo ve.
-  en_curso: null,
+  // Antes de la primera entrega el cliente no ve la pieza. Pero si llega acá
+  // después de mandar cambios, sí la ve: y lo que necesita saber es que ya no
+  // está en su cancha.
+  en_curso: { texto: "Con el equipo", tono: "quieto" },
   entregada: { texto: "Para revisar", tono: "espera" },
   en_revision: { texto: "Para revisar", tono: "espera" },
   cambios_marcados: { texto: "Cambios pedidos", tono: "mirando" },
