@@ -18,6 +18,7 @@
 
 import type { Estado } from "@/dominio/pieza";
 import { ajustesDe, soloLasVisibles, type Vista } from "@/lib/ajustesDeCarpeta";
+import { agruparVersiones } from "@/lib/versiones";
 import { archivosDe, datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 
 /** Una vuelta anterior de la misma pieza. */
@@ -76,43 +77,54 @@ export async function portalDelCliente(): Promise<PortalDeCliente> {
     subcarpetasDe(raiz),
   ]);
 
-  const visibles = soloLasVisibles(subcarpetas);
+  const visibles = await soloLasVisibles(subcarpetas);
 
   // Las carpetas se leen en paralelo: son pocas y esperar una por una haría
   // que la pantalla tarde la suma de todas.
   const carpetas = await Promise.all(
     visibles.map(async (carpeta): Promise<CarpetaDeTrabajo> => {
-      const { vista } = ajustesDe(carpeta.id);
+      const { vista } = await ajustesDe(carpeta.id);
       const archivos = (await archivosDe(carpeta.id)).filter((a) =>
         MOSTRABLES.test(a.mimeType)
       );
+
+      // «9304.jpeg» y «9304 V2.jpeg» son una sola pieza en dos vueltas, no
+      // dos piezas. La regla vive en `versiones.ts` y está probada aparte.
+      const agrupadas = agruparVersiones(archivos);
 
       return {
         id: carpeta.id,
         nombre: carpeta.name,
         enlaceDrive: carpeta.webViewLink,
         vista,
-        piezas: archivos.map((archivo) => ({
-          id: archivo.id,
-          nombre: archivo.name,
-          driveFileId: archivo.id,
-          modificado: archivo.modifiedTime,
-          // Sin base de datos, todo empieza donde empieza de verdad: entregado
-          // y sin revisar. Lo que el cliente vaya decidiendo lo guarda su
-          // navegador hasta que exista dónde anotarlo.
-          estado: "entregada" as Estado,
-          ronda: 0,
-          versiones: [
-            {
-              numero: 1,
-              driveFileId: archivo.id,
-              modificado: archivo.modifiedTime,
-              entregadaEl: archivo.modifiedTime
-                ? new Date(archivo.modifiedTime)
-                : new Date(),
-            },
-          ],
-        })),
+        piezas: agrupadas.map((pieza) => {
+          const versiones = pieza.versiones.map((v, i) => ({
+            // Se renumeran de corrido: si alguien salteó la V2, el cliente no
+            // tiene por qué ver un hueco.
+            numero: i + 1,
+            driveFileId: v.archivo.id,
+            modificado: v.archivo.modifiedTime,
+            entregadaEl: v.archivo.modifiedTime
+              ? new Date(v.archivo.modifiedTime)
+              : new Date(),
+          }));
+          const ultima = versiones[versiones.length - 1];
+
+          return {
+            id: ultima.driveFileId,
+            nombre: pieza.titulo,
+            driveFileId: ultima.driveFileId,
+            modificado: ultima.modificado,
+            // Sin base de datos, todo empieza donde empieza de verdad:
+            // entregado y sin revisar. Lo que el cliente vaya decidiendo lo
+            // guarda su navegador hasta que exista dónde anotarlo.
+            estado: "entregada" as Estado,
+            // La ronda sale de cuántas vueltas hay: la segunda versión de un
+            // archivo es, por definición, la ronda uno.
+            ronda: versiones.length - 1,
+            versiones,
+          };
+        }),
       };
     })
   );

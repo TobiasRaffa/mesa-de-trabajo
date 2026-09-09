@@ -20,12 +20,12 @@ set IP=%IP: =%
 
 echo   Desde esta computadora:
 echo     Portal del cliente    http://localhost:3000/t/ejemplo
-echo     Administracion        http://localhost:3000/diagnostico
+echo     Administracion        http://localhost:3000/gestion
 echo.
 if defined IP (
   echo   Desde el telefono, con el mismo wifi:
   echo     Portal del cliente    http://%IP%:3000/t/ejemplo
-  echo     Administracion        http://%IP%:3000/diagnostico
+  echo     Administracion        http://%IP%:3000/gestion
   echo.
 )
 echo   Para apagarlo: cerra esta ventana, o apreta Ctrl+C.

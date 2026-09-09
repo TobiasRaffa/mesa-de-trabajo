@@ -839,3 +839,74 @@ Google traen identificadores de carpeta y a veces la dirección del robot.
 El detalle va al registro del servidor; al cliente se le dice que es un
 problema nuestro y que su trabajo no se perdió. Mientras se desarrolla, el
 detalle sí se ve en pantalla —ahí no hay a quién filtrárselo—.
+
+## 57. Una vuelta nueva se marca con el nombre del archivo.
+
+`9304.jpeg` es la primera versión; `9304 V2.jpeg` es la segunda vuelta de la
+**misma** pieza. El portal las junta, muestra la última y habilita el botón de
+comparar.
+
+Se eligió esto porque es **lo más barato que había**: renombrar al guardar es
+algo que un diseñador ya hace sin pensar, y no obliga a abrir la aplicación
+para avisar nada. La alternativa —marcar la versión desde una pantalla— agrega
+un paso a algo que hoy no lo tiene, y el paso que se agrega es el que se
+olvida. De hecho el nombre ya venía escrito así en la carpeta de prueba, sin
+que nadie lo hubiera pedido.
+
+Dos límites, los dos a propósito:
+
+- **La extensión cuenta.** `9304.jpg` y `9304.png` son dos piezas. Entregar el
+  mismo trabajo en dos formatos —uno para mirar, otro para imprimir— es común,
+  y juntarlos sería mentir sobre qué se está aprobando.
+- **No se adivina nada más.** Solo el sufijo. Que dos trabajos distintos se
+  junten solos sería mucho peor que no agruparlos.
+
+La regla vive en `src/lib/versiones.ts`, aparte de Drive y de las pantallas,
+con veinte pruebas: incluye que «Verano 2026» no es una versión, que «V2» a
+secas no es la vuelta de nada, y que subir una vuelta nueva no reordena la
+lista que el cliente venía mirando.
+
+## 58. Existe la app de gestión, y guarda en un archivo.
+
+`/gestion` es la primera pantalla que configura la agencia: qué carpetas ve el
+cliente y cuáles se miran como calendario.
+
+Los ajustes van a `datos/ajustes.json`, al lado de la aplicación. Es lo que
+corresponde mientras corre en una computadora: se abre con el Bloc de notas,
+se copia, y no hace falta base de datos para empezar a usarla. Todo pasa por
+`src/lib/ajustesDeCarpeta.ts`, así que mudarlo a Supabase es cambiar el cuerpo
+de ese módulo sin tocar ninguna pantalla.
+
+Se escribe a un archivo temporal y después se renombra encima. Renombrar es
+atómico: si se corta la luz en el medio queda la configuración vieja entera,
+en vez de una nueva por la mitad.
+
+Lo que sale del archivo se valida igual que lo que llega por la red, porque el
+archivo se puede editar a mano.
+
+## 59. La acción de servidor valida contra Drive, no contra el formulario.
+
+Una acción de servidor **es un endpoint público**: Next le cambia el cuerpo
+por una referencia en el navegador, pero la dirección queda accesible para
+cualquiera que sepa mandar el POST. Que el formulario solo se dibuje en una
+pantalla interna no protege nada.
+
+Por eso `guardarCarpeta` no cree el identificador que le llega: lo compara
+contra las carpetas que de verdad existen adentro de la del cliente, y la
+vista solo puede ser una de las dos conocidas. Sin eso, un POST armado a mano
+podría llenar el archivo de ajustes con cualquier cosa.
+
+**Lo que todavía no hay es autenticación.** Alcanza mientras la aplicación
+corre en una computadora y no está en internet, y está dicho en la propia
+pantalla. Antes de subirla, esto necesita login: es la deuda más grande que
+queda abierta.
+
+## 60. El error se cuenta distinto según quién mire.
+
+En el portal, un fallo de Drive se registra en el servidor y al cliente se le
+dice que es un problema nuestro. En `/gestion` el detalle **sí** se muestra:
+esa pantalla la ve la agencia, que es justamente quien tiene que enterarse de
+qué está mal y puede arreglarlo.
+
+Es la misma información contada a dos públicos distintos, y esa asimetría es
+la decisión, no un descuido.
