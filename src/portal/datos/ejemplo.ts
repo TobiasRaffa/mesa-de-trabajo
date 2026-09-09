@@ -27,6 +27,7 @@ export type ComentarioEjemplo = {
 };
 
 export type EntregaEjemplo = {
+  id: string;
   cliente: string;
   proyecto: string;
   plazoDias: number;
@@ -63,6 +64,7 @@ export async function entregaDeEjemplo(): Promise<EntregaEjemplo> {
   const enviada = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 
   return {
+    id: "ejemplo-campana-temporada",
     cliente: "Café Otoño",
     proyecto: "Campaña de temporada",
     plazoDias: 4,

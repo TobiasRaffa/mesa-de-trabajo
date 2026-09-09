@@ -24,7 +24,9 @@ import { Ampliada } from "@/ui/Ampliada";
 import { Boton } from "@/ui/Boton";
 import { Estado } from "@/ui/Estado";
 import { Seguimiento } from "@/ui/Seguimiento";
+import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { plazoEnPalabras } from "@/lib/fechas";
+import { urlDeMiniatura } from "@/lib/miniaturas";
 import type { EntregaEjemplo } from "@/portal/datos/ejemplo";
 
 type EnPantalla = Pieza & {
@@ -46,7 +48,14 @@ type EnPantalla = Pieza & {
   editando: boolean;
 };
 
-const BORRADOR = "mesa-de-trabajo:borrador";
+/**
+ * Dónde queda el borrador de esta entrega en el navegador.
+ *
+ * Lleva el identificador de la entrega adentro. Con una sola clave para todo,
+ * dos entregas del mismo cliente se pisarían el borrador entre ellas: el
+ * cliente escribiría un pedido en una y lo encontraría en la otra.
+ */
+const claveDelBorrador = (entregaId: string) => `mesa-de-trabajo:borrador:${entregaId}`;
 
 /**
  * El enlace para bajarse el archivo original.
@@ -69,7 +78,7 @@ function Descargar({ pieza }: { pieza: EnPantalla }) {
 }
 
 const miniatura = (p: EnPantalla, px: number) =>
-  `/api/miniatura/${p.driveFileId}?px=${px}&v=${encodeURIComponent(p.modificado ?? "")}`;
+  urlDeMiniatura(p.driveFileId, px, p.modificado);
 
 export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
   const [piezas, setPiezas] = useState<EnPantalla[]>(() =>
@@ -92,6 +101,8 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
   const [confirmando, setConfirmando] = useState<null | { soloEsta?: string }>(null);
   const [rechazo, setRechazo] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+
+  const BORRADOR = claveDelBorrador(entrega.id);
 
   // Mientras no exista la base de datos, el trabajo a medio hacer queda en el
   // navegador. Es lo que hace que «Guardar» signifique algo hoy. Cuando exista
@@ -127,7 +138,9 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
     } catch {
       // Un navegador que no deja guardar no es motivo para romper la pantalla.
     }
-  }, []);
+    // Depende de la clave: si cambia la entrega, hay que traer su borrador y
+    // no el de la anterior.
+  }, [BORRADOR]);
 
   function guardar(siguientes: EnPantalla[]) {
     try {
@@ -145,34 +158,45 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
     } catch {}
   }
 
+  /**
+   * Guarda una lista ya calculada.
+   *
+   * Todo lo que cambia el estado lo calcula **antes** de llamar a `setPiezas`,
+   * y nunca adentro del actualizador. React puede ejecutar un actualizador más
+   * de una vez —lo hace a propósito en desarrollo para encontrar justamente
+   * este error—, así que meter ahí adentro un guardado o el cambio de otro
+   * estado significa hacerlo dos veces.
+   */
+  function aplicarYGuardar(siguientes: EnPantalla[]) {
+    setPiezas(siguientes);
+    guardar(siguientes);
+  }
+
   function mover(id: string, evento: Evento, extra?: Partial<EnPantalla>) {
+    const pieza = piezas.find((p) => p.id === id);
+    if (!pieza) return;
+
+    const resultado = aplicar(pieza, evento);
+    if (!resultado.ok) {
+      setRechazo(resultado.motivo);
+      return;
+    }
+
     setRechazo(null);
-    setPiezas((antes) => {
-      const siguientes = antes.map((pieza) => {
-        if (pieza.id !== id) return pieza;
-        const resultado = aplicar(pieza, evento);
-        if (!resultado.ok) {
-          setRechazo(resultado.motivo);
-          return pieza;
-        }
-        return { ...pieza, ...resultado.pieza, ...extra };
-      });
-      guardar(siguientes);
-      return siguientes;
-    });
+    aplicarYGuardar(
+      piezas.map((p) => (p.id === id ? { ...p, ...resultado.pieza, ...extra } : p))
+    );
   }
 
   function enviar(soloEsta?: string) {
-    setPiezas((antes) => {
-      const siguientes = antes.map((pieza) => {
+    aplicarYGuardar(
+      piezas.map((pieza) => {
         if (soloEsta && pieza.id !== soloEsta) return pieza;
         if (pieza.enviada) return pieza;
         const r = aplicar(pieza, { tipo: "cerrar_revision" });
         return r.ok ? { ...pieza, ...r.pieza, enviada: true } : pieza;
-      });
-      guardar(siguientes);
-      return siguientes;
-    });
+      })
+    );
     setConfirmando(null);
     setAbierta(null);
     setAviso(soloEsta ? "Enviamos esa pieza al equipo." : "Enviamos la revisión al equipo.");
@@ -381,13 +405,11 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                             <Boton
                               variante="principal"
                               onClick={() => {
-                                setPiezas((antes) => {
-                                  const siguientes = antes.map((p) =>
+                                aplicarYGuardar(
+                                  piezas.map((p) =>
                                     p.id === pieza.id ? { ...p, editando: false } : p
-                                  );
-                                  guardar(siguientes);
-                                  return siguientes;
-                                });
+                                  )
+                                );
                                 setAbierta(null);
                               }}
                             >
@@ -601,7 +623,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
               ? paraEnviar.filter((p) => p.id === confirmando.soloEsta)
               : paraEnviar
           }
-          sinRevisar={confirmando.soloEsta ? [] : sinDecidir.map((p) => p.nombre)}
+          sinRevisar={confirmando.soloEsta ? [] : sinDecidir}
           soloUna={Boolean(confirmando.soloEsta)}
           onVolver={() => setConfirmando(null)}
           onEnviar={() => enviar(confirmando.soloEsta)}
@@ -629,17 +651,13 @@ function Confirmacion({
   onEnviar,
 }: {
   proyecto: string;
-  piezas: Array<{ nombre: string; estado: Pieza["estado"]; pedido: string }>;
-  sinRevisar: string[];
+  piezas: Array<{ id: string; nombre: string; estado: Pieza["estado"]; pedido: string }>;
+  sinRevisar: Array<{ id: string; nombre: string }>;
   soloUna: boolean;
   onVolver: () => void;
   onEnviar: () => void;
 }) {
-  useEffect(() => {
-    const alTeclado = (e: KeyboardEvent) => e.key === "Escape" && onVolver();
-    document.addEventListener("keydown", alTeclado);
-    return () => document.removeEventListener("keydown", alTeclado);
-  }, [onVolver]);
+  const marco = useTrampaDeFoco<HTMLDivElement>(onVolver);
 
   const aprobadas = piezas.filter((p) => p.estado === "final");
   const conCambios = piezas.filter((p) => p.estado === "cambios_marcados");
@@ -650,6 +668,8 @@ function Confirmacion({
       onClick={onVolver}
     >
       <div
+        ref={marco}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="titulo-confirmacion"
@@ -670,7 +690,7 @@ function Confirmacion({
                 </h3>
                 <ul className="mt-3 space-y-1.5">
                   {aprobadas.map((p) => (
-                    <li key={p.nombre} className="text-normal">
+                    <li key={p.id} className="text-normal">
                       {p.nombre}
                     </li>
                   ))}
@@ -685,7 +705,7 @@ function Confirmacion({
                 </h3>
                 <ul className="mt-3 space-y-4">
                   {conCambios.map((p) => (
-                    <li key={p.nombre}>
+                    <li key={p.id}>
                       <p className="text-normal font-semibold">{p.nombre}</p>
                       <p className="mt-1 text-menudo text-tinta-suave">
                         {p.pedido.trim() || (
@@ -704,9 +724,9 @@ function Confirmacion({
                   Sin revisar · {sinRevisar.length}
                 </h3>
                 <ul className="mt-3 space-y-1.5">
-                  {sinRevisar.map((n) => (
-                    <li key={n} className="text-menudo text-tinta-suave">
-                      {n}
+                  {sinRevisar.map((p) => (
+                    <li key={p.id} className="text-menudo text-tinta-suave">
+                      {p.nombre}
                     </li>
                   ))}
                 </ul>

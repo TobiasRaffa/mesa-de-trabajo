@@ -29,3 +29,20 @@ export function tamanoPermitido(valor: string | number | null | undefined): Tama
 export function urlConTamano(link: string, px: number): string {
   return link.replace(/=s\d+(-c)?$/, "") + `=s${px}`;
 }
+
+/**
+ * La dirección con la que la pantalla pide una miniatura a nuestro servidor.
+ *
+ * El parámetro `v` lleva la fecha de modificación del archivo, y es lo que
+ * permite tener una caché larga sin quedarse con una imagen vieja: si el
+ * archivo cambia en Drive, cambia la fecha, cambia la dirección y el navegador
+ * pide la nueva.
+ *
+ * Cuando no hay fecha, el parámetro **no se pone**. Ponerlo vacío sería peor
+ * que no ponerlo: la ruta vería que está y aplicaría la caché de un día a algo
+ * que no se puede invalidar.
+ */
+export function urlDeMiniatura(fileId: string, px: number, modificado?: string): string {
+  const base = `/api/miniatura/${encodeURIComponent(fileId)}?px=${px}`;
+  return modificado ? `${base}&v=${encodeURIComponent(modificado)}` : base;
+}

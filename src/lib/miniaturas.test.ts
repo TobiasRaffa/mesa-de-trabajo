@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { TAMANO_POR_DEFECTO, tamanoPermitido, urlConTamano } from "@/lib/miniaturas";
+import {
+  TAMANO_POR_DEFECTO,
+  tamanoPermitido,
+  urlConTamano,
+  urlDeMiniatura,
+} from "@/lib/miniaturas";
 
 describe("tamanoPermitido", () => {
   it("acepta los tamaños de la lista", () => {
@@ -44,5 +49,36 @@ describe("urlConTamano", () => {
 
   it("agrega el tamaño si la dirección no traía ninguno", () => {
     expect(urlConTamano(base, 400)).toBe(`${base}=s400`);
+  });
+});
+
+describe("urlDeMiniatura", () => {
+  it("arma la dirección con el tamaño pedido", () => {
+    expect(urlDeMiniatura("abc123", 400, "2026-09-08T14:22:33.000Z")).toBe(
+      "/api/miniatura/abc123?px=400&v=2026-09-08T14%3A22%3A33.000Z"
+    );
+  });
+
+  it("NO pone el parámetro de versión cuando no hay fecha", () => {
+    // Este es el error que tenía: mandaba «&v=» a secas. La ruta pregunta si
+    // el parámetro está, no si vale algo, así que le ponía caché de un día a
+    // algo que no se puede invalidar -- y si el archivo cambiaba, el cliente
+    // seguía viendo el viejo durante 24 horas.
+    expect(urlDeMiniatura("abc123", 400)).toBe("/api/miniatura/abc123?px=400");
+    expect(urlDeMiniatura("abc123", 400, undefined)).not.toContain("v=");
+    expect(urlDeMiniatura("abc123", 400, "")).not.toContain("v=");
+  });
+
+  it("escapa lo que pueda romper la dirección", () => {
+    const url = urlDeMiniatura("a b/c?d=e&f", 400, "x y&z");
+    expect(url.split("?")[0]).toBe("/api/miniatura/a%20b%2Fc%3Fd%3De%26f");
+    expect(url).toContain("v=x%20y%26z");
+  });
+
+  it("cambiar la fecha cambia la dirección", () => {
+    // Es lo único que hace que el navegador vuelva a pedir la imagen.
+    const antes = urlDeMiniatura("abc", 400, "2026-09-08T00:00:00.000Z");
+    const despues = urlDeMiniatura("abc", 400, "2026-09-09T00:00:00.000Z");
+    expect(antes).not.toBe(despues);
   });
 });

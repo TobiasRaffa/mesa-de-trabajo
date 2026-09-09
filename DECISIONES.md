@@ -536,3 +536,43 @@ codificada que respeta acentos. Sin la segunda, «Diseño otoño.jpg» baja como
 Nueve pruebas cubren la función, incluidas las de inyección. Es una función de
 diez líneas que toca datos que vienen de afuera: exactamente donde conviene
 gastar pruebas.
+
+## 37. Cinco errores que encontró una lectura del código.
+
+Ninguno rompía la pantalla, y por eso ninguno se había notado.
+
+**Efectos secundarios adentro del actualizador de estado.** Guardar en el
+navegador y avisar de un rechazo se hacían dentro de la función que React usa
+para calcular el estado siguiente. React puede ejecutar esa función **más de
+una vez** —lo hace a propósito en desarrollo, justamente para encontrar este
+error—, así que se guardaba dos veces. Ahora todo se calcula antes y el
+actualizador solo devuelve el resultado.
+
+**El borrador se guardaba con una sola clave para todo.** Dos entregas del
+mismo cliente se hubieran pisado el borrador entre ellas: escribir un pedido en
+una y encontrarlo en la otra. Ahora la clave lleva el identificador de la
+entrega.
+
+**La dirección de la miniatura mandaba `v=` vacío** cuando el archivo no traía
+fecha de modificación. La ruta pregunta si el parámetro está, no si vale algo,
+así que le ponía caché de un día a algo que no se puede invalidar: si el
+archivo cambiaba, el cliente seguía viendo el viejo durante 24 horas. Ahora es
+una función probada que no pone el parámetro si no hay fecha.
+
+**Las listas se identificaban por nombre.** Dos piezas llamadas igual daban
+claves repetidas, y React puede confundirlas al reordenar. Ahora van por
+identificador.
+
+**El foco se escapaba de las ventanas emergentes.** Apretar Tab dentro de un
+diálogo llevaba el foco a los botones de atrás: quien navega con teclado se
+encontraba apretando cosas que no ve, con el diálogo abierto tapándolo todo.
+
+## 38. Y lo que encontró usar la aplicación.
+
+Después de leer, probar. Doble clic rápido en Aprobar, texto de once mil
+caracteres sin espacios en el pedido, diálogos abiertos con teclado, la barra
+de avance contra el texto que dice lo mismo.
+
+Todo aguantó. Pero el valor no está en el resultado: está en que las dos
+revisiones buscan cosas distintas. Leer encuentra lo que está mal escrito;
+usar encuentra lo que está mal pensado. Ninguna de las dos ve lo de la otra.
