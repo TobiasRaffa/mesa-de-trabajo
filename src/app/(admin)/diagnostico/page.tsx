@@ -3,6 +3,7 @@
 // Se borra cuando empiece la aplicación de verdad.
 
 import { variablesFaltantes } from "@/lib/entorno";
+import { clientesHabilitados } from "@/lib/clientes";
 import { listarCarpeta, type ArchivoDrive } from "@/lib/google";
 
 // Sin esto Next intentaría resolver la página al compilar, y queremos
@@ -17,7 +18,7 @@ export default async function Diagnostico() {
 
   if (faltantes.length === 0) {
     try {
-      archivos = await listarCarpeta(process.env.DRIVE_CARPETA_CLIENTE!);
+      archivos = await listarCarpeta((await clientesHabilitados())[0]?.id ?? "");
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

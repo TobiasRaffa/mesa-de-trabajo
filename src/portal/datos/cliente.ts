@@ -18,6 +18,7 @@
 
 import type { Estado } from "@/dominio/pieza";
 import { ajustesDe, soloLasVisibles, type Vista } from "@/lib/ajustesDeCarpeta";
+import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones } from "@/lib/versiones";
 import { archivosDe, datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 
@@ -67,15 +68,13 @@ const RONDAS_INCLUIDAS = 2;
 /** Solo se muestran las imágenes y los PDF: el resto no se puede revisar. */
 const MOSTRABLES = /^(image\/|application\/pdf$)/;
 
-export async function portalDelCliente(): Promise<PortalDeCliente> {
-  const raiz = process.env.DRIVE_CARPETA_CLIENTE;
-  if (!raiz) {
-    throw new Error(
-      "Falta DRIVE_CARPETA_CLIENTE: sin eso no se sabe qué carpeta mostrar. " +
-        "Se configura en .env.local, y en Netlify en Site settings → Environment variables."
-    );
-  }
-
+/**
+ * Lo que ve un cliente, leído de su carpeta.
+ *
+ * Recibe **de qué cliente se trata** y no lo saca de la configuración: hay
+ * varios, y quién es sale del link con el que entró.
+ */
+export async function portalDelCliente(raiz: string): Promise<PortalDeCliente> {
   const [cliente, subcarpetas] = await Promise.all([
     datosDeCarpeta(raiz),
     subcarpetasDe(raiz),
@@ -95,6 +94,10 @@ export async function portalDelCliente(): Promise<PortalDeCliente> {
       // «9304.jpeg» y «9304 V2.jpeg» son una sola pieza en dos vueltas, no
       // dos piezas. La regla vive en `versiones.ts` y está probada aparte.
       const agrupadas = agruparVersiones(archivos);
+
+      // Las fechas las puso la agencia arrastrando en el calendario. Se piden
+      // todas juntas: una consulta por pieza serían doce lecturas del archivo.
+      const dias = await publicacionesDe(archivos.map((a) => a.id));
 
       return {
         id: carpeta.id,
@@ -121,6 +124,11 @@ export async function portalDelCliente(): Promise<PortalDeCliente> {
             driveFileId: ultima.driveFileId,
             modificado: ultima.modificado,
             enlaceDrive: ultima.enlaceDrive,
+            // La fecha va con la vuelta que se está mirando: si se subió una
+            // V2, es esa la que sale publicada.
+            publicaEl: dias[ultima.driveFileId]
+              ? fechaDeDia(dias[ultima.driveFileId])
+              : undefined,
             // Sin base de datos, todo empieza donde empieza de verdad:
             // entregado y sin revisar. Lo que el cliente vaya decidiendo lo
             // guarda su navegador hasta que exista dónde anotarlo.

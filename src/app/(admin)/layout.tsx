@@ -10,20 +10,33 @@
 
 import Link from "next/link";
 
+const SECCIONES = [
+  { href: "/gestion", texto: "Clientes" },
+  { href: "/gestion/chats", texto: "Conversaciones" },
+  { href: "/diagnostico", texto: "Diagnóstico" },
+] as const;
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-papel">
       <header className="bg-tinta text-lienzo">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
-          <Link
-            href="/gestion"
-            className="text-micro font-extrabold uppercase tracking-widest text-lienzo/50 transition-colors hover:text-lienzo"
-          >
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 px-6 py-3">
+          <span className="text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
             Mesa de trabajo
-          </Link>
-          <span className="bg-lienzo px-2 py-0.5 text-micro font-extrabold uppercase tracking-widest text-tinta">
-            Administración
           </span>
+
+          <nav className="flex flex-wrap items-center gap-x-1">
+            {SECCIONES.map((seccion) => (
+              <Link
+                key={seccion.href}
+                href={seccion.href}
+                className="px-3 py-1.5 text-normal font-bold tracking-tight text-lienzo/70
+                           transition-colors hover:bg-lienzo/10 hover:text-lienzo"
+              >
+                {seccion.texto}
+              </Link>
+            ))}
+          </nav>
         </div>
       </header>
       {children}

@@ -18,7 +18,6 @@ const LLAVE_REAL = [
 beforeEach(() => {
   delete process.env.GOOGLE_SA_EMAIL;
   delete process.env.GOOGLE_SA_KEY;
-  delete process.env.DRIVE_CARPETA_CLIENTE;
 });
 afterEach(() => {
   process.env = { ...ORIGINAL };
@@ -58,7 +57,6 @@ describe("variablesFaltantes", () => {
     expect(variablesFaltantes().map((v) => v.nombre)).toEqual([
       "GOOGLE_SA_EMAIL",
       "GOOGLE_SA_KEY",
-      "DRIVE_CARPETA_CLIENTE",
     ]);
   });
 
@@ -71,7 +69,6 @@ describe("variablesFaltantes", () => {
   it("no reporta nada cuando están todas", () => {
     process.env.GOOGLE_SA_EMAIL = "robot@proyecto.iam.gserviceaccount.com";
     process.env.GOOGLE_SA_KEY = LLAVE_ESCAPADA;
-    process.env.DRIVE_CARPETA_CLIENTE = "1AbC";
     expect(variablesFaltantes()).toEqual([]);
   });
 });

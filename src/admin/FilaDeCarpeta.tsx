@@ -8,11 +8,18 @@
 // optimista que después no coincida con el archivo.
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { guardarCarpeta } from "@/app/(admin)/gestion/acciones";
 import type { CarpetaEnGestion } from "@/admin/datos/carpetas";
 import { ChatDeCarpeta } from "@/admin/ChatDeCarpeta";
 
-export function FilaDeCarpeta({ carpeta }: { carpeta: CarpetaEnGestion }) {
+export function FilaDeCarpeta({
+  carpeta,
+  clienteId,
+}: {
+  carpeta: CarpetaEnGestion;
+  clienteId: string;
+}) {
   const [estado, enviar, esperando] = useActionState(guardarCarpeta, null);
 
   const oculta = !carpeta.visible;
@@ -48,6 +55,9 @@ export function FilaDeCarpeta({ carpeta }: { carpeta: CarpetaEnGestion }) {
           {carpeta.piezas} {carpeta.piezas === 1 ? "pieza" : "piezas"}
           {carpeta.conVueltas > 0 && (
             <> · {carpeta.conVueltas} con más de una vuelta</>
+          )}
+          {carpeta.vista === "calendario" && (
+            <> · {carpeta.conFecha} con fecha</>
           )}
           {carpeta.enlaceDrive && (
             <>
@@ -96,6 +106,19 @@ export function FilaDeCarpeta({ carpeta }: { carpeta: CarpetaEnGestion }) {
             {carpeta.visible ? "Ocultar" : "Mostrar"}
           </button>
         </form>
+
+        {/* El calendario se arma en su propia pantalla: arrastrar piezas a los
+            días necesita espacio, y meterlo en una fila sería pelearse con el
+            lugar. */}
+        {carpeta.vista === "calendario" && !oculta && (
+          <Link
+            href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}`}
+            className="inline-flex min-h-toque items-center bg-acento px-4 text-normal
+                       font-bold tracking-tight text-white transition-colors hover:bg-acento-hover"
+          >
+            Armar calendario
+          </Link>
+        )}
 
         {/* Lista o calendario. Solo tiene sentido si el cliente la ve. */}
         <form action={enviar}>

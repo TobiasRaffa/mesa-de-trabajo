@@ -1,5 +1,5 @@
-// Lo que la agencia ve de un cliente: todas sus carpetas, incluso las que el
-// cliente no ve.
+// Lo que la agencia ve: todos los clientes, todas sus carpetas, incluso las
+// que el cliente no ve.
 //
 // Es la diferencia con el portal, y es a propósito. El portal recibe solo lo
 // visible —no puede filtrar lo que nunca le llegó—. Acá llega todo, porque de
@@ -10,9 +10,14 @@ import {
   esCarpetaReservada,
   type AjustesDeCarpeta,
 } from "@/lib/ajustesDeCarpeta";
+import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
 import { cuentaPorCarpeta } from "@/lib/conversaciones";
-import { archivosDe, datosDeCarpeta, subcarpetasDe } from "@/lib/google";
+import { archivosDe, datosDeCarpeta, subcarpetasDe, type ArchivoDrive } from "@/lib/google";
+import { publicacionesDe, type DiaSuelto } from "@/lib/publicaciones";
 import { agruparVersiones } from "@/lib/versiones";
+
+const ultimoId = (versiones: Array<{ archivo: ArchivoDrive }>) =>
+  versiones[versiones.length - 1].archivo.id;
 
 export type CarpetaEnGestion = AjustesDeCarpeta & {
   id: string;
@@ -22,6 +27,8 @@ export type CarpetaEnGestion = AjustesDeCarpeta & {
   piezas: number;
   /** Cuántos archivos son una segunda vuelta o más. */
   conVueltas: number;
+  /** De esas piezas, cuántas ya tienen día de publicación. */
+  conFecha: number;
   /** `Entregas finales` no es un trabajo: no se configura ni se muestra. */
   reservada: boolean;
   /** Cuántos mensajes hay en la conversación de esta carpeta. */
@@ -29,21 +36,17 @@ export type CarpetaEnGestion = AjustesDeCarpeta & {
 };
 
 export type VistaDeGestion = {
-  cliente: { id: string; nombre: string; enlaceDrive?: string };
+  cliente: Cliente;
   carpetas: CarpetaEnGestion[];
 };
 
-export async function carpetasDelCliente(): Promise<VistaDeGestion> {
-  const raiz = process.env.DRIVE_CARPETA_CLIENTE;
-  if (!raiz) {
-    throw new Error(
-      "Falta DRIVE_CARPETA_CLIENTE: sin eso no se sabe qué carpeta administrar."
-    );
-  }
+/** Las carpetas de un cliente, con todo lo que hace falta para configurarlas. */
+export async function carpetasDelCliente(clienteId: string): Promise<VistaDeGestion> {
+  const cliente = await clientePorId(clienteId);
+  if (!cliente) throw new Error("No encontré ese cliente.");
 
-  const [cliente, subcarpetas, charlas] = await Promise.all([
-    datosDeCarpeta(raiz),
-    subcarpetasDe(raiz),
+  const [subcarpetas, charlas] = await Promise.all([
+    subcarpetasDe(cliente.id),
     cuentaPorCarpeta(),
   ]);
 
@@ -51,25 +54,123 @@ export async function carpetasDelCliente(): Promise<VistaDeGestion> {
     subcarpetas.map(async (carpeta): Promise<CarpetaEnGestion> => {
       const reservada = esCarpetaReservada(carpeta.name);
       const ajustes = await ajustesDe(carpeta.id);
-
-      // De una carpeta reservada no hace falta contar nada: no se revisa.
-      const piezas = reservada ? [] : agruparVersiones(await archivosDe(carpeta.id));
-
-      return {
+      const comun = {
         id: carpeta.id,
         nombre: carpeta.name,
         enlaceDrive: carpeta.webViewLink,
-        piezas: piezas.length,
-        conVueltas: piezas.filter((p) => p.versiones.length > 1).length,
         reservada,
         mensajes: charlas[carpeta.id] ?? 0,
         ...ajustes,
       };
+
+      // De una carpeta reservada no hace falta contar nada: no se revisa.
+      if (reservada) return { ...comun, piezas: 0, conVueltas: 0, conFecha: 0 };
+
+      const archivos = await archivosDe(carpeta.id);
+      const piezas = agruparVersiones(archivos);
+      const dias = await publicacionesDe(piezas.map((p) => ultimoId(p.versiones)));
+
+      return {
+        ...comun,
+        piezas: piezas.length,
+        conVueltas: piezas.filter((p) => p.versiones.length > 1).length,
+        conFecha: piezas.filter((p) => dias[ultimoId(p.versiones)]).length,
+      };
     })
   );
 
+  return { cliente, carpetas };
+}
+
+// ---------------------------------------------------------------------------
+
+export type PiezaParaFechar = {
+  /** El archivo de la última vuelta: es el que sale publicado. */
+  id: string;
+  nombre: string;
+  modificado?: string;
+  vueltas: number;
+  /** `AAAA-MM-DD`, o `null` si todavía no tiene día. */
+  dia: DiaSuelto | null;
+};
+
+export type CarpetaParaFechar = {
+  cliente: Cliente;
+  carpeta: { id: string; nombre: string; enlaceDrive?: string } & AjustesDeCarpeta;
+  piezas: PiezaParaFechar[];
+};
+
+/** Todo lo que hace falta para armar el calendario de una carpeta. */
+export async function carpetaParaFechar(
+  clienteId: string,
+  carpetaId: string
+): Promise<CarpetaParaFechar> {
+  const cliente = await clientePorId(clienteId);
+  if (!cliente) throw new Error("No encontré ese cliente.");
+
+  const [datos, ajustes, archivos] = await Promise.all([
+    datosDeCarpeta(carpetaId),
+    ajustesDe(carpetaId),
+    archivosDe(carpetaId),
+  ]);
+
+  const agrupadas = agruparVersiones(archivos);
+  const dias = await publicacionesDe(agrupadas.map((p) => ultimoId(p.versiones)));
+
   return {
-    cliente: { id: raiz, nombre: cliente.name, enlaceDrive: cliente.webViewLink },
-    carpetas,
+    cliente,
+    carpeta: {
+      id: carpetaId,
+      nombre: datos.name,
+      enlaceDrive: datos.webViewLink,
+      ...ajustes,
+    },
+    piezas: agrupadas.map((pieza) => {
+      const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
+      return {
+        id: ultima.id,
+        nombre: pieza.titulo,
+        modificado: ultima.modifiedTime,
+        vueltas: pieza.versiones.length,
+        dia: dias[ultima.id] ?? null,
+      };
+    }),
   };
+}
+
+// ---------------------------------------------------------------------------
+
+export type ClienteEnGestion = Cliente & {
+  /** Cuántas carpetas de trabajo tiene, sin contar las reservadas. */
+  carpetas: number;
+  carpetasVisibles: number;
+  mensajes: number;
+};
+
+/** Todos los clientes que el robot ve, para la pantalla que los administra. */
+export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
+  const [clientes, charlas] = await Promise.all([todosLosClientes(), cuentaPorCarpeta()]);
+
+  return Promise.all(
+    clientes.map(async (cliente): Promise<ClienteEnGestion> => {
+      // De un cliente apagado no se cuenta nada: no se le pide a Drive lo que
+      // no se va a mostrar.
+      if (!cliente.habilitado) {
+        return { ...cliente, carpetas: 0, carpetasVisibles: 0, mensajes: 0 };
+      }
+
+      const subcarpetas = await subcarpetasDe(cliente.id);
+      const deTrabajo = subcarpetas.filter((c) => !esCarpetaReservada(c.name));
+      const visibles = await Promise.all(
+        deTrabajo.map(async (c) => (await ajustesDe(c.id)).visible)
+      );
+
+      return {
+        ...cliente,
+        carpetas: deTrabajo.length,
+        carpetasVisibles: visibles.filter(Boolean).length,
+        mensajes: subcarpetas.reduce((suma, c) => suma + (charlas[c.id] ?? 0), 0),
+      };
+    })
+  );
 }

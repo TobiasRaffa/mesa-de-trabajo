@@ -112,6 +112,27 @@ export async function subcarpetasDe(folderId: string): Promise<CarpetaDrive[]> {
   return data.files ?? [];
 }
 
+/**
+ * Las carpetas que alguien le compartió al robot.
+ *
+ * Es la lista de clientes: el robot no tiene Drive propio, así que todo lo que
+ * ve es algo que alguien decidió compartirle. Se piden solo carpetas —un
+ * archivo suelto compartido por error no es un cliente—.
+ */
+export async function carpetasCompartidas(): Promise<CarpetaDrive[]> {
+  const token = await tokenDeGoogle();
+  const q = encodeURIComponent(
+    `sharedWithMe and mimeType = '${CARPETA}' and trashed=false`
+  );
+  const fields = encodeURIComponent("files(id,name,webViewLink,modifiedTime)");
+  const url = `${DRIVE}/files?q=${q}&fields=${fields}&orderBy=name&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  const data = await r.json();
+  if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "error desconocido"));
+  return data.files ?? [];
+}
+
 /** Los archivos de una carpeta, sin las subcarpetas. */
 export async function archivosDe(folderId: string): Promise<ArchivoDrive[]> {
   const todo = await listarCarpeta(folderId);

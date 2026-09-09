@@ -63,17 +63,45 @@ verdad y va a pedir el tag del cliente.
 
 ## Qué se puede configurar hoy
 
-En **Administración** (`/gestion`):
+Administración tiene tres secciones, arriba:
 
-- **Ocultar o mostrar cada carpeta.** Una carpeta nueva de Drive aparece sola y
-  se muestra; ocultarla es la acción deliberada.
+### Clientes (`/gestion`)
+
+**La lista se descubre sola.** Un cliente aparece acá cuando alguien le
+comparte su carpeta al robot desde Drive. No hay que darlo de alta.
+
+De cada uno podés:
+
+- **Darle o quitarle acceso.** Quitar acceso apaga su portal sin tocar Drive.
+- **Copiar su link.** Es lo que se le manda por WhatsApp: `/t/<algo largo>`.
+- **Cambiar el link.** El viejo deja de funcionar en el acto. Sirve cuando se
+  fue alguien de la empresa del cliente, o el link se reenvió a quien no
+  correspondía.
+- **Entrar a sus carpetas.**
+
+### Las carpetas de un cliente
+
+- **Ocultar o mostrar cada una.** Una carpeta nueva de Drive aparece sola y se
+  muestra; ocultarla es la acción deliberada.
 - **Pasarla a calendario o a lista.**
-- **Hablar con el cliente.** Cada carpeta tiene su conversación. El cliente
-  escribe desde el portal y vos contestás desde acá; el número al lado del
-  botón dice cuántos mensajes hay.
+- **Armar el calendario**, si está en modo calendario.
+- **Hablar con el cliente**, con la conversación de esa carpeta.
 
-Lo que elegís queda guardado al lado de la aplicación, en la carpeta `datos`:
-los ajustes en `ajustes.json` y las conversaciones en `conversaciones.json`.
+### Conversaciones (`/gestion/chats`)
+
+Todas juntas, sin entrar cliente por cliente. Arriba de todo, **las que están
+esperando tu respuesta** —o sea, donde el último que habló fue el cliente—.
+
+Todo lo que elegís queda guardado al lado de la aplicación, en la carpeta
+`datos`:
+
+| Archivo | Qué guarda |
+|---|---|
+| `clientes.json` | Quién tiene acceso, y el link de cada uno |
+| `ajustes.json` | Qué carpeta se muestra, y si es lista o calendario |
+| `publicaciones.json` | Qué día sale publicada cada pieza |
+| `conversaciones.json` | Los chats |
+
 Se pueden abrir con el Bloc de notas y se pueden copiar. Cuando tengamos base
 de datos, se mudan solos y las pantallas no cambian.
 
@@ -125,3 +153,25 @@ cada pocos segundos: no hace falta recargar.
 > **Del otro lado siempre hay una persona.** La aplicación no contesta, no
 > sugiere respuestas y no resume lo que dijo nadie. Si alguna vez parece
 > contestar sola, algo se rompió y hay que avisar.
+
+
+---
+
+## El calendario
+
+Una carpeta puesta en **calendario** tiene su propia pantalla para armarlo:
+**Armar calendario**.
+
+1. Se abre en modo mirar. Nada se puede mover por accidente.
+2. **Editar fechas** habilita el arrastre.
+3. Arrastrás cada pieza al día que sale. Las que todavía no tienen día están
+   abajo, en «Sin fecha».
+4. **Guardar** lo publica; **Cancelar** deja todo como estaba.
+
+Se puede pasar de mes con las flechas, así que una grilla que arranca a fin de
+mes se arma igual.
+
+> Sin mouse: tocá una pieza de abajo para elegirla y después tocá el día.
+
+Lo que guardás acá es exactamente lo que ve el cliente en su portal. No hay dos
+copias: es el mismo dato leído por las dos pantallas.

@@ -1,27 +1,37 @@
 "use server";
 
-// Lo que la pantalla de gestión puede cambiar.
+// Lo que la app de gestión puede cambiar.
 //
 // **Una acción de servidor es un endpoint público.** Next le cambia el cuerpo
 // por una referencia en el navegador, pero la dirección queda accesible para
 // cualquiera que sepa mandar el POST. Que el formulario solo se dibuje en una
 // pantalla interna no protege nada.
 //
-// Por eso acá no se cree nada de lo que llega: el identificador de carpeta se
-// compara contra las carpetas que de verdad existen adentro de la del cliente,
-// y la vista solo puede ser una de las dos que conocemos. Sin eso, un POST
-// armado a mano podría llenar el archivo de ajustes con lo que quisiera.
+// Por eso acá no se cree nada de lo que llega: los identificadores se comparan
+// contra lo que de verdad existe en Drive, y cada valor solo puede ser uno de
+// los que conocemos. Sin eso, un POST armado a mano podría llenar los archivos
+// de configuración con lo que quisiera.
 //
 // Lo que todavía NO hay es autenticación: cualquiera que llegue a la máquina
 // puede entrar. Hoy alcanza porque la aplicación corre en una computadora y no
 // está en internet. Antes de subirla, esto necesita login.
 
 import { revalidatePath } from "next/cache";
-import { esCarpetaDelCliente, idsDeCarpetasReales } from "@/lib/carpetas";
 import { esCarpetaReservada, guardarAjustesDe, type Vista } from "@/lib/ajustesDeCarpeta";
+import { esCarpetaDelCliente, idsDeCarpetasReales, olvidarCarpetas } from "@/lib/carpetas";
+import { habilitarCliente, renovarLink, todosLosClientes } from "@/lib/clientes";
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
+import { archivosDe } from "@/lib/google";
+import {
+  esDiaValido,
+  guardarPublicaciones,
+  type DiaSuelto,
+} from "@/lib/publicaciones";
 
 export type Resultado = { ok: true } | { ok: false; motivo: string };
+
+// ---------------------------------------------------------------------------
+// Carpetas
 
 export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
   const carpetaId = String(formulario.get("carpetaId") ?? "");
@@ -35,7 +45,7 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
   if (!reales.has(carpetaId)) {
     return {
       ok: false as const,
-      motivo: "Esa carpeta no está adentro de la carpeta del cliente.",
+      motivo: "Esa carpeta no está adentro de la carpeta de un cliente.",
     };
   }
 
@@ -51,11 +61,108 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
   await guardarAjustesDe(carpetaId, { visible, vista });
 
   // La pantalla se vuelve a dibujar con lo guardado, en el mismo viaje.
-  revalidatePath("/gestion");
+  revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
 
 // ---------------------------------------------------------------------------
+// Clientes
+
+async function esClienteReal(id: string): Promise<boolean> {
+  if (!id) return false;
+  try {
+    return (await todosLosClientes()).some((c) => c.id === id);
+  } catch {
+    return false;
+  }
+}
+
+export async function cambiarCliente(_previo: unknown, formulario: FormData) {
+  const clienteId = String(formulario.get("clienteId") ?? "");
+  const habilitado = formulario.get("habilitado") === "si";
+
+  if (!(await esClienteReal(clienteId))) {
+    return { ok: false as const, motivo: "Ese cliente no existe." };
+  }
+
+  await habilitarCliente(clienteId, habilitado);
+  // Habilitar un cliente cambia qué carpetas se administran: lo recordado
+  // quedó viejo.
+  olvidarCarpetas();
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+/**
+ * Le da un link nuevo a un cliente.
+ *
+ * Es cómo se corta el acceso a quien tenga el viejo: alguien que se fue de la
+ * empresa del cliente, un link reenviado a quien no correspondía. El viejo
+ * deja de funcionar en el acto.
+ */
+export async function renovarLinkDeCliente(_previo: unknown, formulario: FormData) {
+  const clienteId = String(formulario.get("clienteId") ?? "");
+
+  if (!(await esClienteReal(clienteId))) {
+    return { ok: false as const, motivo: "Ese cliente no existe." };
+  }
+
+  await renovarLink(clienteId);
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+// ---------------------------------------------------------------------------
+// Calendario
+
+export type CambioDeFecha = { archivo: string; dia: DiaSuelto | null };
+
+/**
+ * Guarda las fechas de publicación de una carpeta, todas juntas.
+ *
+ * Se guarda de a una tanda y no pieza por pieza porque así se trabaja: se
+ * acomodan varias en el calendario y recién ahí se aprieta guardar. Poder
+ * cancelar sin haber tocado nada es la mitad del valor de tener un botón.
+ */
+export async function guardarCalendario(
+  carpetaId: string,
+  cambios: CambioDeFecha[]
+): Promise<Resultado> {
+  if (!(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no está adentro de la carpeta de un cliente." };
+  }
+
+  if (!Array.isArray(cambios) || cambios.length > 500) {
+    return { ok: false, motivo: "No pude leer los cambios." };
+  }
+
+  // Los archivos que llegan tienen que estar de verdad en esa carpeta: si no,
+  // esto sería una forma de ponerle fecha a cualquier archivo de cualquier
+  // cliente.
+  const adentro = new Set((await archivosDe(carpetaId)).map((a) => a.id));
+
+  const aGuardar: Record<string, DiaSuelto | null> = {};
+  for (const cambio of cambios) {
+    const archivo = String(cambio?.archivo ?? "");
+    if (!adentro.has(archivo)) continue;
+
+    if (cambio.dia === null) aGuardar[archivo] = null;
+    else if (esDiaValido(cambio.dia)) aGuardar[archivo] = cambio.dia;
+    else return { ok: false, motivo: "Hay una fecha que no existe." };
+  }
+
+  try {
+    await guardarPublicaciones(aGuardar);
+  } catch {
+    return { ok: false, motivo: "No pude guardar las fechas. Probá de nuevo." };
+  }
+
+  revalidatePath("/gestion", "layout");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Conversación
 
 export type RespuestaDeChat =
   | { ok: true; mensajes: Mensaje[] }
@@ -89,6 +196,7 @@ export async function escribirComoAgencia(
   try {
     // El nombre queda fijo hasta que existan los usuarios y los roles.
     const mensajes = await agregarMensaje(carpetaId, "agencia", "El equipo", limpio);
+    revalidatePath("/gestion/chats");
     return { ok: true, mensajes };
   } catch {
     return { ok: false, motivo: "No pudimos guardar el mensaje. Probá de nuevo." };

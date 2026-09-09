@@ -15,6 +15,7 @@
 // afuera y el portal se veía vacío. Mirar el árbol entero es lo que hace que
 // la agencia pueda seguir armando carpetas en Drive sin avisarle a nadie.
 
+import { clientesHabilitados } from "@/lib/clientes";
 import { metadatosArchivo, type MetadatosArchivo } from "@/lib/google";
 
 /**
@@ -40,10 +41,26 @@ const RECUERDO_MS = 5 * 60 * 1000;
  */
 const madresDe = new Map<string, { padres: string[]; vence: number }>();
 
-/** Carpetas que la aplicación administra. Más adelante salen de la base de datos. */
-export function carpetasAdministradas(): string[] {
-  const cliente = process.env.DRIVE_CARPETA_CLIENTE;
-  return cliente ? [cliente] : [];
+/**
+ * Carpetas que la aplicación administra: la de cada cliente habilitado.
+ *
+ * Deshabilitar un cliente en la app de gestión le corta el acceso a sus
+ * archivos acá mismo, sin tocar Drive. Es el interruptor rápido; el definitivo
+ * sigue siendo dejar de compartirle la carpeta al robot.
+ *
+ * **Lo que todavía no distingue es de qué cliente es cada quien.** Un archivo
+ * queda autorizado si cuelga de *algún* cliente habilitado, no del cliente que
+ * está mirando. Alcanza mientras los identificadores de Drive sean
+ * impredecibles y no haya sesiones; cuando existan los accesos, esta función
+ * recibe quién pregunta y la respuesta se angosta.
+ */
+export async function carpetasAdministradas(): Promise<string[]> {
+  try {
+    return (await clientesHabilitados()).map((c) => c.id);
+  } catch {
+    // Si no se puede saber qué se administra, no se administra nada.
+    return [];
+  }
 }
 
 /** Olvida lo aprendido del árbol. Existe para las pruebas. */
@@ -103,7 +120,7 @@ async function desciendeDeAlgunaAdministrada(
  * pagar dos viajes de red por cada imagen.
  */
 export async function archivoAutorizado(fileId: string): Promise<MetadatosArchivo | null> {
-  const permitidas = carpetasAdministradas();
+  const permitidas = await carpetasAdministradas();
   if (permitidas.length === 0) return null;
 
   try {

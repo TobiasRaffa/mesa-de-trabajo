@@ -3,13 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Drive se reemplaza por un doble: estas pruebas verifican la decisión de
 // permisos, no la conexión con Google.
 vi.mock("@/lib/google", () => ({ metadatosArchivo: vi.fn() }));
+// Los clientes también se reemplazan: acá se prueba la decisión de permisos,
+// no cómo se descubren las carpetas compartidas.
+vi.mock("@/lib/clientes", () => ({ clientesHabilitados: vi.fn() }));
 
+import { clientesHabilitados } from "@/lib/clientes";
 import { metadatosArchivo } from "@/lib/google";
 import { archivoAutorizado, carpetasAdministradas, olvidarElArbol } from "@/lib/permisos";
 
 const CLIENTE = "carpeta-del-cliente";
 const AJENA = "carpeta-que-no-administramos";
 const mock = vi.mocked(metadatosArchivo);
+const clientes = vi.mocked(clientesHabilitados);
+
+const cliente = (id: string) => ({ id, nombre: id, habilitado: true, token: "t-" + id });
 
 const archivo = (parents: string[] | undefined) => ({
   id: "archivo-1",
@@ -35,17 +42,29 @@ function driveConArbol(arbol: Record<string, string[]>) {
 
 beforeEach(() => {
   mock.mockReset();
+  clientes.mockReset();
   olvidarElArbol();
-  process.env.DRIVE_CARPETA_CLIENTE = CLIENTE;
+  clientes.mockResolvedValue([cliente(CLIENTE)]);
 });
 afterEach(() => {
-  delete process.env.DRIVE_CARPETA_CLIENTE;
+  vi.restoreAllMocks();
 });
 
 describe("carpetasAdministradas", () => {
-  it("está vacía si no hay ninguna configurada", () => {
-    delete process.env.DRIVE_CARPETA_CLIENTE;
-    expect(carpetasAdministradas()).toEqual([]);
+  it("es la carpeta de cada cliente habilitado", async () => {
+    clientes.mockResolvedValue([cliente("uno"), cliente("dos")]);
+    await expect(carpetasAdministradas()).resolves.toEqual(["uno", "dos"]);
+  });
+
+  it("está vacía si no hay ningún cliente habilitado", async () => {
+    clientes.mockResolvedValue([]);
+    await expect(carpetasAdministradas()).resolves.toEqual([]);
+  });
+
+  it("está vacía si no se puede saber cuáles son", async () => {
+    // Si no se puede saber qué se administra, no se administra nada.
+    clientes.mockRejectedValue(new Error("Drive se cayó"));
+    await expect(carpetasAdministradas()).resolves.toEqual([]);
   });
 });
 
@@ -90,9 +109,9 @@ describe("archivoAutorizado", () => {
     await expect(archivoAutorizado("archivo-1")).resolves.toBeNull();
   });
 
-  it("rechaza cuando no hay ninguna carpeta configurada", async () => {
+  it("rechaza cuando no hay ningún cliente habilitado", async () => {
     // Una configuración incompleta no puede volverse permiso para todo.
-    delete process.env.DRIVE_CARPETA_CLIENTE;
+    clientes.mockResolvedValue([]);
     mock.mockResolvedValue(archivo([CLIENTE]));
     await expect(archivoAutorizado("archivo-1")).resolves.toBeNull();
     expect(mock).not.toHaveBeenCalled();
@@ -122,6 +141,21 @@ describe("archivoAutorizado", () => {
     for (let i = 0; i < 9; i++) arbol[`n${i}`] = [`n${i + 1}`];
     arbol.n9 = [CLIENTE];
     driveConArbol(arbol);
+    await expect(archivoAutorizado("archivo-1")).resolves.toBeNull();
+  });
+
+  it("autoriza un archivo de OTRO cliente habilitado", async () => {
+    // Con varios clientes, cada uno aporta su carpeta a la lista.
+    clientes.mockResolvedValue([cliente(CLIENTE), cliente("otro-cliente")]);
+    driveConArbol({ "archivo-1": ["sub"], sub: ["otro-cliente"] });
+    await expect(archivoAutorizado("archivo-1")).resolves.not.toBeNull();
+  });
+
+  it("RECHAZA un archivo de un cliente deshabilitado", async () => {
+    // Apagar un cliente en gestión le corta el acceso a sus archivos acá
+    // mismo, sin tocar Drive.
+    clientes.mockResolvedValue([cliente(CLIENTE)]);
+    driveConArbol({ "archivo-1": ["sub"], sub: ["cliente-apagado"] });
     await expect(archivoAutorizado("archivo-1")).resolves.toBeNull();
   });
 

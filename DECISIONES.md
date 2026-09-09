@@ -1026,3 +1026,76 @@ estado.
 Ahora es `/datos/`, con la barra adelante, que ancla la regla a la raíz. Vale
 la pena revisar con `git status --ignored` cada vez que se agrega una regla:
 lo que se ignora de más no avisa nunca.
+
+## 68. Los clientes se descubren, no se cargan.
+
+La lista de clientes son las carpetas que alguien le compartió al robot. No hay
+pantalla de «nuevo cliente» y no la va a haber: compartir la carpeta en Drive
+es el único trámite, y a partir de ahí el cliente aparece solo.
+
+Es la misma idea que ya regía para las carpetas de trabajo, aplicada un nivel
+más arriba. Y por lo mismo, un cliente nuevo llega **habilitado**: el acto
+deliberado ya ocurrió cuando alguien compartió la carpeta. Quitarle el acceso
+es lo que hay que hacer a propósito.
+
+Esto retira `DRIVE_CARPETA_CLIENTE`. La aplicación dejó de tener «el cliente»
+en la configuración.
+
+## 69. Cada cliente tiene su link, y se puede cambiar.
+
+96 bits al azar en la dirección del portal (`/t/<token>`). Adivinarlo probando
+no es una estrategia.
+
+Es la primera mitad del modelo de acceso que se había diseñado; la segunda
+—pedirle al cliente su tag— llega con la base de datos. Hasta entonces, el
+link **es** el acceso, y por eso importa que se pueda cambiar: renovar el link
+corta en el acto a quien tenga el viejo. Es lo que se hace cuando alguien se va
+de la empresa del cliente o el link se reenvía a quien no correspondía.
+
+Mientras se trabaja en la máquina, un link inexistente cae en el primer cliente
+habilitado, con un cartel que lo dice. En producción no: ahí un link que no
+vale es un link que no vale. Sin eso, cada prueba local empezaba copiando un
+link.
+
+## 70. Un link que no vale y un cliente apagado dan la misma respuesta.
+
+«Este link no está disponible», sin distinguir cuál de las dos cosas es.
+Distinguirlas le diría a quien prueba links si acertó el cliente y falló el
+resto. Es la misma razón por la que un archivo no autorizado responde 404 y no
+403.
+
+## 71. El calendario se edita a propósito, y se guarda de a una tanda.
+
+Tres decisiones, y las tres son la misma idea: un calendario es una promesa de
+fechas, y no se toca sin querer.
+
+1. **Se abre en modo mirar.** Editar es un botón. Siempre editable es siempre
+   a un clic de desarmarse.
+2. **Se guarda de a una tanda.** Se acomodan varias piezas y recién ahí se
+   guarda. Guardando en cada movimiento, cualquier reacomodo a medio hacer
+   deja el calendario diciendo algo que nadie quiso decir. Y cancelar sin
+   haber tocado el servidor es la mitad del valor de tener un botón.
+3. **Se arrastra, pero también se puede sin arrastrar.** Arrastrar es lo
+   natural con el mouse y no existe con el teclado: cada pieza puesta tiene su
+   botón para sacarla, y las que no tienen día se asignan eligiéndolas y
+   tocando el día.
+
+La fecha se guarda por **archivo** y como `AAAA-MM-DD`, no como un instante.
+Un posteo sale «el 12», no «el 12 a las 03:00 UTC»: guardar una hora que nadie
+eligió es pedir que un cambio de horario lo mueva un día. Convertir texto a
+fecha se hace con el constructor de tres números y no parseando —`new
+Date("2026-09-12")` es medianoche UTC, o sea el 11 a las 21 en Buenos Aires—.
+Está probado en los dos sentidos.
+
+Lo que se guarda acá es lo mismo que lee el portal: un dato, dos pantallas.
+
+## 72. Las conversaciones se ordenan por quién debe una respuesta.
+
+La pantalla de chats no se ordena por cliente ni alfabéticamente, sino por lo
+que la agencia se pregunta todo el día: **dónde me están esperando**. Arriba,
+lo que dijo el cliente y nadie contestó; después, lo más reciente; al final,
+las carpetas donde no se habló nunca.
+
+«El último que habló fue el cliente» es lo más parecido a «sin responder» que
+se puede saber sin registrar quién leyó qué. Cuando existan los usuarios pasa
+a ser «no leído» de verdad, por persona.
