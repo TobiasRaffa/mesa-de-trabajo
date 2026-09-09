@@ -439,3 +439,40 @@ decidir, para volver a elegir con calma.
 No es un detalle de redacción. Un botón que hace algo distinto de lo que dice
 es la forma más barata de perder la confianza de quien lo aprieta — sobre todo
 si lo que hace de más es aprobar un trabajo.
+
+## 30. Guardado y editable son dos cosas distintas.
+
+Al guardar, el texto deja de ser un campo y pasa a ser texto: se lee, no se
+toca. Para volver a cambiarlo hay que apretar **Editar cambios**.
+
+La razón es que un campo abierto invita a escribir, y en un teléfono invita
+también a borrar sin querer. Si el cliente ya decidió qué pedir, lo que
+corresponde es mostrárselo, no dejarle el lápiz en la mano.
+
+La disposición de los botones dice lo mismo sin palabras:
+
+```
+[ Editar cambios ] [ Descartar cambios ]  ················  [ Enviar revisión ]
+   lo que se puede hacer con el texto                        lo que no se deshace
+```
+
+Juntos a la izquierda lo que se puede rehacer; solo a la derecha, lejos, lo
+único que sale hacia la agencia.
+
+## 31. Los botones dicen lo que hacen, en el idioma del cliente.
+
+«Está bien así» pasó a **Aprobar**. La frase amable describía un sentimiento;
+el botón ejecuta un acto con consecuencias —la pieza queda cerrada y el equipo
+puede publicarla— y merece el verbo que le corresponde.
+
+«Descartar» pasó a **Descartar cambios**, que dice qué se descarta. Solo, podía
+leerse como descartar la pieza.
+
+## 32. El seguimiento tenía que verse.
+
+Era una fila de palabras grises de once píxeles y se perdía en la pantalla.
+Ahora tiene marcas, línea y tamaño de lectura: el punto donde está la pieza va
+en color y en negrita, lo recorrido en gris, y lo que falta apenas dibujado.
+
+Sigue siendo información y no reproche. Pero información que nadie ve no es
+información.

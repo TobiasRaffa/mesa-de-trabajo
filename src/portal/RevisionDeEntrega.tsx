@@ -36,6 +36,14 @@ type EnPantalla = Pieza & {
   pedido: string;
   /** Ya viajó a la agencia, sola o con el resto. */
   enviada: boolean;
+  /**
+   * Se está escribiendo el pedido ahora mismo.
+   *
+   * Guardado y editable son cosas distintas: una vez guardado, el texto se
+   * muestra pero no se toca. Volver a editarlo es una decisión, no algo que
+   * pase por apoyar el dedo en el lugar equivocado.
+   */
+  editando: boolean;
 };
 
 const BORRADOR = "mesa-de-trabajo:borrador";
@@ -56,6 +64,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
       rondasExtra: entrega.rondasExtra,
       pedido: "",
       enviada: false,
+      editando: false,
     }))
   );
   const [abierta, setAbierta] = useState<string | null>(null);
@@ -89,6 +98,8 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                 estado: guardado[p.id].estado as Pieza["estado"],
                 pedido: guardado[p.id].pedido,
                 enviada: guardado[p.id].enviada ?? false,
+                // Lo recuperado ya estaba guardado: se muestra, no se edita.
+                editando: false,
               }
             : p
         )
@@ -262,7 +273,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                             variante="principal"
                             onClick={() => setConfirmando({ soloEsta: pieza.id })}
                           >
-                            Enviar solo esta
+                            Enviar revisión
                           </Boton>
                         </div>
                       </>
@@ -277,51 +288,105 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                           >
                             Qué habría que cambiar
                           </label>
-                          <textarea
-                            id={`pedido-${pieza.id}`}
-                            value={pieza.pedido}
-                            onChange={(e) =>
-                              setPiezas((antes) =>
-                                antes.map((p) =>
-                                  p.id === pieza.id ? { ...p, pedido: e.target.value } : p
+
+                          {pieza.editando ? (
+                            <textarea
+                              id={`pedido-${pieza.id}`}
+                              value={pieza.pedido}
+                              onChange={(e) =>
+                                setPiezas((antes) =>
+                                  antes.map((p) =>
+                                    p.id === pieza.id ? { ...p, pedido: e.target.value } : p
+                                  )
                                 )
-                              )
-                            }
-                            rows={6}
-                            placeholder="Escribí lo que haya que ajustar. Podés volver más tarde y seguir agregando."
-                            className="mt-3 w-full rounded-lg border border-linea bg-lienzo p-4 text-normal
-                                       placeholder:text-apagado focus:border-acento focus:outline-none"
-                          />
+                              }
+                              rows={6}
+                              autoFocus
+                              placeholder="Escribí lo que haya que ajustar. Podés guardarlo y volver más tarde a seguir."
+                              className="mt-3 w-full rounded-lg border border-linea bg-lienzo p-4 text-normal
+                                         placeholder:text-apagado focus:border-acento focus:outline-none"
+                            />
+                          ) : (
+                            /* Ya guardado: se lee, no se toca. Para cambiarlo
+                               hay que decidir cambiarlo. */
+                            <p className="mt-3 min-h-32 whitespace-pre-wrap rounded-lg border border-linea bg-hueco p-4 text-normal">
+                              {pieza.pedido.trim() || (
+                                <span className="text-apagado">Todavía no escribiste nada.</span>
+                              )}
+                            </p>
+                          )}
                         </div>
 
-                        <div className="flex flex-col gap-3 sm:flex-row">
-                          <Boton
-                            variante="principal"
-                            onClick={() => {
-                              setPiezas((antes) => {
-                                guardar(antes);
-                                return antes;
-                              });
-                              setAbierta(null);
-                            }}
-                          >
-                            Guardar y seguir después
-                          </Boton>
-                          <Boton
-                            variante="secundario"
-                            onClick={() => setConfirmando({ soloEsta: pieza.id })}
-                          >
-                            Enviar solo esta
-                          </Boton>
-                          <Boton
-                            variante="sutil"
-                            onClick={() =>
-                              mover(pieza.id, { tipo: "descartar_cambios" }, { pedido: "" })
-                            }
-                          >
-                            Descartar
-                          </Boton>
-                        </div>
+                        {pieza.editando ? (
+                          <div className="flex flex-col gap-3 sm:flex-row">
+                            <Boton
+                              variante="principal"
+                              onClick={() => {
+                                setPiezas((antes) => {
+                                  const siguientes = antes.map((p) =>
+                                    p.id === pieza.id ? { ...p, editando: false } : p
+                                  );
+                                  guardar(siguientes);
+                                  return siguientes;
+                                });
+                                setAbierta(null);
+                              }}
+                            >
+                              Guardar y seguir después
+                            </Boton>
+                            <Boton
+                              variante="sutil"
+                              onClick={() =>
+                                mover(
+                                  pieza.id,
+                                  { tipo: "descartar_cambios" },
+                                  { pedido: "", editando: false }
+                                )
+                              }
+                            >
+                              Descartar cambios
+                            </Boton>
+                          </div>
+                        ) : (
+                          /* Guardado. Lo que se puede hacer con el texto queda a
+                             la izquierda; enviar --que no se deshace-- lejos, a
+                             la derecha. */
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-col gap-3 sm:flex-row">
+                              <Boton
+                                variante="secundario"
+                                onClick={() =>
+                                  setPiezas((antes) =>
+                                    antes.map((p) =>
+                                      p.id === pieza.id ? { ...p, editando: true } : p
+                                    )
+                                  )
+                                }
+                              >
+                                Editar cambios
+                              </Boton>
+                              <Boton
+                                variante="sutil"
+                                onClick={() =>
+                                  mover(
+                                    pieza.id,
+                                    { tipo: "descartar_cambios" },
+                                    { pedido: "", editando: false }
+                                  )
+                                }
+                              >
+                                Descartar cambios
+                              </Boton>
+                            </div>
+
+                            <Boton
+                              variante="principal"
+                              onClick={() => setConfirmando({ soloEsta: pieza.id })}
+                            >
+                              Enviar revisión
+                            </Boton>
+                          </div>
+                        )}
 
                         <p className="text-menudo text-apagado">
                           Esto todavía no llegó a la agencia.
@@ -336,11 +401,13 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
                             variante="aprobar"
                             onClick={() => mover(pieza.id, { tipo: "aprobar", por: "cliente" })}
                           >
-                            Está bien así
+                            Aprobar
                           </Boton>
                           <Boton
                             variante="secundario"
-                            onClick={() => mover(pieza.id, { tipo: "pedir_cambios" })}
+                            onClick={() =>
+                              mover(pieza.id, { tipo: "pedir_cambios" }, { editando: true })
+                            }
                           >
                             Pedir cambios
                           </Boton>
