@@ -679,6 +679,10 @@ quién es la pieza, cómo se llama y en qué anda, sin que haya que buscarlo.
 Se descartó la barra lateral fija: en una pantalla de 1280 se come una cuarta
 parte de forma permanente para tres botones que se usan al final.
 
+> **Revertido.** Ver la [decisión 48](#48-el-resumen-y-las-acciones-van-al-costado):
+> la barra lateral entró igual, y el argumento de arriba resultó estar mirando
+> la dimensión equivocada.
+
 ## 46. La fuente la servimos nosotros.
 
 `next/font` la descarga al compilar y la deja junto al resto de la aplicación.
@@ -699,3 +703,60 @@ como calendario** al armarla. Si no la marcó, hay lista y nada más.
 La división es a propósito: la agencia sabe si esa entrega tiene sentido como
 mes —una grilla de contenido sí, una campaña de packaging no—, y el cliente
 sabe cómo prefiere mirarla. Cada uno decide lo que le corresponde.
+
+## 48. El resumen y las acciones van al costado.
+
+Estaban en una banda negra a lo ancho, arriba de las piezas. Pasaron a una
+columna a la derecha, fija mientras se baja. En el teléfono vuelven arriba,
+que es donde hay lugar.
+
+Esto revierte lo que decía la [decisión 45](#45-la-dirección-visual-elegida-entre-opciones-y-no-propuesta-a-ciegas).
+El argumento de entonces —«se come una cuarta parte del ancho»— medía la
+dimensión que sobra. Una pantalla de computadora es más ancha que alta: el
+ancho es lo que hay de más y el alto es lo que falta. La banda horizontal se
+llevaba alto que le hacía falta al trabajo y, peor, se perdía apenas se bajaba
+un poco; la columna no se va nunca.
+
+## 49. Los cambios son una lista, no un texto.
+
+Un cliente no piensa el pedido entero de una vez: se acuerda de una cosa hoy y
+de otra mañana. Con un solo campo, agregar significaba reabrir, releer y
+escribir al final, con el riesgo de pisar lo anterior. Ahora cada punto se
+agrega, se corrige y se borra por separado, hasta que se envía la revisión;
+después queda firme.
+
+**Anotar el primer cambio es pedir cambios; borrar el último es arrepentirse.**
+Son las dos únicas veces que tocar la lista mueve la pieza. Corregir la
+redacción o sumar el tercer punto no es una decisión nueva y no toca la
+máquina de estados.
+
+Esto arregla el botón de «editar cambios», que no funcionaba: despachaba
+`pedir_cambios` sobre una pieza que ya estaba en `cambios_marcados`, y el
+dominio —con razón— lo rechazaba. **Editar es estado de pantalla, no un evento
+del negocio.** Confundir las dos cosas era el error; la regla del dominio
+estaba bien y no se tocó.
+
+## 50. Las ventanas se apilan, y atiende la de arriba.
+
+Al ampliar una pieza hay dos ventanas abiertas, una encima de la otra. Cada
+una escuchaba el teclado en `document` por su cuenta, así que Escape las
+cerraba a las dos de golpe: se cerraba la imagen y, detrás, la pieza entera
+que se estaba revisando —con lo escrito a medias adentro—.
+
+Hay una pila (`src/ui/pilaDeVentanas.ts`) y solo la de más arriba atiende
+Escape y atrapa el foco. Se sacan una ventana del medio y un cierre repetido
+—React puede limpiar un efecto más de una vez— sin que ninguna de las dos
+cosas promueva a la ventana equivocada.
+
+Vive aparte del `hook` a propósito: así la regla se prueba sin navegador, como
+el resto de lo que decide algo.
+
+## 51. Tres errores de medida que solo aparecen probando.
+
+Ninguno de los tres da error; los tres se ven mal y nada avisa.
+
+| Dónde | Qué pasaba | Por qué |
+|---|---|---|
+| Imagen ampliada | Se dibujaba a tamaño completo y se iba de la pantalla | Faltaba `min-h-0` en la cadena de elementos flexibles: un elemento flexible no se achica por debajo de su contenido si no se le dice |
+| Grilla del portal, en el teléfono | Un pedido largo la ensanchaba y la página se desplazaba de costado | Faltaba `min-w-0` en las columnas: lo mismo, pero a lo ancho |
+| Comparador | Las láminas se medían con una proporción fija (`aspect-[4/5]`) | Una pieza se juzga contra la pantalla que la muestra, no contra su propia forma |
