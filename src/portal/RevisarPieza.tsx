@@ -30,6 +30,7 @@ import {
   IconoComparar,
   IconoDescargar,
   IconoDeshacer,
+  IconoDrive,
   IconoEditar,
   IconoEnviar,
   IconoFlecha,
@@ -47,6 +48,8 @@ export type PiezaAbierta = Pieza & {
   nombre: string;
   driveFileId: string;
   modificado?: string;
+  /** El archivo en Drive, para abrirlo allá. */
+  enlaceDrive?: string;
   versiones: VersionDePieza[];
   publicaEl?: Date;
   /** Los puntos que el cliente pidió cambiar, en el orden en que los escribió. */
@@ -227,6 +230,22 @@ export function RevisarPieza({
                   <IconoAmpliar />
                   {comparando && hayAnterior ? "Agrandar las dos" : "Ver en grande"}
                 </Boton>
+
+                {/* El archivo en Drive: para quien quiera verlo con las
+                    herramientas de Google, o bajarlo desde ahí. Solo abre para
+                    quien ya tenga acceso a esa carpeta. */}
+                {pieza.enlaceDrive && (
+                  <BotonEnlace
+                    href={pieza.enlaceDrive}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    variante="contorno"
+                    tamano="chico"
+                  >
+                    <IconoDrive />
+                    Abrir en Drive
+                  </BotonEnlace>
+                )}
 
                 {hayAnterior && (
                   <Boton

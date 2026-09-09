@@ -23,7 +23,14 @@ import { aplicar, type Evento, type Pieza } from "@/dominio/pieza";
 import { Ampliada, type Lamina } from "@/ui/Ampliada";
 import { Boton, BotonEnlace } from "@/ui/Boton";
 import { Calendario, type PiezaEnCalendario } from "@/ui/Calendario";
-import { IconoCerrar, IconoDescargar, IconoEditar, IconoEnviar } from "@/ui/Icono";
+import {
+  IconoCerrar,
+  IconoDescargar,
+  IconoDrive,
+  IconoEditar,
+  IconoEnviar,
+} from "@/ui/Icono";
+import { Conversacion, type Mensaje } from "@/portal/Conversacion";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta } from "@/lib/fechas";
@@ -40,6 +47,9 @@ type EnPantalla = PiezaAbierta;
  * dos carpetas del mismo cliente se pisarían el borrador entre ellas.
  */
 const claveDelBorrador = (carpetaId: string) => `mesa-de-trabajo:borrador:${carpetaId}`;
+
+/** Dónde queda la conversación de esta carpeta, hasta que exista la base. */
+const claveDeLaCharla = (carpetaId: string) => `mesa-de-trabajo:charla:${carpetaId}`;
 
 /** Un identificador para un cambio recién escrito. */
 function nuevoId(): string {
@@ -97,6 +107,7 @@ function Revision({
       nombre: p.nombre,
       driveFileId: p.driveFileId,
       modificado: p.modificado,
+      enlaceDrive: p.enlaceDrive,
       estado: p.estado,
       ronda: p.ronda,
       rondasIncluidas: datos.rondasIncluidas,
@@ -112,8 +123,8 @@ function Revision({
   const [confirmando, setConfirmando] = useState<null | { soloEsta?: string }>(null);
   const [descargas, setDescargas] = useState(false);
   const [vista, setVista] = useState<"mes" | "semana" | "lista">("mes");
-  const [comentando, setComentando] = useState(false);
-  const [comentarioGeneral, setComentarioGeneral] = useState("");
+  const [conversando, setConversando] = useState(false);
+  const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [rechazo, setRechazo] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
@@ -153,6 +164,51 @@ function Revision({
       // Un navegador que no deja guardar no es motivo para romper la pantalla.
     }
   }, [BORRADOR]);
+
+  // La conversación, hasta que exista dónde guardarla de verdad. Cuando esté
+  // Supabase, esto pasa a ser una consulta y la pantalla no cambia.
+  useEffect(() => {
+    try {
+      const crudo = localStorage.getItem(claveDeLaCharla(carpeta.id));
+      if (!crudo) return;
+      const guardados = JSON.parse(crudo) as unknown;
+      if (!Array.isArray(guardados)) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMensajes(
+        guardados.filter(
+          (m): m is Mensaje =>
+            typeof m?.id === "string" &&
+            typeof m?.texto === "string" &&
+            typeof m?.cuando === "string" &&
+            (m.de === "cliente" || m.de === "agencia" || m.de === "sistema")
+        )
+      );
+    } catch {}
+  }, [carpeta.id]);
+
+  /**
+   * Manda un mensaje al equipo.
+   *
+   * **No hay respuesta automática, ni la va a haber.** La aplicación anota lo
+   * que se dijo; contestar es de una persona. Si algún día esto genera una
+   * respuesta, se rompió la regla más vieja del proyecto.
+   */
+  function enviarMensaje(texto: string) {
+    const siguiente: Mensaje[] = [
+      ...mensajes,
+      {
+        id: nuevoId(),
+        de: "cliente",
+        quien: "Vos",
+        texto,
+        cuando: new Date().toISOString(),
+      },
+    ];
+    setMensajes(siguiente);
+    try {
+      localStorage.setItem(claveDeLaCharla(carpeta.id), JSON.stringify(siguiente));
+    } catch {}
+  }
 
   function guardarEnElNavegador(siguientes: EnPantalla[]) {
     try {
@@ -288,14 +344,11 @@ function Revision({
                    lg:sticky lg:top-0 lg:h-screen lg:w-80 lg:shrink-0 lg:overflow-y-auto"
       >
         <div>
-          <p className="text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
+          <h1 className="text-grande font-extrabold leading-none tracking-tighter">
             {datos.cliente.nombre}
-          </p>
-          <h1 className="mt-1 text-titulo font-extrabold leading-tight tracking-tight">
-            {carpeta.nombre}
           </h1>
-          <p className="mt-1 text-menudo text-lienzo/55">
-            {piezas.length} {piezas.length === 1 ? "archivo" : "archivos"}
+          <p className="mt-2 text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
+            Mesa de trabajo
           </p>
         </div>
 
@@ -342,36 +395,9 @@ function Revision({
           </nav>
         )}
 
-        <div>
-          <div className="flex items-baseline gap-2">
-            <span className="cifras text-grande font-extrabold tracking-tighter">
-              {resueltas}
-            </span>
-            <span className="text-guia font-semibold text-lienzo/45">de {piezas.length}</span>
-          </div>
-          <p className="mt-1 text-micro font-extrabold uppercase tracking-widest text-lienzo/55">
-            resueltas
-          </p>
-          <div className="mt-3 h-1.5 bg-lienzo/15">
-            <div
-              className="h-full bg-acento transition-[width] duration-300"
-              style={{ width: `${avance}%` }}
-              role="progressbar"
-              aria-valuenow={avance}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Piezas resueltas"
-            />
-          </div>
-          {sinDecidir.length > 0 && (
-            <p className="mt-3 text-menudo text-lienzo/60">
-              Te {sinDecidir.length === 1 ? "queda" : "quedan"} {sinDecidir.length}{" "}
-              {sinDecidir.length === 1 ? "pieza" : "piezas"} sin mirar.
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2">
+        {/* Los botones van al fondo: son el final del recorrido, no el
+            principio. `mt-auto` los empuja hasta abajo de la columna. */}
+        <div className="mt-auto flex flex-col gap-2">
           <Boton
             variante="principal"
             ancho
@@ -384,12 +410,17 @@ function Revision({
 
           <button
             type="button"
-            onClick={() => setComentando(true)}
+            onClick={() => setConversando(true)}
             className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-4
                        text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
           >
             <IconoEditar />
-            Comentario general
+            Hablar con el equipo
+            {mensajes.length > 0 && (
+              <span className="bg-lienzo/20 px-1.5 text-micro font-extrabold">
+                {mensajes.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -418,7 +449,7 @@ function Revision({
             href={carpeta.enlaceDrive}
             target="_blank"
             rel="noreferrer noopener"
-            className="mt-auto inline-flex min-h-toque items-center gap-2 text-menudo font-semibold
+            className="inline-flex min-h-toque items-center gap-2 text-menudo font-semibold
                        text-lienzo/60 underline underline-offset-4 transition-colors hover:text-lienzo"
           >
             Abrir «{carpeta.nombre}» en Drive
@@ -439,37 +470,73 @@ function Revision({
           </p>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          {hayCalendario ? (
-            <div
-              role="tablist"
-              aria-label="Cómo mirar la carpeta"
-              className="flex border-2 border-tinta"
-            >
-              {(["mes", "semana", "lista"] as const).map((modo) => (
-                <button
-                  key={modo}
-                  role="tab"
-                  aria-selected={vista === modo}
-                  onClick={() => setVista(modo)}
-                  className={`min-h-toque px-5 text-normal font-bold capitalize tracking-tight transition-colors ${
-                    vista === modo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
-                  }`}
-                >
-                  {modo}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <h2 className="text-titulo font-extrabold tracking-tight">Las piezas</h2>
-          )}
+        {/* El título es el nombre de la carpeta, y el avance va pegado a él:
+            «cuánto me falta» es una propiedad de esto que estoy mirando, no un
+            dato suelto en otra columna. */}
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          <h2 className="min-w-0 text-grande font-extrabold leading-none tracking-tighter">
+            {carpeta.nombre}
+          </h2>
 
-          {hayCalendario && vista !== "lista" && (
-            <p className="text-titulo font-extrabold capitalize tracking-tight">
-              {nombreDelMes}
+          <div className="min-w-44">
+            <p className="flex items-baseline gap-2">
+              <span className="cifras text-titulo font-extrabold leading-none tracking-tighter">
+                {resueltas}
+              </span>
+              <span className="text-normal font-semibold text-apagado">
+                de {piezas.length} resueltas
+              </span>
             </p>
-          )}
+            <div className="mt-2 h-1.5 bg-hueco">
+              <div
+                className="h-full bg-acento transition-[width] duration-300"
+                style={{ width: `${avance}%` }}
+                role="progressbar"
+                aria-valuenow={avance}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Piezas resueltas"
+              />
+            </div>
+          </div>
         </div>
+
+        {(hayCalendario || sinDecidir.length > 0) && (
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+            {hayCalendario ? (
+              <div
+                role="tablist"
+                aria-label="Cómo mirar la carpeta"
+                className="flex border-2 border-tinta"
+              >
+                {(["mes", "semana", "lista"] as const).map((modo) => (
+                  <button
+                    key={modo}
+                    role="tab"
+                    aria-selected={vista === modo}
+                    onClick={() => setVista(modo)}
+                    className={`min-h-toque px-5 text-normal font-bold capitalize tracking-tight transition-colors ${
+                      vista === modo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
+                    }`}
+                  >
+                    {modo}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-menudo text-apagado">
+                Te {sinDecidir.length === 1 ? "queda" : "quedan"} {sinDecidir.length}{" "}
+                {sinDecidir.length === 1 ? "pieza" : "piezas"} sin mirar.
+              </p>
+            )}
+
+            {hayCalendario && vista !== "lista" && (
+              <p className="text-titulo font-extrabold capitalize tracking-tight">
+                {nombreDelMes}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="mt-5">
           {hayCalendario && vista !== "lista" ? (
@@ -482,11 +549,14 @@ function Revision({
           ) : (
             <ul className="divide-y divide-linea border-y border-linea">
               {piezas.map((pieza) => (
-                <li key={pieza.id}>
+                <li key={pieza.id} className="flex items-center gap-2">
+                  {/* El link va afuera del botón y no adentro: un enlace
+                      adentro de un botón es HTML inválido, y el navegador
+                      resuelve el conflicto como quiere. */}
                   <button
                     type="button"
                     onClick={() => setAbierta(pieza.id)}
-                    className="flex w-full items-center gap-4 py-4 text-left transition-colors hover:bg-hueco/60"
+                    className="flex min-w-0 flex-1 items-center gap-4 py-4 text-left transition-colors hover:bg-hueco/60"
                   >
                     <span className="relative h-16 w-16 shrink-0 overflow-hidden bg-tinta">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -509,6 +579,11 @@ function Revision({
                           aprobada={pieza.estado === "final"}
                           compacto
                         />
+                        {pieza.versiones.length > 1 && (
+                          <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
+                            {pieza.versiones.length} vueltas
+                          </span>
+                        )}
                         {pieza.publicaEl && (
                           <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
                             sale el {fechaCorta(pieza.publicaEl)}
@@ -530,11 +605,21 @@ function Revision({
                         </span>
                       )}
                     </span>
-
-                    <span aria-hidden="true" className="shrink-0 text-apagado">
-                      ›
-                    </span>
                   </button>
+
+                  {pieza.enlaceDrive && (
+                    <a
+                      href={pieza.enlaceDrive}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      title={`Abrir ${pieza.nombre} en Drive`}
+                      className="grid h-10 w-10 shrink-0 place-items-center text-apagado
+                                 transition-colors hover:bg-hueco hover:text-tinta"
+                    >
+                      <IconoDrive />
+                      <span className="sr-only">Abrir en Drive</span>
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
@@ -596,16 +681,12 @@ function Revision({
 
       {descargas && <Descargas piezas={aprobadas} onCerrar={() => setDescargas(false)} />}
 
-      {comentando && (
-        <ComentarioGeneral
-          texto={comentarioGeneral}
-          onEscribir={setComentarioGeneral}
-          onCerrar={() => setComentando(false)}
-          onEnviar={() => {
-            setComentando(false);
-            setAviso("Le mandamos tu comentario al equipo.");
-            setComentarioGeneral("");
-          }}
+      {conversando && (
+        <Conversacion
+          carpeta={carpeta.nombre}
+          mensajes={mensajes}
+          onEnviar={enviarMensaje}
+          onCerrar={() => setConversando(false)}
         />
       )}
 
@@ -716,58 +797,6 @@ function Descargas({
           </li>
         ))}
       </ul>
-    </Ventana>
-  );
-}
-
-/**
- * Un comentario sobre toda la carpeta, no sobre una pieza.
- *
- * Existe porque no todo lo que el cliente quiere decir cabe adentro de una
- * pieza: «el tono de toda la campaña quedó muy frío», «¿podemos correr todo una
- * semana?». Sin este lugar, eso termina en un audio de WhatsApp y se pierde.
- */
-function ComentarioGeneral({
-  texto,
-  onEscribir,
-  onCerrar,
-  onEnviar,
-}: {
-  texto: string;
-  onEscribir: (t: string) => void;
-  onCerrar: () => void;
-  onEnviar: () => void;
-}) {
-  return (
-    <Ventana
-      titulo="Comentario general"
-      bajada="Sobre toda la carpeta, no sobre una pieza en particular."
-      onCerrar={onCerrar}
-      pie={
-        <div className="flex flex-col gap-3 sm:flex-row-reverse">
-          <Boton ancho onClick={onEnviar} disabled={texto.trim().length === 0}>
-            <IconoEnviar />
-            Enviar comentario
-          </Boton>
-          <Boton variante="contorno" ancho onClick={onCerrar}>
-            Volver
-          </Boton>
-        </div>
-      }
-    >
-      <textarea
-        value={texto}
-        onChange={(e) => onEscribir(e.target.value)}
-        rows={8}
-        autoFocus
-        placeholder="Lo que quieras decirle al equipo sobre el conjunto: el tono, las fechas, algo que se repite en varias piezas…"
-        className="w-full resize-y border border-linea bg-lienzo p-4 text-normal
-                   transition-colors placeholder:text-apagado
-                   focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
-      />
-      <p className="mt-3 text-menudo text-apagado">
-        Este comentario se manda solo, sin esperar a que termines la revisión.
-      </p>
     </Ventana>
   );
 }

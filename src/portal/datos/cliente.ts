@@ -27,6 +27,8 @@ export type VersionDePieza = {
   driveFileId: string;
   modificado?: string;
   entregadaEl: Date;
+  /** Para abrirla en Drive. Solo funciona para quien ya tenga acceso. */
+  enlaceDrive?: string;
 };
 
 export type PiezaDeCarpeta = {
@@ -34,6 +36,8 @@ export type PiezaDeCarpeta = {
   nombre: string;
   driveFileId: string;
   modificado?: string;
+  /** El archivo en Drive: el de la vuelta que se está mirando. */
+  enlaceDrive?: string;
   estado: Estado;
   ronda: number;
   versiones: VersionDePieza[];
@@ -104,6 +108,7 @@ export async function portalDelCliente(): Promise<PortalDeCliente> {
             numero: i + 1,
             driveFileId: v.archivo.id,
             modificado: v.archivo.modifiedTime,
+            enlaceDrive: v.archivo.webViewLink,
             entregadaEl: v.archivo.modifiedTime
               ? new Date(v.archivo.modifiedTime)
               : new Date(),
@@ -115,6 +120,7 @@ export async function portalDelCliente(): Promise<PortalDeCliente> {
             nombre: pieza.titulo,
             driveFileId: ultima.driveFileId,
             modificado: ultima.modificado,
+            enlaceDrive: ultima.enlaceDrive,
             // Sin base de datos, todo empieza donde empieza de verdad:
             // entregado y sin revisar. Lo que el cliente vaya decidiendo lo
             // guarda su navegador hasta que exista dónde anotarlo.

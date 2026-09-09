@@ -910,3 +910,62 @@ qué está mal y puede arreglarlo.
 
 Es la misma información contada a dos públicos distintos, y esa asimetría es
 la decisión, no un descuido.
+
+## 61. El robot puede mover archivos, y no puede borrarlos.
+
+Preguntado a Drive el 9/9/2026 sobre la carpeta real, con el permiso de Editor
+que ya tiene:
+
+| | |
+|---|---|
+| `canMoveItemWithinDrive` | ✅ `true` — puede mover lo aprobado a «Entregas finales» |
+| `canAddChildren` / `canRemoveChildren` | ✅ `true` — sobre las carpetas |
+| `canEdit` | ✅ `true` |
+| `canDelete` | ❌ **`false`** |
+
+Que no pueda borrar no es una limitación: es la garantía que hacía falta.
+«Nada se borra nunca» dejó de depender de que el código se porte bien y pasó a
+estar puesto en Google. Aunque un error nuestro pidiera borrar un archivo,
+Drive lo rechaza.
+
+Se preguntó en vez de probarlo: probar un movimiento habría movido un archivo
+de verdad en la carpeta de la agencia.
+
+## 62. El comentario general se convierte en conversación.
+
+Era un cuadro de texto que se mandaba y desaparecía. Una entrega no se
+resuelve con un mensaje suelto: se resuelve hablando, y eso hoy pasa en
+WhatsApp, donde se mezcla con todo lo demás y se pierde. Ahora hay una
+conversación por carpeta, al lado del trabajo del que se está hablando.
+
+**Del otro lado siempre hay una persona.** Es la regla más vieja del proyecto
+y la conversación no la toca: la aplicación no contesta, no sugiere
+respuestas, no resume lo que dijo nadie. Está escrito en el encabezado del
+módulo y el pie de la pantalla lo dice en voz alta: «contesta una persona del
+equipo».
+
+Lo único que la aplicación escribe son **avisos de estado** —«se envió la
+revisión»—, y van centrados, en gris y sin burbuja, para que nadie los
+confunda con alguien hablando.
+
+La hora va en 24 horas. El formato que sale por omisión en `es-AR` es
+«05:31 P. M.», que se lee como traducido de otro lado.
+
+## 63. Cada cosa tiene su link a Drive: el archivo, el archivo; la carpeta, la carpeta.
+
+En la barra, el link es de la carpeta que se está mirando. En cada fila de la
+lista y adentro de la ventana de la pieza, el link es **de ese archivo**.
+
+El link de la lista va **afuera** del botón que abre la pieza y no adentro: un
+enlace adentro de un botón es HTML inválido y cada navegador resuelve el
+conflicto como quiere —a veces abriendo las dos cosas—.
+
+## 64. El avance se pega al nombre de la carpeta.
+
+«Cuánto me falta» es una propiedad de lo que estoy mirando, no un dato suelto
+en otra columna. El contador y la barra pasaron al lado del título, y el
+título dejó de decir «Las piezas» para decir el nombre de la carpeta.
+
+La barra de la izquierda queda con lo que identifica —el cliente, arriba y
+grande; las carpetas— y con los botones **al fondo**: son el final del
+recorrido, no el principio.

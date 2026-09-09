@@ -94,3 +94,11 @@ export const IconoBorrar = (p: Props) => (
     <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
   </Trazo>
 );
+
+// El triángulo de Drive, simplificado a sus tres planos.
+export const IconoDrive = (p: Props) => (
+  <Trazo {...p}>
+    <path d="M8.5 3h7l5.5 9.5-3.5 6h-11l-3.5-6L8.5 3z" />
+    <path d="M8.5 3l5.5 9.5M15.5 3l-5.5 9.5M3 12.5h11" />
+  </Trazo>
+);
