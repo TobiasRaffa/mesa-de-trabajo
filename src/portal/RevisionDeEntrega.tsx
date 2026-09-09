@@ -66,6 +66,15 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
   const [ampliada, setAmpliada] = useState<{ src: string; alt: string } | null>(null);
   const [confirmando, setConfirmando] = useState<null | { soloEsta?: string }>(null);
   const [descargas, setDescargas] = useState(false);
+  /**
+   * Mes, semana o lista.
+   *
+   * El interruptor solo existe si la agencia marcó la entrega como calendario
+   * al armarla; si no, hay lista y nada más. La elección es del cliente: la
+   * agencia decide si tiene sentido mirarlo como mes, no cómo prefiere mirarlo
+   * cada persona.
+   */
+  const [vista, setVista] = useState<"mes" | "semana" | "lista">("mes");
   const [comentando, setComentando] = useState(false);
   const [comentarioGeneral, setComentarioGeneral] = useState("");
   const [rechazo, setRechazo] = useState<string | null>(null);
@@ -182,143 +191,192 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
     aprobada: p.estado === "final",
   });
 
+  const hayCalendario = entrega.vista === "calendario" && conFecha.length > 0;
+  const nombreDelMes = hayCalendario
+    ? new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(
+        conFecha[0].publicaEl!
+      )
+    : "";
+
   const abiertaIndice = piezas.findIndex((p) => p.id === abierta);
   const piezaAbierta = abiertaIndice >= 0 ? piezas[abiertaIndice] : null;
 
   return (
     <>
       {/* ===================== Lo que se vino a hacer ==================== */}
-      <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-linea bg-lienzo p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
-        <div className="min-w-0 flex-1">
-          <p className="text-normal">
-            <span className="font-semibold">
-              {resueltas} de {piezas.length}
-            </span>{" "}
-            <span className="text-apagado">resueltas</span>
-            <span className="text-apagado"> · {plazoEnPalabras(entrega.vence)}</span>
-          </p>
-          <div
-            className="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full bg-hueco"
-            role="progressbar"
-            aria-valuenow={avance}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Piezas resueltas"
-          >
-            <div
-              className="h-full rounded-full bg-acento transition-[width] duration-300"
-              style={{ width: `${avance}%` }}
-            />
+      <div className="mt-6 bg-tinta text-lienzo">
+        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8 sm:p-6">
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-grande font-extrabold tracking-tighter">{resueltas}</span>
+              <span className="text-guia font-semibold text-lienzo/45">de {piezas.length}</span>
+            </div>
+            <p className="mt-1 text-micro font-extrabold uppercase tracking-widest text-lienzo/55">
+              resueltas · {plazoEnPalabras(entrega.vence)}
+            </p>
+            <div className="mt-3 h-1.5 max-w-xs bg-lienzo/15">
+              <div
+                className="h-full bg-acento transition-[width] duration-300"
+                style={{ width: `${avance}%` }}
+                role="progressbar"
+                aria-valuenow={avance}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Piezas resueltas"
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Boton variante="contorno" onClick={() => setComentando(true)}>
-            <IconoEditar />
-            Comentario general
-          </Boton>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => setComentando(true)}
+              className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-5
+                         text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
+            >
+              <IconoEditar />
+              Comentario general
+            </button>
 
-          <Boton
-            variante="contorno"
-            onClick={() => setDescargas(true)}
-            disabled={aprobadas.length === 0}
-          >
-            <IconoDescargar />
-            Descargar archivos
-            {aprobadas.length > 0 && (
-              <span className="rounded bg-hueco px-1.5 text-micro text-tinta-suave">
-                {aprobadas.length}
-              </span>
-            )}
-          </Boton>
+            <button
+              type="button"
+              onClick={() => setDescargas(true)}
+              disabled={aprobadas.length === 0}
+              className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-5
+                         text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10
+                         disabled:opacity-35 disabled:pointer-events-none"
+            >
+              <IconoDescargar />
+              Descargar archivos
+              {aprobadas.length > 0 && (
+                <span className="bg-lienzo/20 px-1.5 text-micro font-extrabold">
+                  {aprobadas.length}
+                </span>
+              )}
+            </button>
 
-          <Boton
-            variante="principal"
-            onClick={() => setConfirmando({})}
-            disabled={paraEnviar.length === 0}
-          >
-            <IconoEnviar />
-            Enviar revisión completa
-          </Boton>
+            <Boton
+              variante="principal"
+              onClick={() => setConfirmando({})}
+              disabled={paraEnviar.length === 0}
+            >
+              <IconoEnviar />
+              Enviar revisión completa
+            </Boton>
+          </div>
         </div>
       </div>
 
       {aviso && (
-        <p className="mt-4 rounded-xl border border-listo/25 bg-listo-tenue px-5 py-4 text-normal text-listo">
+        <p className="mt-4 border-l-4 border-acento bg-acento-tenue px-5 py-4 text-normal font-semibold text-acento">
           {aviso}
         </p>
       )}
       {rechazo && (
-        <p className="mt-4 rounded-xl border border-espera/25 bg-espera-tenue px-5 py-4 text-normal text-espera">
+        <p className="mt-4 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal font-semibold text-espera">
           {rechazo}
         </p>
       )}
 
-      {/* ========================== El calendario ======================== */}
-      {entrega.vista === "calendario" && conFecha.length > 0 && (
-        <div className="mt-10">
+      {/* ==================== Mes · Semana · Lista ======================= */}
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+        {hayCalendario ? (
+          <div
+            role="tablist"
+            aria-label="Cómo mirar la entrega"
+            className="flex border-2 border-tinta"
+          >
+            {(["mes", "semana", "lista"] as const).map((modo) => (
+              <button
+                key={modo}
+                role="tab"
+                aria-selected={vista === modo}
+                onClick={() => setVista(modo)}
+                className={`min-h-toque px-5 text-normal font-bold capitalize tracking-tight transition-colors ${
+                  vista === modo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
+                }`}
+              >
+                {modo}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <h2 className="text-titulo font-extrabold tracking-tight">Las piezas</h2>
+        )}
+
+        {hayCalendario && vista !== "lista" && (
+          <p className="text-titulo font-extrabold capitalize tracking-tight">
+            {nombreDelMes}
+          </p>
+        )}
+      </div>
+
+      {/* ========================== El contenido ========================= */}
+      <div className="mt-5">
+        {hayCalendario && vista !== "lista" ? (
           <Calendario
+            modo={vista}
             mes={conFecha[0].publicaEl!}
             piezas={conFecha.map(enCalendario)}
             onAbrir={setAbierta}
           />
-        </div>
-      )}
-
-      {/* ============================ La lista =========================== */}
-      <h2 className="mt-10 text-micro uppercase tracking-[0.18em] text-apagado">
-        Todas las piezas
-      </h2>
-      <ul className="mt-3 divide-y divide-linea-tenue border-y border-linea-tenue">
-        {piezas.map((pieza) => (
-          <li key={pieza.id}>
-            <button
-              type="button"
-              onClick={() => setAbierta(pieza.id)}
-              className="flex w-full items-center gap-4 py-4 text-left transition-colors hover:bg-hueco/50"
-            >
-              <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-linea bg-hueco">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={urlDeMiniatura(pieza.driveFileId, 220, pieza.modificado)}
-                  alt=""
-                  className="absolute inset-0 h-full w-full object-contain"
-                />
-              </span>
-
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold">{pieza.nombre}</span>
-                <span className="mt-1 flex flex-wrap items-center gap-2">
-                  <Seguimiento
-                    ronda={pieza.ronda}
-                    rondasIncluidas={pieza.rondasIncluidas}
-                    rondasExtra={pieza.rondasExtra}
-                    aprobada={pieza.estado === "final"}
-                    compacto
-                  />
-                  {pieza.publicaEl && (
-                    <span className="text-micro text-apagado">
-                      sale el {fechaCorta(pieza.publicaEl)}
-                    </span>
-                  )}
-                  {pieza.enviada && (
-                    <span className="text-micro text-apagado">· enviada</span>
-                  )}
-                </span>
-                {pieza.pedido && (
-                  <span className="mt-1 block truncate text-menudo text-apagado">
-                    {pieza.pedido}
+        ) : (
+          <ul className="divide-y divide-linea border-y border-linea">
+            {piezas.map((pieza) => (
+              <li key={pieza.id}>
+                <button
+                  type="button"
+                  onClick={() => setAbierta(pieza.id)}
+                  className="flex w-full items-center gap-4 py-4 text-left transition-colors hover:bg-hueco/60"
+                >
+                  <span className="relative h-16 w-16 shrink-0 overflow-hidden bg-tinta">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={urlDeMiniatura(pieza.driveFileId, 220, pieza.modificado)}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-contain"
+                    />
                   </span>
-                )}
-              </span>
 
-              <span aria-hidden="true" className="shrink-0 text-apagado">
-                ›
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-guia font-bold leading-snug">
+                      {pieza.nombre}
+                    </span>
+                    <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <Seguimiento
+                        ronda={pieza.ronda}
+                        rondasIncluidas={pieza.rondasIncluidas}
+                        rondasExtra={pieza.rondasExtra}
+                        aprobada={pieza.estado === "final"}
+                        compacto
+                      />
+                      {pieza.publicaEl && (
+                        <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
+                          sale el {fechaCorta(pieza.publicaEl)}
+                        </span>
+                      )}
+                      {pieza.enviada && (
+                        <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
+                          · enviada
+                        </span>
+                      )}
+                    </span>
+                    {pieza.pedido && (
+                      <span className="mt-1 block truncate text-menudo text-apagado">
+                        {pieza.pedido}
+                      </span>
+                    )}
+                  </span>
+
+                  <span aria-hidden="true" className="shrink-0 text-apagado">
+                    ›
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {/* ===================== Solo mientras es prueba =================== */}
       <div className="mt-12 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-hueco/60 px-4 py-3">

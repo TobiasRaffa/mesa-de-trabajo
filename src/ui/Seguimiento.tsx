@@ -1,10 +1,5 @@
 // El camino que hizo una pieza: Boceto, las rondas que hubo, y Final.
 //
-// Antes era una fila de puntitos con texto gris, y se leía como información de
-// depuración. Ahora es lo que en realidad es: **una etiqueta que dice dónde
-// está el trabajo**, con el paso actual marcado de verdad y los anteriores
-// apenas presentes.
-//
 // No enumera las rondas que todavía no pasaron. Mostrar «Boceto · Ronda 1 ·
 // Ronda 2 · Final» desde el principio da a entender que va a haber cambios, y
 // muchas veces al cliente le gusta el boceto y se termina ahí. El camino se
@@ -15,11 +10,10 @@ type Props = {
   rondasIncluidas: number;
   rondasExtra: number;
   aprobada: boolean;
-  /** En el calendario y en las filas alcanza con el paso actual. */
+  /** En listas y calendarios alcanza con el paso actual. */
   compacto?: boolean;
 };
 
-/** Cómo se llama el paso número `n`. El cero es el boceto. */
 function nombreDelPaso(n: number, rondasIncluidas: number) {
   if (n === 0) return "Boceto";
   // Las rondas habilitadas por encima de las incluidas se llaman distinto: el
@@ -44,8 +38,8 @@ export function Seguimiento({
   if (compacto) {
     return (
       <span
-        className={`inline-flex items-center rounded-md px-2 py-0.5 text-micro font-semibold ${
-          aprobada ? "bg-listo-tenue text-listo" : "bg-hueco text-tinta-suave"
+        className={`inline-flex items-center px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider ${
+          aprobada ? "bg-acento text-white" : "bg-hueco text-tinta-suave"
         }`}
       >
         {actual}
@@ -58,10 +52,10 @@ export function Seguimiento({
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
       {anteriores.map((paso) => (
-        <span key={paso} className="flex items-center gap-1.5">
-          <span className="text-menudo text-apagado">{paso}</span>
+        <span key={paso} className="flex items-center gap-2">
+          <span className="text-menudo font-semibold text-apagado">{paso}</span>
           <span aria-hidden="true" className="text-linea">
             ›
           </span>
@@ -69,8 +63,8 @@ export function Seguimiento({
       ))}
 
       <span
-        className={`rounded-md px-2.5 py-1 text-menudo font-semibold ${
-          aprobada ? "bg-listo-tenue text-listo" : "bg-acento-tenue text-acento"
+        className={`px-2.5 py-1 text-menudo font-extrabold uppercase tracking-wider ${
+          aprobada ? "bg-acento text-white" : "bg-tinta text-lienzo"
         }`}
         aria-current="step"
       >
@@ -82,7 +76,7 @@ export function Seguimiento({
           <span aria-hidden="true" className="text-linea">
             ›
           </span>
-          <span className="text-menudo text-linea">Final</span>
+          <span className="text-menudo font-semibold text-linea">Final</span>
         </>
       )}
 
@@ -90,7 +84,7 @@ export function Seguimiento({
           cambia lo que se puede hacer. Que sea la última no hace falta
           aclararlo: se lee del camino. */}
       {!aprobada && quedan <= 0 && (
-        <span className="ml-1 rounded-md bg-espera-tenue px-2 py-0.5 text-micro font-semibold text-espera">
+        <span className="border-l-4 border-espera-borde bg-espera-tenue px-2 py-0.5 text-micro font-bold text-espera">
           sin rondas incluidas
         </span>
       )}

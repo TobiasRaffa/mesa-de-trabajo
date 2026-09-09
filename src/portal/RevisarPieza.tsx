@@ -15,7 +15,7 @@ import { useState } from "react";
 import type { Evento, Pieza } from "@/dominio/pieza";
 import { Boton, BotonEnlace } from "@/ui/Boton";
 import { Comparador } from "@/ui/Comparador";
-import { Seguimiento } from "@/ui/Seguimiento";
+import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import {
   IconoAmpliar,
   IconoAprobar,
@@ -97,37 +97,52 @@ export function RevisarPieza({
         className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[94vh] sm:max-w-6xl sm:rounded-2xl sm:shadow-2xl"
       >
         {/* ------------------------- Encabezado ------------------------- */}
-        <header className="flex items-center gap-3 border-b border-linea bg-lienzo px-4 py-3 sm:px-6">
+        {/* La banda de color es el encabezado: dice de quién es la pieza, cómo
+            se llama y en qué anda, sin que haya que buscarlo. */}
+        <header className="flex items-center gap-4 bg-acento px-4 py-4 text-white sm:px-6">
           <div className="min-w-0 flex-1">
-            <p className="text-micro uppercase tracking-[0.18em] text-apagado">
+            <p className="text-micro font-extrabold uppercase tracking-widest text-white/60">
               Pieza {posicion.actual} de {posicion.total}
               {pieza.publicaEl && ` · sale el ${fechaCorta(pieza.publicaEl)}`}
             </p>
-            <h2 className="truncate text-guia font-semibold tracking-tight">{pieza.nombre}</h2>
+            <h2 className="mt-0.5 truncate text-titulo font-extrabold tracking-tight">
+              {pieza.nombre}
+            </h2>
           </div>
 
-          <div className="flex items-center gap-1">
-            <Boton
-              variante="fantasma"
-              tamano="chico"
-              onClick={() => onIr(-1)}
-              disabled={posicion.total < 2}
-              aria-label="Pieza anterior"
-            >
-              <IconoFlecha className="rotate-180" />
-            </Boton>
-            <Boton
-              variante="fantasma"
-              tamano="chico"
-              onClick={() => onIr(1)}
-              disabled={posicion.total < 2}
-              aria-label="Pieza siguiente"
-            >
-              <IconoFlecha />
-            </Boton>
-            <Boton variante="fantasma" tamano="chico" onClick={onCerrar} aria-label="Cerrar">
-              <IconoCerrar />
-            </Boton>
+          <div className="flex items-center gap-3">
+            <span className="hidden bg-white/15 px-3 py-1.5 text-micro font-extrabold uppercase tracking-wider sm:block">
+              {pasoActual(pieza.ronda, pieza.rondasIncluidas, pieza.estado === "final")}
+            </span>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => onIr(-1)}
+                disabled={posicion.total < 2}
+                aria-label="Pieza anterior"
+                className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25 disabled:opacity-35"
+              >
+                <IconoFlecha className="rotate-180" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onIr(1)}
+                disabled={posicion.total < 2}
+                aria-label="Pieza siguiente"
+                className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25 disabled:opacity-35"
+              >
+                <IconoFlecha />
+              </button>
+              <button
+                type="button"
+                onClick={onCerrar}
+                aria-label="Cerrar"
+                className="grid h-9 w-9 place-items-center bg-white text-acento transition-colors hover:bg-white/90"
+              >
+                <IconoCerrar />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -150,7 +165,7 @@ export function RevisarPieza({
                   onClick={() => onAmpliar(srcGrande, pieza.nombre)}
                   aria-label={`Ver ${pieza.nombre} en grande`}
                   className="group relative grid h-[38vh] w-full place-items-center overflow-hidden
-                             rounded-xl border border-linea bg-lienzo sm:h-[46vh] lg:h-[58vh]"
+                             border border-linea bg-lienzo sm:h-[46vh] lg:h-[58vh]"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -277,7 +292,7 @@ export function RevisarPieza({
         </div>
 
         {/* ---------------------------- Pie ----------------------------- */}
-        <footer className="border-t border-linea bg-lienzo px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-3">
+        <footer className="border-t-2 border-tinta bg-lienzo px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {pendiente && (
               <>

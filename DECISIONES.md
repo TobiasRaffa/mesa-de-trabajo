@@ -659,3 +659,43 @@ color no dice nada, hay que aprenderse qué significa cada uno.
 
 Así que en el teléfono es una agenda: los días con trabajo, uno abajo del otro,
 con lugar para decir las cosas por su nombre. Mismo componente, dos formas.
+
+## 45. La dirección visual, elegida entre opciones y no propuesta a ciegas.
+
+Se dibujaron siete maquetas —tres ventanas, dos calendarios, dos páginas— y se
+eligió sobre ellas. Quedó **«marcado»**: contraste alto, tipografía con peso,
+bloques de color definidos, y **cero esquinas redondeadas**. Los bordes se ven.
+
+| | |
+|---|---|
+| Neutros | Cálidos, girados al ocre. Al lado de una pieza impresa un gris frío se ve enfermo; este papel se ve papel. |
+| Acento | Verde profundo `#1b4d3e`. Es también el color de aprobar, porque aprobar **es** la acción principal del portal. |
+| Ámbar | Lo que está esperando algo. |
+| Rojo | Lo que está mal. Se usa poco, a propósito. |
+
+La banda de color en el encabezado de la ventana es la idea central: dice de
+quién es la pieza, cómo se llama y en qué anda, sin que haya que buscarlo.
+
+Se descartó la barra lateral fija: en una pantalla de 1280 se come una cuarta
+parte de forma permanente para tres botones que se usan al final.
+
+## 46. La fuente la servimos nosotros.
+
+`next/font` la descarga al compilar y la deja junto al resto de la aplicación.
+Eso evita un pedido a otro servidor mientras el cliente espera —en un teléfono
+con datos móviles se nota— y de paso no le cuenta a Google quién abrió el
+portal de la agencia.
+
+Se intentó primero con un `@import` en la hoja de estilos y **rompió la
+aplicación entera**: CSS exige que los `@import` vayan antes que cualquier
+regla, y el nuestro quedó al final. Devolvía 500 y el mensaje hablaba de
+«Parsing CSS source code failed», que no dice qué hacer.
+
+## 47. Mes, semana o lista: elige el cliente, habilita la agencia.
+
+El interruptor de tres vistas aparece **solo si la agencia marcó la entrega
+como calendario** al armarla. Si no la marcó, hay lista y nada más.
+
+La división es a propósito: la agencia sabe si esa entrega tiene sentido como
+mes —una grilla de contenido sí, una campaña de packaging no—, y el cliente
+sabe cómo prefiere mirarla. Cada uno decide lo que le corresponde.

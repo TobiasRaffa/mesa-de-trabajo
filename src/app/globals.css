@@ -3,74 +3,72 @@
 /* Tailwind descubre solo qué archivos mirar, pero se saltea las carpetas con
    paréntesis o corchetes -- que en Next son justamente los grupos de rutas,
    `(portal)`, y las rutas dinámicas, `[token]`. Sin esta línea, las clases que
-   solo se usan ahí no se generan: la pantalla se ve a medio armar y nada avisa.
-   Se lo decimos explícitamente. */
+   solo se usan ahí no se generan: la pantalla se ve a medio armar y nada avisa. */
 @source "../";
 
 /* ============================================================================
-   Sistema visual
+   Sistema visual — «marcado»
    ============================================================================
 
-   Una regla manda sobre todas las demás: **lo más fuerte de la pantalla tiene
-   que ser el trabajo del cliente**, no la aplicación. Los bocetos son piezas
-   de diseño con sus propios colores; si la interfaz compite, la pieza pierde.
+   La dirección elegida: contraste alto, tipografía con peso, bloques de color
+   definidos. Sin sombras difusas ni esquinas redondeadas — los bordes se ven.
 
-   De ahí salen las decisiones:
+   Sigue mandando una regla sobre todas: **lo más fuerte de la pantalla tiene
+   que ser el trabajo del cliente**. Por eso el color fuerte se reserva para
+   las bandas de estado y los botones, y el resto es papel: los bocetos tienen
+   sus propios colores y no compiten contra un fondo saturado.
 
-     · Neutros apenas girados al azul, en vez de grises puros. Un gris puro al
-       lado de una pieza cálida se ve sucio.
-     · Un solo acento, para lo que se puede tocar.
-     · Los colores de estado (esperando, aprobado, con cambios) son señales,
-       no decoración: no se usan para nada más.
-     · Tipografía del sistema. En un teléfono con datos móviles, una fuente
-       que hay que descargar es texto que tarda en aparecer. Esto es una
-       herramienta, no un folleto.
+   Los neutros son cálidos, girados al ocre y no al azul. Al lado de una pieza
+   impresa, un gris frío se ve enfermo; este papel se ve papel.
    ============================================================================ */
 
 @theme {
-  /* Neutros ------------------------------------------------------------- */
-  --color-papel: #fafaf8;
+  /* Neutros: papel, no pantalla ----------------------------------------- */
+  --color-papel: #f0ede6;
   --color-lienzo: #ffffff;
-  --color-hueco: #f2f3f0;
+  --color-hueco: #e8e4da;
   --color-tinta: #16181d;
-  --color-tinta-suave: #3d424e;
-  --color-apagado: #666d7c;
-  --color-linea: #e2e3df;
-  --color-linea-tenue: #eeefeb;
+  --color-tinta-suave: #45433d;
+  --color-apagado: #8a8578;
+  --color-linea: #d8d2c4;
+  --color-linea-tenue: #e6e1d6;
 
-  /* Acento: lo que se puede tocar --------------------------------------- */
-  --color-acento: #0f5ea8;
-  --color-acento-hover: #0a4275;
-  --color-acento-tenue: #e4f0fa;
+  /* Acento: verde profundo. Es también el color de aprobar, porque aprobar
+     es la acción principal de todo el portal. ---------------------------- */
+  --color-acento: #1b4d3e;
+  --color-acento-hover: #123528;
+  --color-acento-tenue: #e0eae5;
 
-  /* Estados: señales, no adorno ----------------------------------------- */
-  --color-espera: #b23a26;
-  --color-espera-tenue: #fbeae6;
-  --color-listo: #256b4e;
-  --color-listo-tenue: #e4f1ea;
-  --color-mirando: #0f5ea8;
-  --color-mirando-tenue: #e4f0fa;
+  /* Estados ------------------------------------------------------------- */
+  --color-listo: #1b4d3e;
+  --color-listo-tenue: #e0eae5;
+
+  /* Ámbar: lo que está esperando algo. */
+  --color-espera: #7a5c12;
+  --color-espera-tenue: #fbf1d7;
+  --color-espera-borde: #c99a2e;
+
+  /* Rojo: lo que está mal y hay que mirar. Se usa poco, a propósito. */
+  --color-alerta: #99341f;
+  --color-alerta-tenue: #f8e6e1;
 
   /* Tipografía ---------------------------------------------------------- */
-  --font-sans:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    sans-serif;
-  --font-mono:
-    ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  /* La define el layout con next/font, servida desde nuestro dominio. */
+  --font-sans: var(--fuente-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
 
-  /* Una escala corta. Menos tamaños, más consistencia. */
   --text-micro: 0.6875rem;
-  --text-micro--line-height: 1.4;
+  --text-micro--line-height: 1.35;
   --text-menudo: 0.8125rem;
   --text-menudo--line-height: 1.45;
   --text-normal: 0.9375rem;
   --text-normal--line-height: 1.55;
   --text-guia: 1.0625rem;
-  --text-guia--line-height: 1.5;
-  --text-titulo: 1.375rem;
-  --text-titulo--line-height: 1.2;
-  --text-grande: 1.75rem;
-  --text-grande--line-height: 1.15;
+  --text-guia--line-height: 1.45;
+  --text-titulo: 1.5rem;
+  --text-titulo--line-height: 1.15;
+  --text-grande: 2rem;
+  --text-grande--line-height: 1.05;
 
   /* La altura mínima para que un dedo acierte sin pensar. */
   --spacing-toque: 2.75rem;
@@ -103,7 +101,6 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-acento);
   outline-offset: 2px;
-  border-radius: 2px;
 }
 
 /* Nadie debería marearse por usar una herramienta de trabajo. */
