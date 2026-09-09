@@ -1,59 +1,53 @@
-// La entrega, como la ve el cliente.
+// El portal, como lo ve el cliente.
 //
-// Esta parte corre en el servidor: busca los datos y arma el encabezado. La
-// parte que responde a los clics vive en RevisionDeEntrega, del lado del
-// navegador. Es la división de siempre: el servidor trae, el navegador
+// Esta parte corre en el servidor: lee la carpeta del cliente en Drive y arma
+// la estructura. La parte que responde a los clics vive en `Portal`, del lado
+// del navegador. Es la división de siempre: el servidor trae, el navegador
 // interactúa.
 //
-// Todavía muestra datos de ejemplo: falta la base de datos para saber a qué
-// entrega apunta el token y para pedir el tag. La ruta, la forma y el
-// comportamiento son los definitivos.
+// Todavía falta la base de datos para saber a qué cliente apunta el token y
+// para pedirle el tag. La ruta, la forma y el comportamiento son los
+// definitivos.
 
-import { entregaDeEjemplo } from "@/portal/datos/ejemplo";
-import { RevisionDeEntrega } from "@/portal/RevisionDeEntrega";
+import { portalDelCliente } from "@/portal/datos/cliente";
+import { Portal } from "@/portal/Portal";
 
 export const dynamic = "force-dynamic";
 
 export default async function Entrega() {
-  const entrega = await entregaDeEjemplo();
+  let datos;
+  try {
+    datos = await portalDelCliente();
+  } catch (error) {
+    // Un problema de configuración o de Drive no puede verse como una pantalla
+    // rota. Pero el detalle **no se le muestra al cliente**: los mensajes de
+    // Google traen identificadores de carpeta y a veces la dirección del robot,
+    // y esta pantalla la abre gente de afuera de la agencia. El detalle va al
+    // registro del servidor, donde lo lee quien tiene que leerlo.
+    console.error("No se pudo armar el portal del cliente:", error);
 
-  return (
-    <div className="mx-auto max-w-6xl px-5 pb-32 sm:px-8 lg:pb-16">
-      {/* El plazo no aparece acá: va al pie, en chico. */}
-      <header className="border-b border-linea-tenue py-7 lg:py-10">
-        <p className="text-micro uppercase tracking-[0.18em] text-apagado">
-          {entrega.cliente}
-        </p>
-        <h1 className="mt-2 text-titulo font-semibold tracking-tight lg:text-grande">
-          {entrega.proyecto}
-        </h1>
-        <p className="mt-2 text-menudo text-tinta-suave">
-          {entrega.piezas.length} piezas para revisar
-        </p>
-      </header>
+    return (
+      <div className="flex min-h-screen items-center justify-center p-8">
+        <div className="max-w-lg">
+          <h1 className="text-titulo font-extrabold tracking-tight">
+            No pudimos abrir la carpeta
+          </h1>
+          <p className="mt-3 text-normal text-tinta-suave">
+            Es un problema nuestro, no tuyo. Avisale al equipo y lo resuelven; tu
+            trabajo no se perdió.
+          </p>
+          {process.env.NODE_ENV !== "production" && (
+            <p className="mt-4 border-l-4 border-alerta bg-alerta-tenue px-4 py-3 font-mono text-menudo text-alerta">
+              {error instanceof Error ? error.message : "Error desconocido"}
+              <span className="mt-2 block font-sans not-italic opacity-70">
+                Esto solo se ve mientras se trabaja en la aplicación.
+              </span>
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
-      <RevisionDeEntrega entrega={entrega} />
-
-      {/* Se quitó la lista de comentarios anteriores: aparecía suelta al pie,
-          sin decir de quién era ni a qué pieza correspondía. Lo que el cliente
-          escribió vive dentro de cada pieza, que es donde tiene sentido. */}
-      {false && entrega.comentarios.length > 0 && (
-        <section className="mt-10 border-t border-linea-tenue py-8">
-          <h2 className="text-micro uppercase tracking-[0.18em] text-apagado">
-            Lo que anotaron antes
-          </h2>
-          <ul className="mt-5 grid max-w-3xl gap-5 sm:grid-cols-2">
-            {entrega.comentarios.map((c, i) => (
-              <li key={i} className="border-l-2 border-linea pl-4">
-                <p className="text-menudo font-semibold">
-                  {c.quien} <span className="font-normal text-apagado">· {c.cuando}</span>
-                </p>
-                <p className="mt-1 text-normal text-tinta-suave">{c.texto}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </div>
-  );
+  return <Portal datos={datos} />;
 }

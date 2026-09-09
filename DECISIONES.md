@@ -760,3 +760,82 @@ Ninguno de los tres da error; los tres se ven mal y nada avisa.
 | Imagen ampliada | Se dibujaba a tamaño completo y se iba de la pantalla | Faltaba `min-h-0` en la cadena de elementos flexibles: un elemento flexible no se achica por debajo de su contenido si no se le dice |
 | Grilla del portal, en el teléfono | Un pedido largo la ensanchaba y la página se desplazaba de costado | Faltaba `min-w-0` en las columnas: lo mismo, pero a lo ancho |
 | Comparador | Las láminas se medían con una proporción fija (`aspect-[4/5]`) | Una pieza se juzga contra la pantalla que la muestra, no contra su propia forma |
+
+## 52. La forma real: carpeta del cliente, carpetas de trabajo, archivos.
+
+Lo que la agencia comparte con la aplicación es **la carpeta del cliente**.
+Adentro arma carpetas de trabajo —«Logos», «Calendario septiembre»,
+«Banners»— y en cada una van varios archivos. Cada archivo es una pieza.
+
+```
+Café Otoño/                 ← lo único compartido con el robot
+├── Logos/
+│   ├── 9304.jpeg           ← una pieza
+│   └── 9304 V2.jpeg        ← otra pieza
+└── Calendario septiembre/
+```
+
+La consecuencia que importa: **crear una carpeta en Drive alcanza para que
+aparezca en el portal**. No hay nada que dar de alta. Subir el archivo *es*
+darlo de alta, que era el punto de todo esto.
+
+## 53. El permiso sube por el árbol, no mira solo la carpeta madre.
+
+Con la forma anterior —archivos sueltos en la carpeta compartida— alcanzaba
+con mirar el padre directo. Con la forma real, los archivos cuelgan un nivel
+más abajo y **todos quedaban rechazados**: el portal se veía vacío y las
+miniaturas devolvían 404.
+
+Ahora `archivoAutorizado` sube por las carpetas madres hasta encontrar una
+administrada, con tres cuidados que están probados:
+
+| Cuidado | Por qué |
+|---|---|
+| Tope de 6 niveles | Un árbol muy profundo no puede volverse una cadena infinita de pedidos a Google. Pasado el tope se rechaza, que es el lado seguro. |
+| No revisitar carpetas | En Drive un elemento puede tener varias madres, y con atajos se arman ciclos. |
+| Recuerdo de 5 minutos | Doce miniaturas preguntaban doce veces por la misma carpeta madre. Cada pregunta es un viaje de red. |
+
+El recuerdo no es un agujero: quitarle el acceso se hace dejando de compartir
+la carpeta en Drive, y entonces el pedido a Google falla antes de llegar a la
+caché.
+
+## 54. Qué se muestra de cada carpeta vive en un solo módulo.
+
+Si el cliente ve una carpeta, y si se mira como lista o como mes, no puede
+vivir en Drive: Drive no tiene dónde anotarlo.
+
+`src/lib/ajustesDeCarpeta.ts` es el único lugar que contesta esas dos
+preguntas. Hoy contesta desde variables de entorno, que es lo único que hay
+sin base de datos. Cuando exista el panel de administración se cambia el
+cuerpo de dos funciones y **no se toca ninguna pantalla**.
+
+Por omisión: **se muestra, como lista**. Una carpeta nueva aparece sola;
+esconderla es la acción deliberada. Al revés —que haya que habilitar cada
+carpeta— convertiría cada trabajo nuevo en un trámite, que es justo lo que el
+portal viene a sacar del medio.
+
+## 55. La barra pasa a la izquierda y se lleva todo lo que no es el trabajo.
+
+A la izquierda, a lo alto y quieta: quién es el cliente, en qué carpeta está,
+a cuáles más puede entrar, cómo viene la revisión, los botones y el link a
+Drive. A la derecha, solo las piezas.
+
+Esto termina de mover lo que la [decisión 48](#48-el-resumen-y-las-acciones-van-al-costado)
+había empezado. El encabezado que estaba arriba de todo —cliente y proyecto—
+se fue adentro de la barra: era información de contexto ocupando el lugar del
+trabajo.
+
+El link de Drive es **el de la carpeta que se está mirando**, no el del
+cliente entero: lleva a lo mismo que hay en pantalla. Solo funciona para quien
+ya tenga acceso a esa carpeta desde su cuenta de Google; para el resto, Drive
+muestra su propia pantalla de pedir acceso. Es correcto que sea así: los
+permisos de Drive los da la agencia en Drive, no esta aplicación.
+
+## 56. Un error de Drive no se le muestra al cliente.
+
+La pantalla del portal la abre gente de afuera de la agencia. Los mensajes de
+Google traen identificadores de carpeta y a veces la dirección del robot.
+
+El detalle va al registro del servidor; al cliente se le dice que es un
+problema nuestro y que su trabajo no se perdió. Mientras se desarrolla, el
+detalle sí se ve en pantalla —ahí no hay a quién filtrárselo—.

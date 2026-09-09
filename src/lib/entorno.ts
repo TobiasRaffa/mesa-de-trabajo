@@ -14,7 +14,10 @@ export type VariableRequerida = {
 export const REQUERIDAS: VariableRequerida[] = [
   { nombre: "GOOGLE_SA_EMAIL", para: "identificar a la cuenta de servicio ante Google" },
   { nombre: "GOOGLE_SA_KEY", para: "firmar el pedido de acceso a Google" },
-  { nombre: "DRIVE_TEST_FOLDER", para: "saber qué carpeta administra la aplicación" },
+  {
+    nombre: "DRIVE_CARPETA_CLIENTE",
+    para: "saber de qué carpeta de cliente cuelga todo lo que se puede mostrar",
+  },
 ];
 
 /** Las que faltan o están vacías. Lista vacía significa que está todo. */

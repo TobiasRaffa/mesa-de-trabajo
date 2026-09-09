@@ -38,7 +38,7 @@ import {
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
-import type { VersionEjemplo } from "@/portal/datos/ejemplo";
+import type { VersionDePieza } from "@/portal/datos/cliente";
 
 export type Cambio = { id: string; texto: string };
 
@@ -47,7 +47,7 @@ export type PiezaAbierta = Pieza & {
   nombre: string;
   driveFileId: string;
   modificado?: string;
-  versiones: VersionEjemplo[];
+  versiones: VersionDePieza[];
   publicaEl?: Date;
   /** Los puntos que el cliente pidió cambiar, en el orden en que los escribió. */
   cambios: Cambio[];

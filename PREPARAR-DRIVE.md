@@ -11,31 +11,35 @@ con la cuenta de Google de la agencia, no con una personal.
 
 ## Parte 1 — Ordenar las carpetas
 
-La aplicación espera que todos los clientes tengan la misma forma. Cuanto más
-parejo sea, menos configuración especial hace falta después.
+Lo único que se le comparte a la aplicación es **la carpeta del cliente**. Todo
+lo que hay adentro lo descubre sola.
 
 ```
-Clientes/
-├── Café Otoño/                ← una carpeta por cliente
-│   ├── Campaña de temporada/     un proyecto
-│   ├── Rediseño de identidad/    otro proyecto
-│   ├── Entregas finales/      ← nombre fijo, igual en todos
-│   └── Facturas/              ← nombre fijo, igual en todos
-│
-└── Nómade/
-    ├── Grilla septiembre/
-    ├── Packaging lata/
-    ├── Entregas finales/
-    └── Facturas/
+Café Otoño/                    ← esto es lo que se comparte. Una sola vez.
+├── Logos/                        una carpeta de trabajo
+│   ├── 9304.jpeg
+│   └── 9304 V2.jpeg
+├── Calendario septiembre/
+├── Banners/
+├── Entregas finales/          ← nombre fijo, igual en todos
+└── Facturas/                  ← nombre fijo, igual en todos
 ```
 
 ### Las reglas
 
-**Una carpeta por cliente.** Se conecta una sola vez y ese link no se toca
-nunca más.
+**Una carpeta por cliente, y es la que se comparte.** Se conecta una sola vez y
+no se toca nunca más.
 
-**Cada subcarpeta es un proyecto.** Si mañana creás «Campaña verano» en Drive,
-aparece sola como proyecto en la aplicación. No hay que cargar nada.
+**Cada carpeta de adentro es un trabajo.** Si mañana creás «Campaña verano» en
+Drive y le tirás los archivos, aparece sola en el portal. No hay que cargar
+nada en ningún lado: subir el archivo *es* cargarlo.
+
+**Adentro de cada una van varios archivos.** Cada archivo es una pieza que el
+cliente aprueba o devuelve por separado.
+
+**Desde el panel de administración se elige cuáles ve el cliente** y cuáles
+quedan solo para el equipo. Una carpeta nueva se muestra por defecto; esconderla
+es la acción deliberada.
 
 **Dos subcarpetas con nombre fijo, iguales en todos los clientes:**
 
@@ -49,17 +53,10 @@ busca por nombre.
 
 ### Y una costumbre nueva
 
-**Numerar los archivos** desde el próximo trabajo: `01_`, `02_`, `03_` adelante
-del nombre.
-
-```
-01_lunes.jpg
-02_martes.jpg
-03_receta.jpg
-```
-
-Es lo único que hace falta para que los doce posteos de una grilla entren en
-orden sin que nadie los acomode. No cuesta nada y no molesta a nadie.
+**Numerar los archivos** cuando el orden importe: `01_`, `02_`, `03_` adelante
+del nombre. La aplicación los muestra por nombre, así que numerarlos es lo
+único que hace falta para que los doce posteos de una grilla entren en orden
+sin que nadie los acomode.
 
 ---
 
@@ -77,10 +74,12 @@ orden sin que nadie los acomode. No cuesta nada y no molesta a nadie.
 > fuera del proyecto, en `C:\Users\windows\claves\mesa-de-trabajo-agencia.json`.
 > Comprobado el 9/9/2026: la llave funciona y la Drive API está habilitada.
 >
-> **Falta solo el paso 7: compartirle las carpetas.** Hasta que eso pase, el
-> robot no ve nada —que es exactamente como tiene que ser—.
+> **Conectado a la primera carpeta** el 9/9/2026: «Cafe Otono - Prueba», con
+> «Banners - prueba» y «Logo - Prueba» adentro. El portal ya la lee.
 >
-> Los pasos 1 a 6 quedan escritos abajo para cuando haya que rehacerlo.
+> Falta compartirle las carpetas de los clientes de verdad, una por una
+> (paso 7). Los pasos 1 a 6 quedan escritos abajo para cuando haya que
+> rehacerlo.
 
 La aplicación no entra a Drive con la cuenta de nadie. Google deja crear un
 **usuario que no es una persona**: no tiene contraseña ni pantalla de login,
@@ -145,10 +144,7 @@ sobre Drive se controla desde Drive**, no desde la aplicación.
 
 ---
 
-## Qué me tenés que pasar cuando esté
+## Qué me tenés que pasar por cada cliente nuevo
 
-1. El correo del robot
-2. Dónde quedó guardado el archivo de la llave (la ruta, no el contenido)
-3. El link de la carpeta de un cliente para probar
-
-Con eso conecto la aplicación a las carpetas de verdad.
+Solo **el link de su carpeta**, después de compartirla con el robot. Nada más:
+las carpetas de adentro y los archivos los descubre sola.

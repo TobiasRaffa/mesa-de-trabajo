@@ -17,7 +17,7 @@ export default async function Diagnostico() {
 
   if (faltantes.length === 0) {
     try {
-      archivos = await listarCarpeta(process.env.DRIVE_TEST_FOLDER!);
+      archivos = await listarCarpeta(process.env.DRIVE_CARPETA_CLIENTE!);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

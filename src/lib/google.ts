@@ -81,6 +81,55 @@ export async function listarCarpeta(folderId: string): Promise<ArchivoDrive[]> {
   return data.files ?? [];
 }
 
+const CARPETA = "application/vnd.google-apps.folder";
+
+export type CarpetaDrive = {
+  id: string;
+  name: string;
+  /** Para abrirla en Drive. Solo sirve a quien ya tenga acceso desde Google. */
+  webViewLink?: string;
+  modifiedTime?: string;
+};
+
+/**
+ * Las carpetas de trabajo que hay adentro de la del cliente.
+ *
+ * Es la lista que la agencia arma en Drive —«Logos», «Calendario septiembre»,
+ * «Banners»— y que después elige mostrar o no. Se filtra por tipo del lado de
+ * Google y no acá: traer los archivos para descartarlos sería pedir de más.
+ */
+export async function subcarpetasDe(folderId: string): Promise<CarpetaDrive[]> {
+  const token = await tokenDeGoogle();
+  const q = encodeURIComponent(
+    `'${folderId}' in parents and mimeType = '${CARPETA}' and trashed=false`
+  );
+  const fields = encodeURIComponent("files(id,name,webViewLink,modifiedTime)");
+  const url = `${DRIVE}/files?q=${q}&fields=${fields}&orderBy=name&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  const data = await r.json();
+  if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "error desconocido"));
+  return data.files ?? [];
+}
+
+/** Los archivos de una carpeta, sin las subcarpetas. */
+export async function archivosDe(folderId: string): Promise<ArchivoDrive[]> {
+  const todo = await listarCarpeta(folderId);
+  return todo.filter((f) => f.mimeType !== CARPETA);
+}
+
+/** Nombre y link de una carpeta puntual. */
+export async function datosDeCarpeta(folderId: string): Promise<CarpetaDrive> {
+  const token = await tokenDeGoogle();
+  const fields = encodeURIComponent("id,name,webViewLink,modifiedTime");
+  const url = `${DRIVE}/files/${encodeURIComponent(folderId)}?fields=${fields}&supportsAllDrives=true`;
+
+  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  const data = await r.json();
+  if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "no encontré la carpeta"));
+  return data;
+}
+
 // Mueve un archivo de una carpeta a otra. Es lo único que escribimos en Drive.
 export async function moverArchivo(fileId: string, desde: string, hacia: string) {
   const token = await tokenDeGoogle();
