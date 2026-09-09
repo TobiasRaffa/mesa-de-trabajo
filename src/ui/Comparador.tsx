@@ -23,7 +23,8 @@ type Props = {
   nombre: string;
   antes: VersionComparable;
   ahora: VersionComparable;
-  onAmpliar: (src: string, alt: string) => void;
+  /** Agrandar compara las dos: cuál se tocó no cambia lo que hay que abrir. */
+  onAmpliar: () => void;
 };
 
 export function Comparador({ nombre, antes, ahora, onAmpliar }: Props) {
@@ -38,7 +39,7 @@ export function Comparador({ nombre, antes, ahora, onAmpliar }: Props) {
       <div
         role="tablist"
         aria-label={`Versiones de ${nombre}`}
-        className="flex gap-1 rounded-lg bg-hueco p-1 sm:hidden"
+        className="flex border-2 border-tinta sm:hidden"
       >
         {(["antes", "ahora"] as const).map((cual) => {
           const version = cual === "antes" ? antes : ahora;
@@ -49,8 +50,8 @@ export function Comparador({ nombre, antes, ahora, onAmpliar }: Props) {
               role="tab"
               aria-selected={activa}
               onClick={() => setEnPantalla(cual)}
-              className={`min-h-toque flex-1 rounded-md text-menudo font-semibold transition-colors ${
-                activa ? "bg-lienzo text-tinta shadow-sm" : "text-apagado"
+              className={`min-h-toque flex-1 text-normal font-bold tracking-tight transition-colors ${
+                activa ? "bg-tinta text-lienzo" : "text-tinta"
               }`}
             >
               v{version.numero}
@@ -69,7 +70,7 @@ export function Comparador({ nombre, antes, ahora, onAmpliar }: Props) {
       <div className="hidden gap-4 sm:grid sm:grid-cols-2">
         {[antes, ahora].map((version, i) => (
           <figure key={version.numero}>
-            <p className="mb-2 text-micro uppercase tracking-[0.18em] text-apagado">
+            <p className="mb-2 text-micro font-extrabold uppercase tracking-widest text-apagado">
               {i === 0 ? "Antes" : "Ahora"} · v{version.numero}
             </p>
             <Lamina version={version} nombre={nombre} onAmpliar={onAmpliar} />
@@ -88,17 +89,17 @@ function Lamina({
 }: {
   version: VersionComparable;
   nombre: string;
-  onAmpliar: (src: string, alt: string) => void;
+  onAmpliar: () => void;
 }) {
   const alt = `${nombre}, versión ${version.numero}`;
 
   return (
     <button
       type="button"
-      onClick={() => onAmpliar(version.src, alt)}
+      onClick={onAmpliar}
       aria-label={`Ver ${alt} en grande`}
-      className="group relative grid aspect-[4/5] w-full place-items-center overflow-hidden
-                 rounded-lg border border-linea bg-lienzo"
+      className="group relative grid h-[34vh] w-full place-items-center overflow-hidden
+                 border border-linea bg-lienzo sm:h-[40vh] lg:h-[50vh]"
     >
       <span className="px-4 text-center text-micro text-apagado">v{version.numero}</span>
       {/* eslint-disable-next-line @next/next/no-img-element */}

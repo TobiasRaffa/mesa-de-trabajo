@@ -3,9 +3,14 @@
 // Una pieza, abierta para revisarla.
 //
 // Es una ventana y no un despliegue hacia abajo: se abre desde el calendario o
-// desde la lista, se resuelve, se cierra y sigue la que viene — sin perder el
-// lugar donde se estaba. Trae el paso a la anterior y a la siguiente, que es
-// lo que permite hacer las doce de una sentada.
+// desde la lista, se resuelve, se cierra y sigue la que viene. Trae el paso a
+// la anterior y a la siguiente, para hacer las doce de una sentada.
+//
+// **Los cambios son una lista, no un texto.** Un cliente no piensa el pedido
+// entero de una vez: se acuerda de una cosa hoy y de otra mañana. Con un solo
+// campo, agregar significa reabrir, releer y escribir al final —y el riesgo de
+// pisar lo anterior—. Con una lista, agregar es agregar. Cada punto se edita y
+// se borra por separado, hasta que la revisión se envía; después queda firme.
 //
 // **La pieza tiene que verse sin desplazar.** Es lo que se vino a mirar: si
 // hay que buscarla moviendo la pantalla, la ventana falló. Por eso la imagen
@@ -15,10 +20,12 @@ import { useState } from "react";
 import type { Evento, Pieza } from "@/dominio/pieza";
 import { Boton, BotonEnlace } from "@/ui/Boton";
 import { Comparador } from "@/ui/Comparador";
+import type { Lamina } from "@/ui/Ampliada";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import {
   IconoAmpliar,
   IconoAprobar,
+  IconoBorrar,
   IconoCerrar,
   IconoComparar,
   IconoDescargar,
@@ -26,11 +33,14 @@ import {
   IconoEditar,
   IconoEnviar,
   IconoFlecha,
+  IconoMas,
 } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import type { VersionEjemplo } from "@/portal/datos/ejemplo";
+
+export type Cambio = { id: string; texto: string };
 
 export type PiezaAbierta = Pieza & {
   id: string;
@@ -39,9 +49,9 @@ export type PiezaAbierta = Pieza & {
   modificado?: string;
   versiones: VersionEjemplo[];
   publicaEl?: Date;
-  pedido: string;
+  /** Los puntos que el cliente pidió cambiar, en el orden en que los escribió. */
+  cambios: Cambio[];
   enviada: boolean;
-  editando: boolean;
 };
 
 type Props = {
@@ -49,11 +59,12 @@ type Props = {
   posicion: { actual: number; total: number };
   onIr: (paso: -1 | 1) => void;
   onCerrar: () => void;
-  onEvento: (evento: Evento, extra?: Partial<PiezaAbierta>) => void;
-  onEscribir: (texto: string) => void;
-  onGuardar: () => void;
+  onEvento: (evento: Evento) => void;
+  onAgregarCambio: (texto: string) => void;
+  onEditarCambio: (id: string, texto: string) => void;
+  onBorrarCambio: (id: string) => void;
   onEnviarEsta: () => void;
-  onAmpliar: (src: string, alt: string) => void;
+  onAmpliar: (laminas: Lamina[]) => void;
 };
 
 export function RevisarPieza({
@@ -62,18 +73,27 @@ export function RevisarPieza({
   onIr,
   onCerrar,
   onEvento,
-  onEscribir,
-  onGuardar,
+  onAgregarCambio,
+  onEditarCambio,
+  onBorrarCambio,
   onEnviarEsta,
   onAmpliar,
 }: Props) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
   const [comparando, setComparando] = useState(false);
 
+  // Qué se está escribiendo: el id de un cambio existente, "nuevo", o nada.
+  // Es estado de pantalla y no del negocio, así que vive acá y no en el
+  // dominio — confundir las dos cosas fue justamente lo que rompió el botón
+  // de editar, que le pedía al dominio un evento que el dominio rechazaba.
+  const [escribiendo, setEscribiendo] = useState<string | null>(null);
+  const [borrador, setBorrador] = useState("");
+
   const hayAnterior = pieza.versiones.length > 1;
   const pendiente =
     !pieza.enviada && (pieza.estado === "entregada" || pieza.estado === "en_revision");
   const pidiendoCambios = !pieza.enviada && pieza.estado === "cambios_marcados";
+  const sePuedeTocar = !pieza.enviada;
 
   const srcGrande = urlDeMiniatura(pieza.driveFileId, 1200, pieza.modificado);
 
@@ -86,6 +106,35 @@ export function RevisarPieza({
     };
   };
 
+  /**
+   * Agrandar muestra lo que se está mirando.
+   *
+   * Si se están comparando dos versiones, se agrandan las dos: agrandar solo
+   * la actual perdería justo lo que se estaba haciendo.
+   */
+  function ampliarLoQueSeVe() {
+    if (comparando && hayAnterior) {
+      const antes = version(pieza.versiones.length - 2);
+      const ahora = version(pieza.versiones.length - 1);
+      onAmpliar([
+        { src: antes.src, alt: `${pieza.nombre}, versión ${antes.numero}`, rotulo: `Antes · v${antes.numero}` },
+        { src: ahora.src, alt: `${pieza.nombre}, versión ${ahora.numero}`, rotulo: `Ahora · v${ahora.numero}` },
+      ]);
+    } else {
+      onAmpliar([{ src: srcGrande, alt: pieza.nombre }]);
+    }
+  }
+
+  function guardarLoEscrito() {
+    const texto = borrador.trim();
+    if (texto) {
+      if (escribiendo === "nuevo") onAgregarCambio(texto);
+      else if (escribiendo) onEditarCambio(escribiendo, texto);
+    }
+    setEscribiendo(null);
+    setBorrador("");
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex items-stretch justify-center bg-tinta/50 sm:items-center sm:p-6">
       <div
@@ -94,11 +143,10 @@ export function RevisarPieza({
         role="dialog"
         aria-modal="true"
         aria-label={pieza.nombre}
-        className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[94vh] sm:max-w-6xl sm:rounded-2xl sm:shadow-2xl"
+        className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[94vh] sm:max-w-6xl"
       >
-        {/* ------------------------- Encabezado ------------------------- */}
-        {/* La banda de color es el encabezado: dice de quién es la pieza, cómo
-            se llama y en qué anda, sin que haya que buscarlo. */}
+        {/* La banda de color dice de quién es la pieza, cómo se llama y en qué
+            anda, sin que haya que buscarlo. */}
         <header className="flex items-center gap-4 bg-acento px-4 py-4 text-white sm:px-6">
           <div className="min-w-0 flex-1">
             <p className="text-micro font-extrabold uppercase tracking-widest text-white/60">
@@ -114,7 +162,6 @@ export function RevisarPieza({
             <span className="hidden bg-white/15 px-3 py-1.5 text-micro font-extrabold uppercase tracking-wider sm:block">
               {pasoActual(pieza.ronda, pieza.rondasIncluidas, pieza.estado === "final")}
             </span>
-
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -146,25 +193,24 @@ export function RevisarPieza({
           </div>
         </header>
 
-        {/* --------------------------- Cuerpo --------------------------- */}
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-10">
-            {/* La pieza. Medida contra la pantalla, no contra su proporción:
-                así entra siempre sin tener que desplazar. */}
+
+            {/* La pieza, medida contra la pantalla y no contra su proporción. */}
             <div className="flex flex-col gap-3">
               {comparando && hayAnterior ? (
                 <Comparador
                   nombre={pieza.nombre}
                   antes={version(pieza.versiones.length - 2)}
                   ahora={version(pieza.versiones.length - 1)}
-                  onAmpliar={onAmpliar}
+                  onAmpliar={() => ampliarLoQueSeVe()}
                 />
               ) : (
                 <button
                   type="button"
-                  onClick={() => onAmpliar(srcGrande, pieza.nombre)}
+                  onClick={ampliarLoQueSeVe}
                   aria-label={`Ver ${pieza.nombre} en grande`}
-                  className="group relative grid h-[38vh] w-full place-items-center overflow-hidden
+                  className="relative grid h-[38vh] w-full place-items-center overflow-hidden
                              border border-linea bg-lienzo sm:h-[46vh] lg:h-[58vh]"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -177,13 +223,9 @@ export function RevisarPieza({
               )}
 
               <div className="flex flex-wrap gap-2">
-                <Boton
-                  variante="contorno"
-                  tamano="chico"
-                  onClick={() => onAmpliar(srcGrande, pieza.nombre)}
-                >
+                <Boton variante="contorno" tamano="chico" onClick={ampliarLoQueSeVe}>
                   <IconoAmpliar />
-                  Ver en grande
+                  {comparando && hayAnterior ? "Agrandar las dos" : "Ver en grande"}
                 </Boton>
 
                 {hayAnterior && (
@@ -203,7 +245,7 @@ export function RevisarPieza({
             </div>
 
             {/* Las decisiones */}
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-5">
               <Seguimiento
                 ronda={pieza.ronda}
                 rondasIncluidas={pieza.rondasIncluidas}
@@ -211,87 +253,136 @@ export function RevisarPieza({
                 aprobada={pieza.estado === "final"}
               />
 
+              {pendiente && (
+                <p className="border-l-4 border-linea bg-hueco/70 px-4 py-3 text-normal text-tinta-suave">
+                  Mirá la pieza y decidí. Si está lista, <b>Aprobar</b>. Si hay algo
+                  para corregir, <b>Pedir cambios</b> y anotá los puntos de a uno: los
+                  vas a poder editar y borrar hasta que envíes la revisión.
+                </p>
+              )}
+
               {pieza.enviada && (
-                <p className="rounded-xl bg-hueco px-4 py-3 text-normal text-tinta-suave">
+                <p className="bg-hueco px-4 py-3 text-normal font-semibold text-tinta-suave">
                   Ya se lo mandamos al equipo.
                 </p>
               )}
 
               {!pieza.enviada && pieza.estado === "final" && (
-                <p className="rounded-xl bg-listo-tenue px-4 py-3 text-normal text-listo">
+                <p className="bg-acento-tenue px-4 py-3 text-normal font-semibold text-acento">
                   Aprobada. Va a salir tal cual está.
                 </p>
               )}
 
-              {pidiendoCambios && (
+              {(pidiendoCambios || (pieza.enviada && pieza.cambios.length > 0)) && (
                 <div className="flex flex-col gap-3">
-                  {/* El título de lo que hay que escribir, con su propio peso y
-                      separado del camino de arriba: es la tarea de la pantalla. */}
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <label htmlFor={`pedido-${pieza.id}`} className="text-titulo font-semibold tracking-tight">
+                    <h3 className="text-titulo font-extrabold tracking-tight">
                       Qué habría que cambiar
-                    </label>
-
-                    {/* Editar y descartar viven arriba del cuadro, que es lo
-                        que gobiernan. Abajo quedan las acciones que mandan la
-                        pieza a algún lado. */}
-                    <div className="flex flex-wrap gap-2">
-                      {!pieza.editando && (
-                        <Boton
-                          variante="contorno"
-                          tamano="chico"
-                          onClick={() => onEvento({ tipo: "pedir_cambios" }, { editando: true })}
-                        >
-                          <IconoEditar />
-                          Editar cambios
-                        </Boton>
-                      )}
+                    </h3>
+                    {sePuedeTocar && escribiendo === null && (
                       <Boton
-                        variante="sutil"
+                        variante="contorno"
                         tamano="chico"
-                        onClick={() =>
-                          onEvento({ tipo: "descartar_cambios" }, { pedido: "", editando: false })
-                        }
+                        onClick={() => {
+                          setEscribiendo("nuevo");
+                          setBorrador("");
+                        }}
                       >
-                        <IconoDeshacer />
-                        Descartar
+                        <IconoMas />
+                        Agregar cambio
                       </Boton>
-                    </div>
+                    )}
                   </div>
 
-                  {pieza.editando ? (
-                    <textarea
-                      id={`pedido-${pieza.id}`}
-                      value={pieza.pedido}
-                      onChange={(e) => onEscribir(e.target.value)}
-                      rows={8}
-                      autoFocus
-                      placeholder="Escribí lo que haya que ajustar. Podés guardarlo y volver más tarde a seguir."
-                      className="w-full resize-y rounded-xl border border-linea bg-lienzo p-4 text-normal
-                                 shadow-inner transition-colors placeholder:text-apagado
-                                 focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
-                    />
-                  ) : (
-                    // Ya guardado: se lee, no se toca.
-                    <p className="min-h-40 whitespace-pre-wrap rounded-xl border border-linea-tenue bg-hueco/60 p-4 text-normal">
-                      {pieza.pedido.trim() || (
-                        <span className="text-apagado">Todavía no escribiste nada.</span>
-                      )}
+                  <ol className="flex flex-col divide-y divide-linea border-y border-linea">
+                    {pieza.cambios.map((cambio, i) => (
+                      <li key={cambio.id} className="py-3">
+                        {escribiendo === cambio.id ? (
+                          <CampoDeCambio
+                            valor={borrador}
+                            onEscribir={setBorrador}
+                            onGuardar={guardarLoEscrito}
+                            onCancelar={() => {
+                              setEscribiendo(null);
+                              setBorrador("");
+                            }}
+                          />
+                        ) : (
+                          <div className="flex items-start gap-3">
+                            <span className="mt-0.5 shrink-0 bg-tinta px-2 py-0.5 text-micro font-extrabold text-lienzo">
+                              {i + 1}
+                            </span>
+                            <p className="min-w-0 flex-1 whitespace-pre-wrap text-normal">
+                              {cambio.texto}
+                            </p>
+                            {sePuedeTocar && escribiendo === null && (
+                              <span className="flex shrink-0 gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEscribiendo(cambio.id);
+                                    setBorrador(cambio.texto);
+                                  }}
+                                  aria-label={`Editar el cambio ${i + 1}`}
+                                  className="grid h-8 w-8 place-items-center text-apagado transition-colors hover:bg-hueco hover:text-tinta"
+                                >
+                                  <IconoEditar />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onBorrarCambio(cambio.id)}
+                                  aria-label={`Borrar el cambio ${i + 1}`}
+                                  className="grid h-8 w-8 place-items-center text-apagado transition-colors hover:bg-alerta-tenue hover:text-alerta"
+                                >
+                                  <IconoBorrar />
+                                </button>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+
+                    {escribiendo === "nuevo" && (
+                      <li className="py-3">
+                        <CampoDeCambio
+                          valor={borrador}
+                          onEscribir={setBorrador}
+                          onGuardar={guardarLoEscrito}
+                          onCancelar={() => {
+                            setEscribiendo(null);
+                            setBorrador("");
+                          }}
+                        />
+                      </li>
+                    )}
+                  </ol>
+
+                  {pieza.cambios.length === 0 && escribiendo === null && (
+                    <p className="text-menudo text-apagado">
+                      Todavía no anotaste ningún cambio.
+                    </p>
+                  )}
+
+                  {sePuedeTocar && (
+                    <p className="text-menudo text-apagado">
+                      Nada de esto llegó a la agencia. Podés seguir agregando y se manda
+                      todo junto.
                     </p>
                   )}
                 </div>
               )}
 
               {pieza.estado === "extra_pedida" && (
-                <p className="rounded-xl bg-acento-tenue px-4 py-3 text-normal text-acento">
-                  Le pedimos al equipo una revisión adicional. Te avisamos cuando la habiliten.
+                <p className="border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-normal font-semibold text-espera">
+                  Le pedimos al equipo una revisión adicional. Te avisamos cuando la
+                  habiliten.
                 </p>
               )}
             </div>
           </div>
         </div>
 
-        {/* ---------------------------- Pie ----------------------------- */}
         <footer className="border-t-2 border-tinta bg-lienzo px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {pendiente && (
@@ -302,7 +393,11 @@ export function RevisarPieza({
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Boton
                     variante="contorno"
-                    onClick={() => onEvento({ tipo: "pedir_cambios" }, { editando: true })}
+                    onClick={() => {
+                      onEvento({ tipo: "pedir_cambios" });
+                      setEscribiendo("nuevo");
+                      setBorrador("");
+                    }}
                   >
                     <IconoEditar />
                     Pedir cambios
@@ -318,21 +413,21 @@ export function RevisarPieza({
               </>
             )}
 
-            {pidiendoCambios && pieza.editando && (
+            {pidiendoCambios && (
               <>
-                <span className="hidden sm:block" />
-                <Boton variante="principal" onClick={onGuardar}>
-                  Guardar y seguir después
+                <Boton
+                  variante="sutil"
+                  tamano="chico"
+                  onClick={() => onEvento({ tipo: "descartar_cambios" })}
+                >
+                  <IconoDeshacer />
+                  Descartar todo
                 </Boton>
-              </>
-            )}
-
-            {pidiendoCambios && !pieza.editando && (
-              <>
-                <Boton variante="sutil" tamano="chico" onClick={onCerrar}>
-                  Dejar esta para después
-                </Boton>
-                <Boton variante="principal" onClick={onEnviarEsta}>
+                <Boton
+                  variante="principal"
+                  onClick={onEnviarEsta}
+                  disabled={pieza.cambios.length === 0}
+                >
                   <IconoEnviar />
                   Enviar revisión
                 </Boton>
@@ -375,6 +470,49 @@ export function RevisarPieza({
             )}
           </div>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** El campo para escribir un punto del pedido. */
+function CampoDeCambio({
+  valor,
+  onEscribir,
+  onGuardar,
+  onCancelar,
+}: {
+  valor: string;
+  onEscribir: (t: string) => void;
+  onGuardar: () => void;
+  onCancelar: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <textarea
+        value={valor}
+        onChange={(e) => onEscribir(e.target.value)}
+        rows={3}
+        autoFocus
+        placeholder="Una cosa por vez: «el sol pisa la bajada», «la fecha tiene que decir 12/3»…"
+        className="w-full resize-y border border-linea bg-lienzo p-3 text-normal
+                   transition-colors placeholder:text-apagado
+                   focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
+      />
+      <div className="flex gap-2">
+        <Boton
+          variante="principal"
+          tamano="chico"
+          onClick={onGuardar}
+          disabled={valor.trim().length === 0}
+        >
+          Guardar
+        </Boton>
+        <Boton variante="sutil" tamano="chico" onClick={onCancelar}>
+          Cancelar
+        </Boton>
       </div>
     </div>
   );

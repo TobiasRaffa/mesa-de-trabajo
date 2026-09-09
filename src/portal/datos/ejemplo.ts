@@ -102,7 +102,7 @@ export async function entregaDeEjemplo(): Promise<EntregaEjemplo> {
   return {
     id: "ejemplo-campana-temporada",
     cliente: "Café Otoño",
-    proyecto: "Grilla de este mes",
+    proyecto: "Redes de septiembre",
     vista: "calendario",
     plazoDias: 4,
     enviada,

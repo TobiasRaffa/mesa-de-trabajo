@@ -1,65 +1,100 @@
 "use client";
 
-// La pieza en grande, ocupando toda la pantalla.
+// Una pieza, o dos, a pantalla completa.
 //
-// Existe porque una miniatura no alcanza para decidir. El cliente tiene que
-// poder mirar el trabajo de cerca antes de aprobarlo, y en el teléfono eso es
-// la diferencia entre revisar y adivinar.
+// Existe porque una miniatura no alcanza para decidir. Y acepta dos porque
+// agrandar mientras se comparan versiones tiene que agrandar **las dos**: si
+// solo se abriera la actual, se pierde justo lo que se estaba haciendo.
 //
 // La imagen se muestra entera, nunca recortada: es una pieza de diseño y
 // cortarle un borde puede cambiar lo que se está juzgando.
 
 import { useEffect } from "react";
+import { IconoCerrar } from "@/ui/Icono";
+import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 
-type Props = {
+export type Lamina = {
   src: string;
   alt: string;
+  /** «Antes · v1», «Ahora · v2». Solo cuando hay dos y hay que distinguirlas. */
+  rotulo?: string;
+};
+
+type Props = {
+  laminas: Lamina[];
   onCerrar: () => void;
 };
 
-export function Ampliada({ src, alt, onCerrar }: Props) {
+export function Ampliada({ laminas, onCerrar }: Props) {
+  // Comparte la pila con las demás ventanas: al abrirse queda arriba de la
+  // pieza que se estaba revisando, y Escape cierra esta sola.
+  const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
+
   useEffect(() => {
-    const alTeclado = (e: KeyboardEvent) => e.key === "Escape" && onCerrar();
-    document.addEventListener("keydown", alTeclado);
     // Que el fondo no se mueva mientras se mira la pieza.
     const antes = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", alTeclado);
       document.body.style.overflow = antes;
     };
-  }, [onCerrar]);
+  }, []);
+
+  const dos = laminas.length > 1;
 
   return (
     <div
+      ref={marco}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
-      aria-label={alt}
+      aria-label={dos ? "Comparación en grande" : laminas[0]?.alt}
       onClick={onCerrar}
-      className="fixed inset-0 z-50 flex flex-col bg-tinta/90 p-4 sm:p-8"
+      className="fixed inset-0 z-50 flex flex-col bg-tinta/95 p-4 outline-none sm:p-6"
     >
       <div className="flex justify-end">
         <button
           type="button"
           onClick={onCerrar}
-          className="min-h-toque rounded-md px-4 text-normal font-semibold text-white/90 hover:text-white"
+          className="inline-flex min-h-toque items-center gap-2 px-4 text-normal font-bold text-white/85 hover:text-white"
         >
+          <IconoCerrar />
           Cerrar
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt={alt}
-          onClick={(e) => e.stopPropagation()}
-          className="max-h-full max-w-full object-contain"
-        />
+      {/*
+        Toda la cadena lleva `min-h-0`. Sin eso, un elemento flexible se niega
+        a achicarse por debajo de su contenido: la imagen se dibuja a tamaño
+        completo y se desborda de la pantalla en lugar de entrar en ella.
+      */}
+      <div
+        className={`flex min-h-0 flex-1 items-stretch justify-center gap-4 ${
+          dos ? "flex-col sm:flex-row" : ""
+        }`}
+      >
+        {laminas.map((lamina) => (
+          <figure
+            key={lamina.src}
+            onClick={(e) => e.stopPropagation()}
+            className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3"
+          >
+            {lamina.rotulo && (
+              <figcaption className="shrink-0 bg-white/15 px-3 py-1 text-micro font-extrabold uppercase tracking-widest text-white">
+                {lamina.rotulo}
+              </figcaption>
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lamina.src}
+              alt={lamina.alt}
+              className="min-h-0 w-full flex-1 object-contain"
+            />
+          </figure>
+        ))}
       </div>
 
-      <p className="pt-4 text-center text-menudo text-white/70">
-        Tocá fuera de la imagen para volver
+      <p className="pt-4 text-center text-menudo text-white/60">
+        Tocá fuera de {dos ? "las imágenes" : "la imagen"} para volver
       </p>
     </div>
   );

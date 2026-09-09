@@ -14,8 +14,15 @@
 // abrir; el del teclado se rearma cada vez que cambia la función de cerrar.
 // Juntos, el foco saltaría al primer botón cada vez que el componente de
 // arriba se dibuja de nuevo — o sea, en medio de la escritura.
+//
+// **Las ventanas se apilan.** Al ampliar una pieza hay dos abiertas, una
+// encima de la otra. Como cada una escuchaba el teclado por su cuenta, Escape
+// las cerraba a las dos de golpe: se cerraba la imagen y, detrás, la pieza
+// entera que se estaba revisando. Por eso hay una pila: solo la de más arriba
+// atiende el teclado, y las de abajo esperan su turno.
 
 import { useEffect, useRef } from "react";
+import { abrir, cerrar, esLaDeArriba, type Ficha } from "@/ui/pilaDeVentanas";
 
 const ENFOCABLES = [
   "a[href]",
@@ -31,16 +38,24 @@ const enfocablesDe = (contenedor: HTMLElement) =>
 
 export function useTrampaDeFoco<T extends HTMLElement>(alCerrar: () => void) {
   const marco = useRef<T>(null);
+  // Identidad de esta ventana dentro de la pila. Se saca al montar, para que
+  // el orden de la pila sea el orden en que las ventanas aparecieron.
+  const ficha = useRef<Ficha | null>(null);
 
   // Entrar y salir: solo al abrir y al cerrar.
   useEffect(() => {
     const contenedor = marco.current;
     if (!contenedor) return;
 
+    const mia = abrir();
+    ficha.current = mia;
+
     const veniaDe = document.activeElement as HTMLElement | null;
     (enfocablesDe(contenedor)[0] ?? contenedor).focus();
 
     return () => {
+      cerrar(mia);
+      ficha.current = null;
       // Devolver el foco a donde estaba es lo que hace que cerrar un diálogo
       // no se sienta como caerse a la nada.
       veniaDe?.focus?.();
@@ -53,6 +68,9 @@ export function useTrampaDeFoco<T extends HTMLElement>(alCerrar: () => void) {
     if (!contenedor) return;
 
     function alTeclado(e: KeyboardEvent) {
+      // Solo la ventana de más arriba atiende el teclado.
+      if (!ficha.current || !esLaDeArriba(ficha.current)) return;
+
       if (e.key === "Escape") {
         e.preventDefault();
         alCerrar();

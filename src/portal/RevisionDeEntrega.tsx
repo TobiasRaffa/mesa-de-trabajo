@@ -4,16 +4,18 @@
 //
 // Cuatro ideas mandan sobre el diseño de esta pantalla:
 //
-//   1. **Las acciones que valen viven arriba.** Descargar lo aprobado y enviar
-//      la revisión son las dos cosas que el cliente vino a hacer: están a mano
-//      desde el primer segundo, no al final de un scroll.
+//   1. **Lo que se vino a hacer va al costado, siempre a la vista.** La
+//      pantalla de una computadora es más ancha que alta: una banda horizontal
+//      arriba se lleva alto que le hace falta al trabajo, y se pierde apenas
+//      se baja. En columna queda quieta y no le saca lugar a las piezas. En el
+//      teléfono, donde no hay ancho de sobra, vuelve arriba.
 //
 //   2. **Cada pieza se revisa en una ventana.** Se abre desde el calendario o
 //      desde la lista, se resuelve, se cierra y sigue la que viene — sin
 //      perder el lugar donde se estaba.
 //
-//   3. **Guardar no es enviar.** Guardar deja el trabajo esperando; enviar es
-//      el único momento en que la agencia recibe algo.
+//   3. **Guardar no es enviar.** Los cambios se anotan de a uno y se pueden
+//      corregir o borrar; la agencia no se entera de nada hasta que se envía.
 //
 //   4. **La pieza se muestra entera.** Es una obra de diseño: recortarle un
 //      borde puede cambiar lo que se está juzgando.
@@ -23,7 +25,7 @@
 
 import { useEffect, useState } from "react";
 import { aplicar, type Evento, type Pieza } from "@/dominio/pieza";
-import { Ampliada } from "@/ui/Ampliada";
+import { Ampliada, type Lamina } from "@/ui/Ampliada";
 import { Boton, BotonEnlace } from "@/ui/Boton";
 import { Calendario, type PiezaEnCalendario } from "@/ui/Calendario";
 import { IconoCerrar, IconoDescargar, IconoEditar, IconoEnviar } from "@/ui/Icono";
@@ -32,7 +34,7 @@ import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta, plazoEnPalabras } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import type { EntregaEjemplo } from "@/portal/datos/ejemplo";
-import { RevisarPieza, type PiezaAbierta } from "@/portal/RevisarPieza";
+import { RevisarPieza, type Cambio, type PiezaAbierta } from "@/portal/RevisarPieza";
 
 type EnPantalla = PiezaAbierta;
 
@@ -43,6 +45,16 @@ type EnPantalla = PiezaAbierta;
  * dos entregas del mismo cliente se pisarían el borrador entre ellas.
  */
 const claveDelBorrador = (entregaId: string) => `mesa-de-trabajo:borrador:${entregaId}`;
+
+/** Un identificador para un cambio recién escrito. */
+function nuevoId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    // Navegadores viejos, o la página servida sin https en una red local.
+    return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  }
+}
 
 export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
   const [piezas, setPiezas] = useState<EnPantalla[]>(() =>
@@ -57,13 +69,12 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
       rondasExtra: entrega.rondasExtra,
       versiones: p.versiones,
       publicaEl: p.publicaEl,
-      pedido: "",
+      cambios: [],
       enviada: false,
-      editando: false,
     }))
   );
   const [abierta, setAbierta] = useState<string | null>(null);
-  const [ampliada, setAmpliada] = useState<{ src: string; alt: string } | null>(null);
+  const [ampliada, setAmpliada] = useState<Lamina[] | null>(null);
   const [confirmando, setConfirmando] = useState<null | { soloEsta?: string }>(null);
   const [descargas, setDescargas] = useState(false);
   /**
@@ -91,7 +102,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
       if (!crudo) return;
       const guardado = JSON.parse(crudo) as Record<
         string,
-        { estado: string; pedido: string; enviada?: boolean }
+        { estado: string; cambios?: Cambio[]; enviada?: boolean }
       >;
       // El servidor no puede saber qué guardó este navegador, así que el
       // borrador solo se puede recuperar una vez montada la pantalla.
@@ -102,9 +113,14 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
             ? {
                 ...p,
                 estado: guardado[p.id].estado as Pieza["estado"],
-                pedido: guardado[p.id].pedido,
+                // Lo que viene del navegador no es de fiar: puede haberlo
+                // dejado una versión anterior de la aplicación, o alguien
+                // editándolo a mano. Se acepta solo lo que tiene la forma.
+                cambios: (guardado[p.id].cambios ?? []).filter(
+                  (c): c is Cambio =>
+                    typeof c?.id === "string" && typeof c?.texto === "string"
+                ),
                 enviada: guardado[p.id].enviada ?? false,
-                editando: false,
               }
             : p
         )
@@ -123,7 +139,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
           Object.fromEntries(
             siguientes.map((p) => [
               p.id,
-              { estado: p.estado, pedido: p.pedido, enviada: p.enviada },
+              { estado: p.estado, cambios: p.cambios, enviada: p.enviada },
             ])
           )
         )
@@ -140,7 +156,7 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
     guardarEnElNavegador(siguientes);
   }
 
-  function mover(id: string, evento: Evento, extra?: Partial<EnPantalla>) {
+  function mover(id: string, evento: Evento) {
     const pieza = piezas.find((p) => p.id === id);
     if (!pieza) return;
 
@@ -151,8 +167,51 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
     }
 
     setRechazo(null);
+    // Descartar los cambios los borra de verdad: dejar la lista escrita debajo
+    // de una pieza que volvió a estar sin decidir sería mentirle al cliente
+    // sobre lo que va a recibir la agencia.
+    const limpiar = evento.tipo === "descartar_cambios";
     aplicarYGuardar(
-      piezas.map((p) => (p.id === id ? { ...p, ...resultado.pieza, ...extra } : p))
+      piezas.map((p) =>
+        p.id === id ? { ...p, ...resultado.pieza, ...(limpiar ? { cambios: [] } : {}) } : p
+      )
+    );
+  }
+
+  /**
+   * Reescribe la lista de cambios de una pieza y acomoda el estado.
+   *
+   * Anotar el primer cambio es pedir cambios, y borrar el último es
+   * arrepentirse: son las dos únicas veces que tocar la lista mueve la pieza.
+   * El resto —corregir la redacción, agregar el tercer punto— no es una
+   * decisión nueva y no tiene por qué molestar a la máquina de estados. Fue
+   * justamente confundir las dos cosas lo que rompía el botón de editar.
+   */
+  function cambiosDe(id: string, siguientes: Cambio[]) {
+    const pieza = piezas.find((p) => p.id === id);
+    if (!pieza || pieza.enviada) return;
+
+    let estado = pieza.estado;
+    let ronda = pieza.ronda;
+
+    const quiereMarcar = siguientes.length > 0 && pieza.estado !== "cambios_marcados";
+    const quiereSoltar = siguientes.length === 0 && pieza.estado === "cambios_marcados";
+
+    if (quiereMarcar || quiereSoltar) {
+      const r = aplicar(pieza, {
+        tipo: quiereMarcar ? "pedir_cambios" : "descartar_cambios",
+      });
+      if (!r.ok) {
+        setRechazo(r.motivo);
+        return;
+      }
+      estado = r.pieza.estado;
+      ronda = r.pieza.ronda;
+    }
+
+    setRechazo(null);
+    aplicarYGuardar(
+      piezas.map((p) => (p.id === id ? { ...p, estado, ronda, cambios: siguientes } : p))
     );
   }
 
@@ -191,6 +250,8 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
     aprobada: p.estado === "final",
   });
 
+  // El calendario aparece solo si la agencia marcó la tanda como calendario al
+  // armarla. Si no, esto es una lista de archivos y nada más.
   const hayCalendario = entrega.vista === "calendario" && conFecha.length > 0;
   const nombreDelMes = hayCalendario
     ? new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(
@@ -203,198 +264,218 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
 
   return (
     <>
-      {/* ===================== Lo que se vino a hacer ==================== */}
-      <div className="mt-6 bg-tinta text-lienzo">
-        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8 sm:p-6">
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-2">
-              <span className="text-grande font-extrabold tracking-tighter">{resueltas}</span>
-              <span className="text-guia font-semibold text-lienzo/45">de {piezas.length}</span>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start lg:gap-8">
+
+        {/* ================ Lo que se vino a hacer, al costado ============= */}
+        <aside className="min-w-0 bg-tinta text-lienzo lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1">
+          <div className="flex flex-col gap-5 p-5">
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="cifras text-grande font-extrabold tracking-tighter">
+                  {resueltas}
+                </span>
+                <span className="text-guia font-semibold text-lienzo/45">
+                  de {piezas.length}
+                </span>
+              </div>
+              <p className="mt-1 text-micro font-extrabold uppercase tracking-widest text-lienzo/55">
+                resueltas · {plazoEnPalabras(entrega.vence)}
+              </p>
+              <div className="mt-3 h-1.5 bg-lienzo/15">
+                <div
+                  className="h-full bg-acento transition-[width] duration-300"
+                  style={{ width: `${avance}%` }}
+                  role="progressbar"
+                  aria-valuenow={avance}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Piezas resueltas"
+                />
+              </div>
             </div>
-            <p className="mt-1 text-micro font-extrabold uppercase tracking-widest text-lienzo/55">
-              resueltas · {plazoEnPalabras(entrega.vence)}
+
+            <div className="flex flex-col gap-2">
+              <Boton
+                variante="principal"
+                ancho
+                onClick={() => setConfirmando({})}
+                disabled={paraEnviar.length === 0}
+              >
+                <IconoEnviar />
+                Enviar revisión
+              </Boton>
+
+              <button
+                type="button"
+                onClick={() => setComentando(true)}
+                className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-4
+                           text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
+              >
+                <IconoEditar />
+                Comentario general
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDescargas(true)}
+                disabled={aprobadas.length === 0}
+                className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-4
+                           text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10
+                           disabled:pointer-events-none disabled:opacity-35"
+              >
+                <IconoDescargar />
+                Descargar archivos
+                {aprobadas.length > 0 && (
+                  <span className="bg-lienzo/20 px-1.5 text-micro font-extrabold">
+                    {aprobadas.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {sinDecidir.length > 0 && (
+              <p className="border-t border-lienzo/15 pt-4 text-menudo text-lienzo/60">
+                Te {sinDecidir.length === 1 ? "queda" : "quedan"} {sinDecidir.length}{" "}
+                {sinDecidir.length === 1 ? "pieza" : "piezas"} sin mirar.
+              </p>
+            )}
+          </div>
+        </aside>
+
+        {/* ========================= Las piezas ============================ */}
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          {aviso && (
+            <p className="mb-5 border-l-4 border-acento bg-acento-tenue px-5 py-4 text-normal font-semibold text-acento">
+              {aviso}
             </p>
-            <div className="mt-3 h-1.5 max-w-xs bg-lienzo/15">
+          )}
+          {rechazo && (
+            <p className="mb-5 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal font-semibold text-espera">
+              {rechazo}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {hayCalendario ? (
               <div
-                className="h-full bg-acento transition-[width] duration-300"
-                style={{ width: `${avance}%` }}
-                role="progressbar"
-                aria-valuenow={avance}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="Piezas resueltas"
-              />
-            </div>
+                role="tablist"
+                aria-label="Cómo mirar la entrega"
+                className="flex border-2 border-tinta"
+              >
+                {(["mes", "semana", "lista"] as const).map((modo) => (
+                  <button
+                    key={modo}
+                    role="tab"
+                    aria-selected={vista === modo}
+                    onClick={() => setVista(modo)}
+                    className={`min-h-toque px-5 text-normal font-bold capitalize tracking-tight transition-colors ${
+                      vista === modo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
+                    }`}
+                  >
+                    {modo}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <h2 className="text-titulo font-extrabold tracking-tight">Las piezas</h2>
+            )}
+
+            {hayCalendario && vista !== "lista" && (
+              <p className="text-titulo font-extrabold capitalize tracking-tight">
+                {nombreDelMes}
+              </p>
+            )}
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <button
-              type="button"
-              onClick={() => setComentando(true)}
-              className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-5
-                         text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
-            >
-              <IconoEditar />
-              Comentario general
-            </button>
+          <div className="mt-5">
+            {hayCalendario && vista !== "lista" ? (
+              <Calendario
+                modo={vista}
+                mes={conFecha[0].publicaEl!}
+                piezas={conFecha.map(enCalendario)}
+                onAbrir={setAbierta}
+              />
+            ) : (
+              <ul className="divide-y divide-linea border-y border-linea">
+                {piezas.map((pieza) => (
+                  <li key={pieza.id}>
+                    <button
+                      type="button"
+                      onClick={() => setAbierta(pieza.id)}
+                      className="flex w-full items-center gap-4 py-4 text-left transition-colors hover:bg-hueco/60"
+                    >
+                      <span className="relative h-16 w-16 shrink-0 overflow-hidden bg-tinta">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={urlDeMiniatura(pieza.driveFileId, 220, pieza.modificado)}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-contain"
+                        />
+                      </span>
 
-            <button
-              type="button"
-              onClick={() => setDescargas(true)}
-              disabled={aprobadas.length === 0}
-              className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-5
-                         text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10
-                         disabled:opacity-35 disabled:pointer-events-none"
-            >
-              <IconoDescargar />
-              Descargar archivos
-              {aprobadas.length > 0 && (
-                <span className="bg-lienzo/20 px-1.5 text-micro font-extrabold">
-                  {aprobadas.length}
-                </span>
-              )}
-            </button>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-guia font-bold leading-snug">
+                          {pieza.nombre}
+                        </span>
+                        <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <Seguimiento
+                            ronda={pieza.ronda}
+                            rondasIncluidas={pieza.rondasIncluidas}
+                            rondasExtra={pieza.rondasExtra}
+                            aprobada={pieza.estado === "final"}
+                            compacto
+                          />
+                          {pieza.publicaEl && (
+                            <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
+                              sale el {fechaCorta(pieza.publicaEl)}
+                            </span>
+                          )}
+                          {pieza.enviada && (
+                            <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
+                              · enviada
+                            </span>
+                          )}
+                        </span>
+                        {pieza.cambios.length > 0 && (
+                          <span className="mt-1 block truncate text-menudo text-apagado">
+                            {pieza.cambios.length}{" "}
+                            {pieza.cambios.length === 1
+                              ? "cambio anotado"
+                              : "cambios anotados"}
+                            : {pieza.cambios[0].texto}
+                          </span>
+                        )}
+                      </span>
 
+                      <span aria-hidden="true" className="shrink-0 text-apagado">
+                        ›
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* =================== Solo mientras es prueba ================== */}
+          <div className="mt-12 flex flex-wrap items-center justify-between gap-3 bg-hueco/60 px-4 py-3">
+            <p className="text-menudo text-apagado">
+              Estás viendo una prueba. Lo que hacés queda guardado en este navegador.
+            </p>
             <Boton
-              variante="principal"
-              onClick={() => setConfirmando({})}
-              disabled={paraEnviar.length === 0}
+              variante="contorno"
+              tamano="chico"
+              onClick={() => {
+                try {
+                  localStorage.removeItem(BORRADOR);
+                } catch {}
+                location.reload();
+              }}
             >
-              <IconoEnviar />
-              Enviar revisión completa
+              Volver a empezar
             </Boton>
           </div>
         </div>
-      </div>
-
-      {aviso && (
-        <p className="mt-4 border-l-4 border-acento bg-acento-tenue px-5 py-4 text-normal font-semibold text-acento">
-          {aviso}
-        </p>
-      )}
-      {rechazo && (
-        <p className="mt-4 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal font-semibold text-espera">
-          {rechazo}
-        </p>
-      )}
-
-      {/* ==================== Mes · Semana · Lista ======================= */}
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
-        {hayCalendario ? (
-          <div
-            role="tablist"
-            aria-label="Cómo mirar la entrega"
-            className="flex border-2 border-tinta"
-          >
-            {(["mes", "semana", "lista"] as const).map((modo) => (
-              <button
-                key={modo}
-                role="tab"
-                aria-selected={vista === modo}
-                onClick={() => setVista(modo)}
-                className={`min-h-toque px-5 text-normal font-bold capitalize tracking-tight transition-colors ${
-                  vista === modo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
-                }`}
-              >
-                {modo}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <h2 className="text-titulo font-extrabold tracking-tight">Las piezas</h2>
-        )}
-
-        {hayCalendario && vista !== "lista" && (
-          <p className="text-titulo font-extrabold capitalize tracking-tight">
-            {nombreDelMes}
-          </p>
-        )}
-      </div>
-
-      {/* ========================== El contenido ========================= */}
-      <div className="mt-5">
-        {hayCalendario && vista !== "lista" ? (
-          <Calendario
-            modo={vista}
-            mes={conFecha[0].publicaEl!}
-            piezas={conFecha.map(enCalendario)}
-            onAbrir={setAbierta}
-          />
-        ) : (
-          <ul className="divide-y divide-linea border-y border-linea">
-            {piezas.map((pieza) => (
-              <li key={pieza.id}>
-                <button
-                  type="button"
-                  onClick={() => setAbierta(pieza.id)}
-                  className="flex w-full items-center gap-4 py-4 text-left transition-colors hover:bg-hueco/60"
-                >
-                  <span className="relative h-16 w-16 shrink-0 overflow-hidden bg-tinta">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={urlDeMiniatura(pieza.driveFileId, 220, pieza.modificado)}
-                      alt=""
-                      className="absolute inset-0 h-full w-full object-contain"
-                    />
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-guia font-bold leading-snug">
-                      {pieza.nombre}
-                    </span>
-                    <span className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <Seguimiento
-                        ronda={pieza.ronda}
-                        rondasIncluidas={pieza.rondasIncluidas}
-                        rondasExtra={pieza.rondasExtra}
-                        aprobada={pieza.estado === "final"}
-                        compacto
-                      />
-                      {pieza.publicaEl && (
-                        <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
-                          sale el {fechaCorta(pieza.publicaEl)}
-                        </span>
-                      )}
-                      {pieza.enviada && (
-                        <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
-                          · enviada
-                        </span>
-                      )}
-                    </span>
-                    {pieza.pedido && (
-                      <span className="mt-1 block truncate text-menudo text-apagado">
-                        {pieza.pedido}
-                      </span>
-                    )}
-                  </span>
-
-                  <span aria-hidden="true" className="shrink-0 text-apagado">
-                    ›
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* ===================== Solo mientras es prueba =================== */}
-      <div className="mt-12 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-hueco/60 px-4 py-3">
-        <p className="text-menudo text-apagado">
-          Estás viendo una prueba. Lo que hacés queda guardado en este navegador.
-        </p>
-        <Boton
-          variante="contorno"
-          tamano="chico"
-          onClick={() => {
-            try {
-              localStorage.removeItem(BORRADOR);
-            } catch {}
-            location.reload();
-          }}
-        >
-          Volver a empezar
-        </Boton>
       </div>
 
       {/* ============================ Ventanas =========================== */}
@@ -407,30 +488,30 @@ export function RevisionDeEntrega({ entrega }: { entrega: EntregaEjemplo }) {
             setAbierta(piezas[siguiente].id);
           }}
           onCerrar={() => setAbierta(null)}
-          onEvento={(evento, extra) => mover(piezaAbierta.id, evento, extra)}
-          onEscribir={(texto) =>
-            setPiezas((antes) =>
-              antes.map((p) => (p.id === piezaAbierta.id ? { ...p, pedido: texto } : p))
+          onEvento={(evento) => mover(piezaAbierta.id, evento)}
+          onAgregarCambio={(texto) =>
+            cambiosDe(piezaAbierta.id, [...piezaAbierta.cambios, { id: nuevoId(), texto }])
+          }
+          onEditarCambio={(id, texto) =>
+            cambiosDe(
+              piezaAbierta.id,
+              piezaAbierta.cambios.map((c) => (c.id === id ? { ...c, texto } : c))
             )
           }
-          onGuardar={() => {
-            aplicarYGuardar(
-              piezas.map((p) => (p.id === piezaAbierta.id ? { ...p, editando: false } : p))
-            );
-            setAbierta(null);
-          }}
+          onBorrarCambio={(id) =>
+            cambiosDe(
+              piezaAbierta.id,
+              piezaAbierta.cambios.filter((c) => c.id !== id)
+            )
+          }
           onEnviarEsta={() => setConfirmando({ soloEsta: piezaAbierta.id })}
-          onAmpliar={(src, alt) => setAmpliada({ src, alt })}
+          onAmpliar={setAmpliada}
         />
       )}
 
-      {ampliada && (
-        <Ampliada src={ampliada.src} alt={ampliada.alt} onCerrar={() => setAmpliada(null)} />
-      )}
+      {ampliada && <Ampliada laminas={ampliada} onCerrar={() => setAmpliada(null)} />}
 
-      {descargas && (
-        <Descargas piezas={aprobadas} onCerrar={() => setDescargas(false)} />
-      )}
+      {descargas && <Descargas piezas={aprobadas} onCerrar={() => setDescargas(false)} />}
 
       {comentando && (
         <ComentarioGeneral
@@ -493,22 +574,27 @@ function Ventana({
         aria-modal="true"
         aria-label={titulo}
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-lienzo shadow-2xl sm:rounded-2xl"
+        className="flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden bg-lienzo"
       >
-        <header className="flex items-start gap-3 border-b border-linea-tenue px-6 py-4">
+        <header className="flex items-start gap-3 bg-acento px-6 py-4 text-white">
           <div className="min-w-0 flex-1">
-            <h2 className="text-guia font-semibold tracking-tight">{titulo}</h2>
-            {bajada && <p className="mt-0.5 text-menudo text-apagado">{bajada}</p>}
+            <h2 className="text-titulo font-extrabold tracking-tight">{titulo}</h2>
+            {bajada && <p className="mt-0.5 text-menudo text-white/70">{bajada}</p>}
           </div>
-          <Boton variante="fantasma" tamano="chico" onClick={onCerrar} aria-label="Cerrar">
+          <button
+            type="button"
+            onClick={onCerrar}
+            aria-label="Cerrar"
+            className="grid h-9 w-9 shrink-0 place-items-center bg-white text-acento transition-colors hover:bg-white/90"
+          >
             <IconoCerrar />
-          </Boton>
+          </button>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
 
         {pie && (
-          <footer className="border-t border-linea-tenue px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4">
+          <footer className="border-t-2 border-tinta px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4">
             {pie}
           </footer>
         )}
@@ -531,7 +617,7 @@ function Descargas({
       bajada="Los originales de todo lo que aprobaste."
       onCerrar={onCerrar}
     >
-      <ul className="flex flex-col divide-y divide-linea-tenue">
+      <ul className="flex flex-col divide-y divide-linea">
         {piezas.map((pieza) => (
           <li key={pieza.id} className="flex items-center justify-between gap-4 py-3">
             <span className="min-w-0 flex-1 truncate font-semibold">{pieza.nombre}</span>
@@ -595,8 +681,8 @@ function ComentarioGeneral({
         rows={8}
         autoFocus
         placeholder="Lo que quieras decirle al equipo sobre el conjunto: el tono, las fechas, algo que se repite en varias piezas…"
-        className="w-full resize-y rounded-xl border border-linea bg-lienzo p-4 text-normal
-                   shadow-inner transition-colors placeholder:text-apagado
+        className="w-full resize-y border border-linea bg-lienzo p-4 text-normal
+                   transition-colors placeholder:text-apagado
                    focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
       />
       <p className="mt-3 text-menudo text-apagado">
@@ -611,7 +697,7 @@ function ComentarioGeneral({
  *
  * Enviar es el único acto de esta pantalla que la agencia ve, y no se deshace.
  * Merece que el cliente lea qué está mandando: qué aprobó, qué pidió cambiar
- * y —sobre todo— si quedó alguna sin mirar.
+ * —punto por punto— y, sobre todo, si quedó alguna sin mirar.
  */
 function Confirmacion({
   proyecto,
@@ -622,7 +708,12 @@ function Confirmacion({
   onEnviar,
 }: {
   proyecto: string;
-  piezas: Array<{ id: string; nombre: string; estado: Pieza["estado"]; pedido: string }>;
+  piezas: Array<{
+    id: string;
+    nombre: string;
+    estado: Pieza["estado"];
+    cambios: Cambio[];
+  }>;
   sinRevisar: Array<{ id: string; nombre: string }>;
   soloUna: boolean;
   onVolver: () => void;
@@ -651,7 +742,7 @@ function Confirmacion({
       <div className="flex flex-col gap-7">
         {aprobadas.length > 0 && (
           <section>
-            <h3 className="text-micro uppercase tracking-[0.18em] text-listo">
+            <h3 className="text-micro font-extrabold uppercase tracking-widest text-listo">
               Aprobadas · {aprobadas.length}
             </h3>
             <ul className="mt-3 flex flex-col gap-1.5">
@@ -666,18 +757,27 @@ function Confirmacion({
 
         {conCambios.length > 0 && (
           <section>
-            <h3 className="text-micro uppercase tracking-[0.18em] text-acento">
+            <h3 className="text-micro font-extrabold uppercase tracking-widest text-acento">
               Con cambios · {conCambios.length}
             </h3>
-            <ul className="mt-3 flex flex-col gap-4">
+            <ul className="mt-3 flex flex-col gap-5">
               {conCambios.map((p) => (
                 <li key={p.id}>
-                  <p className="text-normal font-semibold">{p.nombre}</p>
-                  <p className="mt-1 text-menudo text-tinta-suave">
-                    {p.pedido.trim() || (
-                      <span className="text-espera">Sin escribir qué cambiar</span>
-                    )}
-                  </p>
+                  <p className="text-normal font-bold">{p.nombre}</p>
+                  {p.cambios.length === 0 ? (
+                    <p className="mt-1 text-menudo text-espera">Sin escribir qué cambiar</p>
+                  ) : (
+                    <ol className="mt-1.5 flex flex-col gap-1.5">
+                      {p.cambios.map((c, i) => (
+                        <li key={c.id} className="flex gap-2 text-menudo text-tinta-suave">
+                          <span className="shrink-0 font-extrabold text-apagado">
+                            {i + 1}.
+                          </span>
+                          <span className="min-w-0 whitespace-pre-wrap">{c.texto}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                 </li>
               ))}
             </ul>
@@ -685,8 +785,8 @@ function Confirmacion({
         )}
 
         {sinRevisar.length > 0 && (
-          <section className="rounded-xl bg-espera-tenue px-5 py-4">
-            <h3 className="text-micro uppercase tracking-[0.18em] text-espera">
+          <section className="bg-espera-tenue px-5 py-4">
+            <h3 className="text-micro font-extrabold uppercase tracking-widest text-espera">
               Sin revisar · {sinRevisar.length}
             </h3>
             <ul className="mt-3 flex flex-col gap-1.5">
