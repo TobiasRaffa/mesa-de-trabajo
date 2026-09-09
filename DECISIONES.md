@@ -288,11 +288,22 @@ Cambiarla ahí cambia el alcance en todo el sistema a la vez. Es el equivalente
 en la base de datos de tener los permisos en un solo módulo del código: si la
 regla estuviera copiada en cada tabla, alcanzaría con olvidarse en una.
 
-## 18. Teléfono primero, y no como un ajuste posterior.
+## 18. La computadora manda; el teléfono es una versión, no un recorte.
 
-El cliente abre el portal desde un link de WhatsApp: casi siempre va a estar en
-el teléfono. Así que las pantallas se diseñan para el teléfono y lo de la
-computadora se agrega después, no al revés.
+Los dos mundos no se usan igual, y conviene no fingir que sí.
+
+**La administración se usa en la computadora.** El tablero, armar entregas,
+configurar clientes, la cobranza: todo eso se hace sentado. Es la pantalla
+principal y se diseña para pantalla grande.
+
+**El portal del cliente se abre donde caiga.** Llega por WhatsApp, así que
+muchas veces va a ser un teléfono — pero también una computadora, y una no vale
+menos que la otra. Es un solo diseño que se reacomoda, no dos.
+
+En la práctica, la pantalla de una entrega va en tres columnas en la
+computadora y en una en el teléfono; las acciones quedan dentro de cada pieza
+en pantalla grande y en una barra fija abajo en el teléfono, donde llega el
+pulgar.
 
 En la práctica:
 
@@ -341,3 +352,18 @@ desde otro país, o que Argentina vuelva a mover los relojes.
 Y los días se cuentan **de calendario, no de veinticuatro horas**: si algo vence
 mañana a las nueve y son las once de la noche, para una persona eso es «un
 día», no «diez horas». Contar en horas diría «vence hoy», que es engañoso.
+
+## 22. La pantalla usa la máquina de estados, no una copia de sus reglas.
+
+Cuando el cliente aprueba una pieza, la pantalla llama a la misma función
+`aplicar()` que va a correr en el servidor. No hay una versión de las reglas
+para el navegador y otra para el servidor: hay una sola.
+
+Eso significa que un botón se deshabilita porque el dominio dice que ese evento
+no se puede, y no porque alguien se acordó de deshabilitarlo. Y cuando el
+dominio rechaza algo, la pantalla muestra el motivo que devuelve, en vez de no
+hacer nada y dejar al cliente adivinando.
+
+Hoy los cambios viven solo en el navegador y al recargar se pierden. Cuando
+exista la base, lo único que cambia es dónde se guarda el resultado — las
+reglas ya están donde tienen que estar.
