@@ -9,6 +9,9 @@
 //   - el acceso pasa por una única puerta que se puede controlar.
 
 import type { NextRequest } from "next/server";
+import { cookies } from "next/headers";
+import { clienteQueEntro } from "@/lib/acceso";
+
 import { bytesDeMiniatura } from "@/lib/google";
 import { tamanoPermitido } from "@/lib/miniaturas";
 import { archivoAutorizado } from "@/lib/permisos";
@@ -21,10 +24,13 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/miniatura/[f
 
   const px = tamanoPermitido(req.nextUrl.searchParams.get("px"));
 
-  // Autorización antes que nada. Si no está dentro de una carpeta que
-  // administramos, se responde igual que si no existiera: no confirmamos
-  // ni desmentimos que el archivo exista.
-  const archivo = await archivoAutorizado(fileId);
+  // **Quién pregunta, antes que qué pide.** Sin haber acertado la clave de un
+  // link, no se sirve un solo byte. Y lo que se sirve es lo que cuelga de la
+  // carpeta de ese cliente: la de otro es tan ajena como la de un desconocido.
+  const cliente = await clienteQueEntro(await cookies());
+  if (!cliente) return sinDetalle("No encontrado", 404);
+
+  const archivo = await archivoAutorizado(fileId, cliente.id);
   if (!archivo) return sinDetalle("No encontrado", 404);
 
   if (!archivo.thumbnailLink) return sinDetalle("El archivo no tiene miniatura", 415);

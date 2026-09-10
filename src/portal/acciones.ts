@@ -15,7 +15,9 @@
 // refrescarla. Las de gestión se dibujan de nuevo en cada visita, así que no
 // hacía falta; y el portal no tiene por qué saber que existen.
 
+import { cookies } from "next/headers";
 import { aplicar, type Evento } from "@/dominio/pieza";
+import { entroAlCliente } from "@/lib/acceso";
 import { avisar } from "@/lib/avisar";
 import { clienteDeCarpeta, esCarpetaDelCliente } from "@/lib/carpetas";
 import { datosDeCarpeta } from "@/lib/google";
@@ -37,17 +39,37 @@ import {
 const CLIENTE = "Cliente";
 
 /**
- * De quién es esta carpeta y cómo se llama todo.
+ * Quién está del otro lado, y de qué carpeta habla.
  *
- * **El cliente se deduce de la carpeta, no llega como parámetro.** Antes venía
- * del navegador y se le creía: con eso, un pedido armado a mano podía aprobar
- * la pieza de un cliente diciendo ser otro, y el archivo terminaba en las
- * «Entregas finales» del otro. Todo lo que se puede deducir en el servidor, se
- * deduce en el servidor.
+ * **Toda acción del portal empieza acá.** Son dos preguntas y hacen falta las
+ * dos:
+ *
+ *   1. **¿De quién es esta carpeta?** Se deduce de la carpeta, no llega como
+ *      parámetro. Antes venía del navegador y se le creía: con eso, un pedido
+ *      armado a mano podía aprobar la pieza de un cliente diciendo ser otro.
+ *
+ *   2. **¿Y quién pregunta?** Esta faltaba, y es la que importa. Arreglar la
+ *      primera impidió *hacerse pasar* por otro cliente, pero no exigió ser
+ *      ninguno: alcanzaba con saber un identificador de carpeta de Drive —que
+ *      lo ve cualquiera a quien le hayan compartido la carpeta— para aprobar
+ *      una pieza, mover el archivo en Drive, cerrar una revisión o escribir en
+ *      el chat firmando como el cliente. Sin link y sin clave.
+ *
+ * Una acción de servidor es un endpoint público: que el navegador no dibuje el
+ * botón no impide que alguien haga el pedido igual.
+ *
+ * Devuelve `null` en los tres casos —carpeta que no existe, carpeta de otro,
+ * nadie autenticado— y quien llama contesta lo mismo para los tres. Distinguir
+ * le diría a quien prueba si acertó a medias.
  */
-async function deQuienEs(carpetaId: string) {
+async function quienEntro(carpetaId: string) {
   const cliente = await clienteDeCarpeta(carpetaId);
   if (!cliente) return null;
+
+  // La galleta la firma el servidor y dice «este navegador acertó la clave de
+  // este link». No se puede fabricar sin la llave del servidor.
+  if (!(await entroAlCliente(cliente.id, await cookies()))) return null;
+
   try {
     const carpeta = await datosDeCarpeta(carpetaId);
     return { cliente, nombreDeLaCarpeta: carpeta.name };
@@ -96,12 +118,14 @@ export async function moverPieza(
   piezaId: string,
   evento: Evento
 ): Promise<RespuestaDePieza> {
+  // Primero quién, después qué. Al revés, un pedido de alguien que no entró
+  // igual averiguaría si una pieza existe o no.
+  const donde = await quienEntro(carpetaId);
+  if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
+
   if (!(await piezaDeLaCarpeta(carpetaId, piezaId))) {
     return { ok: false, motivo: "No encontramos esa pieza." };
   }
-
-  const donde = await deQuienEs(carpetaId);
-  if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
   // El portal no puede aprobar en nombre de otro ni reabrir: son eventos de la
   // agencia. Se listan los permitidos en vez de prohibir los otros, para que
@@ -191,6 +215,10 @@ export async function guardarCambiosDePieza(
   piezaId: string,
   cambios: Cambio[]
 ): Promise<RespuestaDePieza> {
+  if (!(await quienEntro(carpetaId))) {
+    return { ok: false, motivo: "No encontramos esa carpeta." };
+  }
+
   if (!(await piezaDeLaCarpeta(carpetaId, piezaId))) {
     return { ok: false, motivo: "No encontramos esa pieza." };
   }
@@ -250,7 +278,7 @@ export async function enviarRevision(
   carpetaId: string,
   soloEsta?: string
 ): Promise<RespuestaDeCarpeta> {
-  const donde = await deQuienEs(carpetaId);
+  const donde = await quienEntro(carpetaId);
   if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
   let archivos: string[];
@@ -318,7 +346,7 @@ export async function escribirComoCliente(
   // La conversación es **del cliente**, y el cliente sale de la carpeta: si
   // llegara como parámetro, un pedido armado a mano podría escribir en la
   // conversación de otro.
-  const donde = await deQuienEs(carpetaId);
+  const donde = await quienEntro(carpetaId);
   if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
   const limpio = String(texto ?? "").trim();

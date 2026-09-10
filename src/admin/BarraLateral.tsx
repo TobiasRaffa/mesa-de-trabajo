@@ -44,6 +44,11 @@ function esLaActual(ruta: string, seccion: (typeof SECCIONES)[number]): boolean 
 export function BarraLateral() {
   const ruta = usePathname();
 
+  // En la puerta no hay a dónde ir todavía. Mostrar el menú de secciones a
+  // quien no entró es ofrecerle lo que no puede abrir, y de paso contarle qué
+  // hay adentro.
+  if (ruta === "/gestion/entrar") return null;
+
   return (
     <aside
       className="flex w-full flex-col gap-6 bg-tinta p-6 text-lienzo

@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import { Archivo } from "next/font/google";
 import "./globals.css";
+import { revisarLoQueInternetExige } from "@/lib/entorno";
+
+// Se revisa acá porque este archivo se evalúa sí o sí al compilar, para todas
+// las pantallas. Si en Netlify falta la contraseña del equipo o el secreto de
+// las sesiones, el despliegue se cae con un mensaje que dice qué cargar y
+// dónde, en vez de salir verde y romperse después con gente adentro.
+revisarLoQueInternetExige();
 
 // La fuente la sirve nuestro propio dominio, no Google.
 //

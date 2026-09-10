@@ -48,11 +48,8 @@ const madresDe = new Map<string, { padres: string[]; vence: number }>();
  * archivos acá mismo, sin tocar Drive. Es el interruptor rápido; el definitivo
  * sigue siendo dejar de compartirle la carpeta al robot.
  *
- * **Lo que todavía no distingue es de qué cliente es cada quien.** Un archivo
- * queda autorizado si cuelga de *algún* cliente habilitado, no del cliente que
- * está mirando. Alcanza mientras los identificadores de Drive sean
- * impredecibles y no haya sesiones; cuando existan los accesos, esta función
- * recibe quién pregunta y la respuesta se angosta.
+ * Ya no se usa para autorizar: `archivoAutorizado` pregunta por **un** cliente,
+ * el que abrió la puerta. Queda para saber qué administra la aplicación.
  */
 export async function carpetasAdministradas(): Promise<string[]> {
   try {
@@ -110,22 +107,33 @@ async function desciendeDeAlgunaAdministrada(
 }
 
 /**
- * Autoriza un archivo y, de paso, devuelve sus datos.
+ * Autoriza un archivo **para un cliente**, y de paso devuelve sus datos.
  *
- * Devuelve los metadatos si el archivo cuelga de una carpeta administrada, o
- * `null` si no cuelga o no se pudo verificar. Ante la duda, no se sirve.
+ * El segundo parámetro no es opcional a propósito. Antes la pregunta era «¿este
+ * archivo cuelga de *algún* cliente habilitado?», y con esa respuesta se servía
+ * el original a cualquiera: bastaba con conocer un identificador de Drive —que
+ * lo ve todo aquel a quien le compartieron la carpeta— para bajarse el archivo
+ * sin haber escrito nunca una clave. Y un cliente legítimo se bajaba los
+ * archivos de otro.
  *
- * Devuelve los datos en vez de un booleano a propósito: quien autoriza ya tuvo
- * que pedírselos a Google, y hacer que el llamador los pida de nuevo sería
- * pagar dos viajes de red por cada imagen.
+ * Que la firma exija saber de quién es hace que la próxima ruta que sirva bytes
+ * no pueda olvidarse: no compila sin decirlo.
+ *
+ * Devuelve los datos en vez de un booleano porque quien autoriza ya tuvo que
+ * pedírselos a Google, y hacer que el llamador los pida de nuevo sería pagar
+ * dos viajes de red por cada imagen.
  */
-export async function archivoAutorizado(fileId: string): Promise<MetadatosArchivo | null> {
-  const permitidas = await carpetasAdministradas();
-  if (permitidas.length === 0) return null;
+export async function archivoAutorizado(
+  fileId: string,
+  carpetaDelCliente: string
+): Promise<MetadatosArchivo | null> {
+  if (!carpetaDelCliente) return null;
 
   try {
     const archivo = await metadatosArchivo(fileId);
-    const adentro = await desciendeDeAlgunaAdministrada(archivo.parents ?? [], permitidas);
+    const adentro = await desciendeDeAlgunaAdministrada(archivo.parents ?? [], [
+      carpetaDelCliente,
+    ]);
     return adentro ? archivo : null;
   } catch {
     return null;

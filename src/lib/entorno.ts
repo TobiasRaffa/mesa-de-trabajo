@@ -22,6 +22,46 @@ export function variablesFaltantes(): VariableRequerida[] {
 }
 
 /**
+ * Las que en la máquina son opcionales y en internet no.
+ *
+ * Sin `CLAVE_DE_ADMIN` no hay contraseña que comparar, así que gestión queda
+ * cerrada para todos —falla del lado seguro, pero falla—. Sin
+ * `SECRETO_DE_SESION`, cada instancia de Netlify que arranque en frío puede
+ * generar la suya y los clientes se caen al saltar de una a otra.
+ *
+ * Acá no valían de nada como advertencia en una tabla del documento de
+ * despliegue: una configuración de seguridad que depende de que alguien se
+ * acuerde de completar una fila es la fila que se olvida.
+ */
+const REQUERIDAS_EN_INTERNET: VariableRequerida[] = [
+  { nombre: "CLAVE_DE_ADMIN", para: "la contraseña con la que entra el equipo a gestión" },
+  { nombre: "SECRETO_DE_SESION", para: "firmar las galletas, igual en todas las máquinas" },
+];
+
+/**
+ * Corta la compilación si falta algo que en internet no puede faltar.
+ *
+ * Es el mismo freno que impide desplegar sin Supabase, y por el mismo motivo:
+ * el despliegue saldría verde y el problema aparecería después, con gente
+ * usándolo. Falla acá, que es cuando todavía no hay nadie.
+ */
+export function revisarLoQueInternetExige(): void {
+  if (!process.env.NETLIFY) return;
+
+  const faltan = REQUERIDAS_EN_INTERNET.filter(
+    ({ nombre }) => !process.env[nombre]?.trim()
+  );
+  if (faltan.length === 0) return;
+
+  const lista = faltan.map((v) => `  - ${v.nombre}: ${v.para}`).join("\n");
+  throw new Error(
+    `Faltan variables que en internet no pueden faltar:\n${lista}\n\n` +
+      `Se cargan en Netlify, en Site configuration -> Environment variables. ` +
+      `Está explicado en DESPLIEGUE.md.`
+  );
+}
+
+/**
  * Deja la llave privada como la espera el módulo de criptografía: con saltos
  * de línea de verdad.
  *

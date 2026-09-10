@@ -199,42 +199,60 @@ export function olvidarIntentos(token: string): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Si este navegador ya entró a algo de este cliente.
+ * **Quién entró.** La única fuente de verdad sobre eso en toda la aplicación.
  *
- * Sirve para las rutas que devuelven datos del cliente sin ser la página del
- * portal —la conversación, por ejemplo—. Sin esto, alcanzaba con saber el
- * identificador de la carpeta en Drive para leer los mensajes **sin haber
- * escrito nunca la clave**, y ese identificador lo ve cualquiera con quien la
- * agencia haya compartido la carpeta.
+ * Devuelve el cliente cuya puerta abrió este navegador, o `null` si no abrió
+ * ninguna. Todo lo que muestre o toque datos de un cliente sale de acá: si
+ * alguien escribe una pantalla nueva y no la llama, no autentica a nadie, y
+ * eso es exactamente el error que ya cometimos tres veces.
  *
- * Vale tanto el link del cliente como el de cualquiera de sus carpetas: las
- * dos puertas llevan al mismo cliente.
+ * Sirve tanto el link del cliente como el de cualquiera de sus carpetas: las
+ * dos puertas llevan al mismo cliente. Se prueban primero los del cliente
+ * porque son una firma cada uno y no tocan Drive; recién si ninguno acierta se
+ * miran los de carpeta.
+ */
+export async function clienteQueEntro(
+  galletas: { get(nombre: string): { value: string } | undefined }
+): Promise<Cliente | null> {
+  let clientes: Cliente[];
+  try {
+    clientes = await clientesHabilitados();
+  } catch {
+    // Si no se puede saber quién es cliente, no entró nadie. El lado seguro.
+    return null;
+  }
+
+  for (const cliente of clientes) {
+    const valor = galletas.get(await nombreDeGalleta(cliente.token))?.value;
+    if (await galletaValida(cliente.token, valor)) return cliente;
+  }
+
+  for (const cliente of clientes) {
+    try {
+      for (const carpeta of await subcarpetasDe(cliente.id)) {
+        const { token } = await ajustesDe(carpeta.id);
+        if (!token) continue;
+        const valor = galletas.get(await nombreDeGalleta(token))?.value;
+        if (await galletaValida(token, valor)) return cliente;
+      }
+    } catch {
+      // Un cliente que Drive no contesta no puede tumbar la búsqueda entera.
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Si este navegador entró a algo de **este** cliente.
+ *
+ * Es `clienteQueEntro` y una comparación. Escrito aparte se le habría ido la
+ * mano a alguno de los dos con el tiempo, y el que se quedara viejo sería el
+ * que autoriza.
  */
 export async function entroAlCliente(
   clienteId: string,
   galletas: { get(nombre: string): { value: string } | undefined }
 ): Promise<boolean> {
-  let cliente: Cliente | undefined;
-  try {
-    cliente = (await clientesHabilitados()).find((c) => c.id === clienteId);
-  } catch {
-    return false;
-  }
-  if (!cliente) return false;
-
-  const candidatos = [cliente.token];
-  try {
-    for (const carpeta of await subcarpetasDe(cliente.id)) {
-      const { token } = await ajustesDe(carpeta.id);
-      if (token) candidatos.push(token);
-    }
-  } catch {
-    // Si Drive no contesta, queda el link del cliente, que es el principal.
-  }
-
-  for (const token of candidatos) {
-    const valor = galletas.get(await nombreDeGalleta(token))?.value;
-    if (await galletaValida(token, valor)) return true;
-  }
-  return false;
+  return (await clienteQueEntro(galletas))?.id === clienteId;
 }

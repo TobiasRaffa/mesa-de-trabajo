@@ -87,8 +87,8 @@ lugar donde está eso.
    | `SUPABASE_SERVICE_KEY` | no compila                                         |
    | `GOOGLE_SA_EMAIL`      | compila, pero no se ve ninguna carpeta ni archivo   |
    | `GOOGLE_SA_KEY`        | igual                                              |
-   | `CLAVE_DE_ADMIN`       | gestión queda abierta a quien sepa la dirección     |
-   | `SECRETO_DE_SESION`    | anda, pero los clientes tienen que reingresar más   |
+   | `CLAVE_DE_ADMIN`       | no compila                                         |
+   | `SECRETO_DE_SESION`    | no compila                                         |
 
    Las dos opcionales de correo (`RESEND_API_KEY`, `CORREO_DESDE`): sin ellas
    la aplicación funciona igual, los avisos quedan anotados en la bandeja de
@@ -111,7 +111,9 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
       dice archivos, algo está mal y hay que parar acá.
 - [ ] Abrir `/` a secas: no tiene que llevar a ningún lado. Es la dirección que
       queda cuando alguien borra el final del link.
-- [ ] Entrar a gestión. Tiene que pedir la contraseña.
+- [ ] Abrir `/gestion`. Tiene que llevarte a `/gestion/entrar` y pedir la
+      contraseña del equipo. Probá también `/gestion/chats` y `/diagnostico`
+      directo: las dos tienen que mandarte a la misma puerta.
 - [ ] Crear un cliente de prueba con una carpeta de Drive de prueba, ponerle un
       tag, abrir su link en una ventana de incógnito. Tiene que pedir el tag, y
       con el tag mal no tiene que dejar pasar.
@@ -128,7 +130,13 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
 ## Lo que todavía no está
 
 - **Nadie entra con usuario y contraseña propios.** Gestión tiene una sola
-  clave compartida para toda la agencia. Se decidió así por ahora.
+  clave compartida para toda la agencia, y hay una puerta real que la pide
+  antes de mostrar nada. Lo que no hay es un usuario por persona: no se sabe
+  quién de las tres hizo cada cosa. Se decidió así por ahora.
+- **El freno de intentos vive en memoria.** Sirve en una computadora. En
+  Netlify, donde cada pedido puede caer en una máquina distinta, no frena nada:
+  hay que moverlo al almacén antes de mandarle el primer link a un cliente
+  real.
 - **Los archivos siguen en Drive.** La aplicación no guarda ninguno: muestra lo
   que hay en Drive y anota qué pasó con cada cosa. Perder la aplicación no
   pierde ningún archivo.

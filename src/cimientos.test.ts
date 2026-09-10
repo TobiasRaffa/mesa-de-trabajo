@@ -337,3 +337,111 @@ describe("las fronteras, revisadas a mano", () => {
     ).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Que exista una puerta, y que nada la esquive.
+ *
+ * Estas pruebas nacen de tres agujeros que estuvieron abiertos a la vez y que
+ * eran el mismo: **«quién entró» no existía como concepto**.
+ *
+ *   - `/gestion` no pedía nada. La contraseña cuidaba dos acciones sueltas y
+ *     todo el resto —el árbol de clientes, los chats, el tablero— abría con
+ *     escribir la dirección.
+ *   - Las acciones del portal no leían la galleta de nadie. Con un
+ *     identificador de carpeta de Drive se podía aprobar una pieza, mover el
+ *     archivo, cerrar una revisión y escribir en el chat firmando como el
+ *     cliente.
+ *   - Los archivos y las miniaturas se servían a cualquiera, y un cliente se
+ *     bajaba los de otro.
+ *
+ * Lo que los tres tienen en común: **una puerta que hay que acordarse de poner
+ * es una puerta que alguna vez falta**. Por eso ahora la puerta está en un solo
+ * lugar por mundo, y esto verifica que siga estando.
+ */
+describe("las puertas", () => {
+  const leer = (relativo: string) => readFileSync(path.join(RAIZ, relativo), "utf8");
+
+  it("el proxy cierra gestión entera y el diagnóstico", () => {
+    // Va en src/ y no en la raíz: la documentación de Next pide que quede al
+    // mismo nivel que `app`, y acá `app` vive dentro de `src`. Puesto en la
+    // raíz el archivo se ignora en silencio -- ninguna pantalla se protege y
+    // nada avisa. Pasó, y por eso esta prueba nombra la ruta exacta.
+    const proxy = leer("src/proxy.ts");
+
+    // No alcanza con que el archivo exista: tiene que cubrir estas rutas.
+    for (const ruta of ['"/gestion"', '"/gestion/:path*"', '"/diagnostico"']) {
+      expect(
+        proxy,
+        `El proxy no cubre ${ruta}. Sin eso esa pantalla abre sin contraseña.`
+      ).toContain(ruta);
+    }
+
+    expect(
+      proxy,
+      "El proxy tiene que comprobar la galleta firmada, no la contraseña cruda."
+    ).toContain("galletaDeGestionValida");
+  });
+
+  it("toda acción del portal pregunta quién entró", () => {
+    const fuente = leer("src/portal/acciones.ts");
+
+    // Se corta el archivo en bloques, uno por función exportada, y se revisa
+    // cada bloque por separado: que el archivo mencione la comprobación en
+    // algún lado no dice nada sobre la función que se agregó ayer.
+    const partes = fuente.split(/^export async function /m).slice(1);
+    expect(partes.length, "No encontré ninguna acción exportada.").toBeGreaterThan(0);
+
+    const sinPuerta = partes
+      .filter((bloque) => !bloque.includes("quienEntro("))
+      .map((bloque) => bloque.slice(0, bloque.indexOf("(")));
+
+    expect(
+      sinPuerta,
+      "Estas acciones del portal no verifican quién las llama. Una acción de " +
+        "servidor es un endpoint público: que el navegador no dibuje el botón " +
+        "no impide que alguien haga el pedido igual. Empezá por quienEntro()."
+    ).toEqual([]);
+  });
+
+  it("ninguna ruta de API sirve datos sin saber quién pregunta", () => {
+    const rutas = archivosBajo(path.join(FUENTE, "app", "api")).filter((f) =>
+      f.endsWith("route.ts")
+    );
+    expect(rutas.length, "No encontré ninguna ruta de API.").toBeGreaterThan(0);
+
+    const sinPuerta = rutas
+      .filter((f) => {
+        // Se sacan los imports antes de buscar. La primera versión de esta
+        // prueba no lo hacía, y no atrapaba nada: al borrar la llamada, el
+        // import quedaba y el nombre seguía apareciendo en el archivo. Se
+        // descubrió rompiéndola a propósito, que es para lo que sirve hacerlo.
+        const cuerpo = readFileSync(f, "utf8")
+          .split("\n")
+          .filter((linea) => !linea.trimStart().startsWith("import "))
+          .join("\n");
+        return !cuerpo.includes("clienteQueEntro(") && !cuerpo.includes("entroAlCliente(");
+      })
+      .map(relativo);
+
+    expect(
+      sinPuerta,
+      "Estas rutas devuelven datos sin comprobar la galleta del cliente. " +
+        "Alcanzaba con conocer un identificador de Drive —que lo ve cualquiera " +
+        "a quien le compartieron la carpeta— para bajarse el archivo sin haber " +
+        "escrito nunca una clave."
+    ).toEqual([]);
+  });
+
+  it("quién entró se decide en un solo lugar", () => {
+    // Dos implementaciones de «quién es este» se separan con el tiempo, y la
+    // que se quede vieja va a ser la que autoriza.
+    const acceso = leer("src/lib/acceso.ts");
+    expect(acceso).toContain("export async function clienteQueEntro");
+    expect(
+      acceso.slice(acceso.indexOf("export async function entroAlCliente")),
+      "entroAlCliente tiene que apoyarse en clienteQueEntro, no repetirlo."
+    ).toContain("clienteQueEntro(galletas)");
+  });
+});

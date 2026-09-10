@@ -10,6 +10,9 @@
 // Un archivo de diseño puede pesar cientos de megas.
 
 import type { NextRequest } from "next/server";
+import { cookies } from "next/headers";
+import { clienteQueEntro } from "@/lib/acceso";
+
 import { abrirArchivo } from "@/lib/google";
 import { cabeceraDeDescarga } from "@/lib/descargas";
 import { archivoAutorizado } from "@/lib/permisos";
@@ -20,12 +23,15 @@ const sinDetalle = (mensaje: string, codigo: number) =>
 export async function GET(_req: NextRequest, ctx: RouteContext<"/api/archivo/[fileId]">) {
   const { fileId } = await ctx.params;
 
-  // Autorización antes que nada. Si no está dentro de una carpeta que
-  // administramos, se responde igual que si no existiera.
-  //
-  // Cuando exista la base de datos, acá se agrega la otra mitad: que la pieza
-  // esté aprobada. Hoy no hay dónde preguntarlo.
-  const archivo = await archivoAutorizado(fileId);
+  // **Quién pregunta, antes que qué pide.** Sin haber acertado la clave de un
+  // link, no se sirve un solo byte. Y lo que se sirve es lo que cuelga de la
+  // carpeta de ese cliente: la de otro es tan ajena como la de un desconocido.
+  const cliente = await clienteQueEntro(await cookies());
+  if (!cliente) return sinDetalle("No encontrado", 404);
+
+  // Si el archivo no cuelga de su carpeta, se responde igual que si no
+  // existiera: no confirmamos ni desmentimos que exista.
+  const archivo = await archivoAutorizado(fileId, cliente.id);
   if (!archivo) return sinDetalle("No encontrado", 404);
 
   try {
