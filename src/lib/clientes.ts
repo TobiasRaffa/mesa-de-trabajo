@@ -127,13 +127,6 @@ export async function clientesHabilitados(): Promise<Cliente[]> {
   return (await todosLosClientes()).filter((c) => c.habilitado);
 }
 
-/** El cliente al que apunta un link, o `null` si ese link no vale. */
-export async function clientePorToken(token: string): Promise<Cliente | null> {
-  if (!token) return null;
-  const clientes = await clientesHabilitados();
-  return clientes.find((c) => c.token === token) ?? null;
-}
-
 export async function clientePorId(id: string): Promise<Cliente | null> {
   return (await todosLosClientes()).find((c) => c.id === id) ?? null;
 }

@@ -69,9 +69,3 @@ export async function entrarConTag(
 
   return { ok: true };
 }
-
-/** Cierra la sesión de este link en este navegador. */
-export async function salir(token: string): Promise<void> {
-  const galletas = await cookies();
-  galletas.delete(await nombreDeGalleta(token));
-}

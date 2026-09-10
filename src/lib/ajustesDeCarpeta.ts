@@ -59,7 +59,7 @@ export function esCarpetaReservada(nombre: string): boolean {
 }
 
 /** Lo guardado, o vacío si todavía no se configuró nada. */
-export async function leerAjustes(): Promise<Ajustes> {
+async function leerAjustes(): Promise<Ajustes> {
   try {
     const crudo = await readFile(ARCHIVO, "utf8");
     const datos = JSON.parse(crudo) as unknown;

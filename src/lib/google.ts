@@ -18,7 +18,7 @@ const b64url = (b: crypto.BinaryLike) =>
 // El token dura una hora; lo guardamos en memoria para no pedirlo en cada pantalla.
 let cache: { token: string; vence: number } | null = null;
 
-export async function tokenDeGoogle(): Promise<string> {
+async function tokenDeGoogle(): Promise<string> {
   const ahora = Math.floor(Date.now() / 1000);
   if (cache && cache.vence > ahora + 60) return cache.token;
 

@@ -105,15 +105,7 @@ export async function anotarAviso(
   return nuevo;
 }
 
-export async function marcarVistos(ids: string[]): Promise<void> {
-  const conjunto = new Set(ids);
-  await guardar((await losAvisos()).map((a) => (conjunto.has(a.id) ? { ...a, visto: true } : a)));
-}
-
 export async function marcarTodosVistos(): Promise<void> {
   await guardar((await losAvisos()).map((a) => ({ ...a, visto: true })));
 }
 
-export async function sinVer(): Promise<number> {
-  return (await losAvisos()).filter((a) => !a.visto).length;
-}

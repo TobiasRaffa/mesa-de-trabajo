@@ -11,7 +11,7 @@ export type VariableRequerida = {
   para: string;
 };
 
-export const REQUERIDAS: VariableRequerida[] = [
+const REQUERIDAS: VariableRequerida[] = [
   { nombre: "GOOGLE_SA_EMAIL", para: "identificar a la cuenta de servicio ante Google" },
   { nombre: "GOOGLE_SA_KEY", para: "firmar el pedido de acceso a Google" },
 ];

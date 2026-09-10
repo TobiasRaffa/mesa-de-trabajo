@@ -6,12 +6,17 @@
 // Lo único que cambia es a qué nivel se guarda, y eso decide qué se lleva
 // puesto: lo de arriba deja heredando a todo lo de abajo.
 //
+// **No se guarda al elegir**, por lo mismo que los días: cambiar el
+// responsable de un cliente reasigna todas sus carpetas, y eso no puede pasar
+// por rozar un desplegable.
+//
 // Dice si está puesto acá o heredado. Sin eso, ver «Nari» no distingue entre
 // «alguien la puso en esta carpeta» y «la lleva porque lleva el cliente».
 
 import { useState, useTransition } from "react";
 import { guardarResponsable } from "@/app/(admin)/gestion/acciones";
 import type { Persona } from "@/lib/equipo";
+import { CAMPO, ETIQUETA, GUARDAR } from "@/admin/estilos";
 
 export function Responsable({
   nivel,
@@ -33,12 +38,15 @@ export function Responsable({
   equipo: Persona[];
   alGuardar?: () => void;
 }) {
+  const [elegido, setElegido] = useState(quien ?? "");
   const [guardando, guardar] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function cambiar(personaId: string) {
+  const cambio = elegido !== (quien ?? "");
+
+  function confirmar() {
     guardar(async () => {
-      const r = await guardarResponsable(nivel, id, personaId, carpetaId);
+      const r = await guardarResponsable(nivel, id, elegido, carpetaId);
       if (r.ok) {
         setError(null);
         alGuardar?.();
@@ -51,12 +59,11 @@ export function Responsable({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
-        value={quien ?? ""}
+        value={elegido}
         disabled={guardando}
-        onChange={(e) => cambiar(e.target.value)}
+        onChange={(e) => setElegido(e.target.value)}
         aria-label="Quién lo lleva"
-        className="min-h-toque border border-linea bg-lienzo px-2 text-menudo font-bold
-                   focus:border-acento focus:outline-none disabled:opacity-40"
+        className={CAMPO}
       >
         <option value="">sin asignar</option>
         {equipo.map((persona) => (
@@ -66,10 +73,12 @@ export function Responsable({
         ))}
       </select>
 
-      {!propio && quien !== null && (
-        <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
-          heredado
-        </span>
+      {cambio ? (
+        <button type="button" onClick={confirmar} disabled={guardando} className={GUARDAR}>
+          {guardando ? "…" : "Guardar"}
+        </button>
+      ) : (
+        !propio && quien !== null && <span className={ETIQUETA}>heredado</span>
       )}
 
       {equipo.length === 0 && (

@@ -4,8 +4,11 @@
 //
 // El mismo control sirve para el cliente, para una carpeta y para un archivo.
 // Lo único que cambia es a qué nivel se guarda, y eso decide **qué se lleva
-// puesto**: lo de arriba borra lo de abajo, para que no queden valores viejos
-// escondidos que nadie sepa de dónde salieron.
+// puesto**: lo de arriba deja heredando a todo lo de abajo.
+//
+// **No se guarda al elegir.** Elegir del desplegable y que eso ya borre el
+// plazo de doce archivos es demasiado para un movimiento del mouse: aparece
+// Guardar, y hasta apretarlo no pasa nada.
 //
 // Dice si el número es propio o heredado. Sin eso, un «3» no distingue entre
 // «alguien eligió tres» y «nadie eligió nada».
@@ -13,6 +16,7 @@
 import { useState, useTransition } from "react";
 import { guardarDiasDeRevision } from "@/app/(admin)/gestion/acciones";
 import { DIAS_POSIBLES } from "@/lib/dias";
+import { CAMPO, ETIQUETA, GUARDAR } from "@/admin/estilos";
 
 export function DiasDeRevision({
   nivel,
@@ -31,12 +35,15 @@ export function DiasDeRevision({
   propio: boolean;
   alGuardar?: () => void;
 }) {
+  const [elegidos, setElegidos] = useState(dias);
   const [guardando, guardar] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function cambiar(nuevos: number) {
+  const cambio = elegidos !== dias;
+
+  function confirmar() {
     guardar(async () => {
-      const r = await guardarDiasDeRevision(nivel, id, nuevos, carpetaId);
+      const r = await guardarDiasDeRevision(nivel, id, elegidos, carpetaId);
       if (r.ok) {
         setError(null);
         alGuardar?.();
@@ -49,12 +56,11 @@ export function DiasDeRevision({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
-        value={dias}
+        value={elegidos}
         disabled={guardando}
-        onChange={(e) => cambiar(Number(e.target.value))}
+        onChange={(e) => setElegidos(Number(e.target.value))}
         aria-label="Días para revisar"
-        className="min-h-toque border border-linea bg-lienzo px-2 text-menudo font-bold
-                   focus:border-acento focus:outline-none disabled:opacity-40"
+        className={CAMPO}
       >
         {DIAS_POSIBLES.map((d) => (
           <option key={d} value={d}>
@@ -63,10 +69,12 @@ export function DiasDeRevision({
         ))}
       </select>
 
-      {!propio && (
-        <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
-          heredado
-        </span>
+      {cambio ? (
+        <button type="button" onClick={confirmar} disabled={guardando} className={GUARDAR}>
+          {guardando ? "…" : "Guardar"}
+        </button>
+      ) : (
+        !propio && <span className={ETIQUETA}>heredado</span>
       )}
 
       {error && <span className="text-menudo font-semibold text-alerta">{error}</span>}

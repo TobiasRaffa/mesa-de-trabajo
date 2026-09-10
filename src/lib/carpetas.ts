@@ -10,7 +10,7 @@
 // portal para no dejar espiar conversaciones ajenas, y administración para no
 // guardar ajustes de carpetas inventadas.
 
-import { clientesHabilitados } from "@/lib/clientes";
+import { clientesHabilitados, type Cliente } from "@/lib/clientes";
 import { subcarpetasDe } from "@/lib/google";
 
 /** Cuánto se recuerda la lista antes de volver a preguntarle a Drive. */
@@ -50,4 +50,28 @@ export async function esCarpetaDelCliente(id: string): Promise<boolean> {
 /** Olvida la lista. Se llama al crear o habilitar algo, y en las pruebas. */
 export function olvidarCarpetas(): void {
   cache = null;
+}
+
+/**
+ * De qué cliente es una carpeta.
+ *
+ * **Se busca, no se recibe.** Las acciones del portal traían el cliente como
+ * parámetro y le creían: con eso, un pedido armado a mano podía aprobar la
+ * pieza de un cliente diciendo ser otro, y el archivo terminaba en la carpeta
+ * «Entregas finales» **del otro** —o el mensaje, en su conversación—.
+ *
+ * La regla general: de lo que llega de afuera se acepta la referencia mínima
+ * —esta carpeta, esta pieza— y todo lo demás se deduce del servidor.
+ */
+export async function clienteDeCarpeta(carpetaId: string): Promise<Cliente | null> {
+  if (!carpetaId) return null;
+  try {
+    for (const cliente of await clientesHabilitados()) {
+      const carpetas = await subcarpetasDe(cliente.id);
+      if (carpetas.some((c) => c.id === carpetaId)) return cliente;
+    }
+  } catch {
+    // Ante la duda, de nadie.
+  }
+  return null;
 }

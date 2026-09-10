@@ -69,7 +69,7 @@ const ESTADOS: Estado[] = [
 ];
 
 /** Lo que se asume de una pieza que nadie tocó todavía. */
-export function sinTocar(carpetaId: string): EstadoDePieza {
+function sinTocar(carpetaId: string): EstadoDePieza {
   return {
     carpetaId,
     estado: "entregada",
@@ -165,7 +165,7 @@ export async function estadoDe(
 }
 
 /** Las piezas que se mudaron a «Entregas finales» pero salieron de esta carpeta. */
-export async function mudadasDe(carpetaId: string): Promise<string[]> {
+async function mudadasDe(carpetaId: string): Promise<string[]> {
   const todo = await leerTodo();
   return Object.entries(todo)
     .filter(([, p]) => p.mudada && p.carpetaId === carpetaId)

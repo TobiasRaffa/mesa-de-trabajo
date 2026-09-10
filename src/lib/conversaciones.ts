@@ -176,7 +176,3 @@ export async function sinLeerPorCliente(lado: Lado): Promise<Record<string, numb
   }
   return salida;
 }
-
-export async function sinLeerDe(lado: Lado, clienteId: string): Promise<number> {
-  return (await sinLeerPorCliente(lado))[clienteId] ?? 0;
-}

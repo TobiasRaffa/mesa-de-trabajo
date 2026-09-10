@@ -12,7 +12,7 @@ import { Responsable } from "@/admin/Responsable";
 import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
-const TITULO = "text-micro font-extrabold uppercase tracking-widest text-apagado";
+import { TITULO } from "@/admin/estilos";
 
 export function ConfiguracionDeArchivo({
   archivo,
@@ -26,7 +26,7 @@ export function ConfiguracionDeArchivo({
   alGuardar: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <section>
         <h4 className={TITULO}>Quién lo lleva</h4>
         <div className="mt-2">
@@ -63,7 +63,7 @@ export function ConfiguracionDeArchivo({
             href={archivo.enlaceDrive}
             target="_blank"
             rel="noreferrer noopener"
-            className="mt-2 inline-flex min-h-toque items-center border-2 border-tinta px-4
+            className="mt-2 inline-flex h-8 items-center border-2 border-tinta px-3
                        text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
           >
             Abrirlo en Drive

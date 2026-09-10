@@ -27,7 +27,7 @@ const FINALES = "entregas finales";
  * Se busca por nombre y no por identificador guardado porque así la agencia
  * puede armar un cliente nuevo entero desde Drive, sin configurar nada acá.
  */
-export async function carpetaDeFinales(clienteId: string): Promise<string | null> {
+async function carpetaDeFinales(clienteId: string): Promise<string | null> {
   const carpetas = await subcarpetasDe(clienteId);
   const encontrada = carpetas.find(
     (c) => esCarpetaReservada(c.name) && c.name.trim().toLowerCase().replace(/\s+/g, " ") === FINALES

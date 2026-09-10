@@ -27,7 +27,7 @@
 // cosa. Se probaron y tapaban lo importante: en una lista, lo que hay que leer
 // son los nombres y los estados, no un párrafo al lado de cada control.
 
-import { useCallback, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import Link from "next/link";
 import { abrirCarpeta, abrirCliente } from "@/app/(admin)/gestion/acciones";
 import type { NodoArchivo, NodoCarpeta } from "@/admin/datos/arbol";
@@ -47,6 +47,18 @@ const comoFecha = (dia: string) => {
 
 /** Cuánto se corre cada nivel del árbol, en píxeles. */
 const SANGRIA = 22;
+
+/**
+ * Cuál configuración está abierta, en todo el árbol.
+ *
+ * Una sola a la vez. Con varias abiertas la lista se estira, hay que desplazar
+ * para volver a ver de qué cliente era cada panel, y es fácil guardar un
+ * cambio creyendo que se estaba en otro.
+ */
+const Abierta = createContext<{
+  cual: string | null;
+  alternarConfig: (id: string) => void;
+}>({ cual: null, alternarConfig: () => {} });
 
 /** El hueco de un botón que no está, para que la columna no se mueva. */
 const Hueco = () => <span aria-hidden="true" className="h-9 w-9 shrink-0" />;
@@ -177,12 +189,26 @@ export function ArbolDeClientes({
   clientes: ClienteEnGestion[];
   equipo: Persona[];
 }) {
+  const [cual, setCual] = useState<string | null>(null);
+
+  const contexto = useMemo(
+    () => ({
+      cual,
+      // Tocar la que ya está abierta la cierra; tocar otra cambia de una a la
+      // otra, sin dejar las dos abiertas.
+      alternarConfig: (id: string) => setCual((antes) => (antes === id ? null : id)),
+    }),
+    [cual]
+  );
+
   return (
-    <ul className="border-t border-linea">
-      {clientes.map((cliente) => (
-        <FilaCliente key={cliente.id} cliente={cliente} equipo={equipo} />
-      ))}
-    </ul>
+    <Abierta.Provider value={contexto}>
+      <ul className="border-t border-linea">
+        {clientes.map((cliente) => (
+          <FilaCliente key={cliente.id} cliente={cliente} equipo={equipo} />
+        ))}
+      </ul>
+    </Abierta.Provider>
   );
 }
 
@@ -194,7 +220,8 @@ function FilaCliente({
   equipo: Persona[];
 }) {
   const [abierto, setAbierto] = useState(false);
-  const [config, setConfig] = useState(false);
+  const { cual, alternarConfig } = useContext(Abierta);
+  const config = cual === cliente.id;
   const [carpetas, setCarpetas] = useState<NodoCarpeta[] | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -254,7 +281,7 @@ function FilaCliente({
         config={
           <BotonDeConfig
             abierta={config}
-            onTocar={() => setConfig(!config)}
+            onTocar={() => alternarConfig(cliente.id)}
             que={cliente.nombre}
           />
         }
@@ -341,7 +368,8 @@ function FilaCarpeta({
   alGuardar: () => void;
 }) {
   const [abierta, setAbierta] = useState(false);
-  const [config, setConfig] = useState(false);
+  const { cual, alternarConfig } = useContext(Abierta);
+  const config = cual === carpeta.id;
   const [archivos, setArchivos] = useState<NodoArchivo[] | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -388,7 +416,7 @@ function FilaCarpeta({
         config={
           <BotonDeConfig
             abierta={config}
-            onTocar={() => setConfig(!config)}
+            onTocar={() => alternarConfig(carpeta.id)}
             que={carpeta.nombre}
           />
         }
@@ -531,7 +559,8 @@ function FilaArchivo({
   equipo: Persona[];
   alGuardar: () => void;
 }) {
-  const [config, setConfig] = useState(false);
+  const { cual, alternarConfig } = useContext(Abierta);
+  const config = cual === archivo.id;
 
   return (
     <li className="border-t border-linea-tenue">
@@ -542,7 +571,7 @@ function FilaArchivo({
         config={
           <BotonDeConfig
             abierta={config}
-            onTocar={() => setConfig(!config)}
+            onTocar={() => alternarConfig(archivo.id)}
             que={archivo.nombre}
           />
         }

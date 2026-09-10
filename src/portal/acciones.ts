@@ -17,8 +17,7 @@
 
 import { aplicar, type Evento } from "@/dominio/pieza";
 import { avisar } from "@/lib/avisar";
-import { esCarpetaDelCliente } from "@/lib/carpetas";
-import { clientePorId } from "@/lib/clientes";
+import { clienteDeCarpeta, esCarpetaDelCliente } from "@/lib/carpetas";
 import { datosDeCarpeta } from "@/lib/google";
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
 import { mudarAFinales } from "@/lib/entregasFinales";
@@ -37,20 +36,22 @@ import {
 const CLIENTE = "Cliente";
 
 /**
- * Los nombres que hacen falta para redactar un aviso.
+ * De quién es esta carpeta y cómo se llama todo.
  *
- * Se piden aparte y sin romper nada si fallan: un aviso es una consecuencia de
- * lo que hizo el cliente, no una condición.
+ * **El cliente se deduce de la carpeta, no llega como parámetro.** Antes venía
+ * del navegador y se le creía: con eso, un pedido armado a mano podía aprobar
+ * la pieza de un cliente diciendo ser otro, y el archivo terminaba en las
+ * «Entregas finales» del otro. Todo lo que se puede deducir en el servidor, se
+ * deduce en el servidor.
  */
-async function comoSeLlaman(clienteId: string, carpetaId: string) {
+async function deQuienEs(carpetaId: string) {
+  const cliente = await clienteDeCarpeta(carpetaId);
+  if (!cliente) return null;
   try {
-    const [cliente, carpeta] = await Promise.all([
-      clientePorId(clienteId),
-      datosDeCarpeta(carpetaId),
-    ]);
-    return { cliente: cliente?.nombre ?? "Un cliente", carpeta: carpeta.name };
+    const carpeta = await datosDeCarpeta(carpetaId);
+    return { cliente, nombreDeLaCarpeta: carpeta.name };
   } catch {
-    return { cliente: "Un cliente", carpeta: "una carpeta" };
+    return { cliente, nombreDeLaCarpeta: "una carpeta" };
   }
 }
 
@@ -94,7 +95,6 @@ async function piezaDeLaCarpeta(carpetaId: string, piezaId: string): Promise<boo
  * comprueba que el pedido sea legítimo, se guarda y se anota en la historia.
  */
 export async function moverPieza(
-  clienteId: string,
   carpetaId: string,
   piezaId: string,
   evento: Evento
@@ -102,6 +102,9 @@ export async function moverPieza(
   if (!(await piezaDeLaCarpeta(carpetaId, piezaId))) {
     return { ok: false, motivo: "No encontramos esa pieza." };
   }
+
+  const donde = await deQuienEs(carpetaId);
+  if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
   // El portal no puede aprobar en nombre de otro ni reabrir: son eventos de la
   // agencia. Se listan los permitidos en vez de prohibir los otros, para que
@@ -155,7 +158,7 @@ export async function moverPieza(
   // una condición: si Drive no contesta, la aprobación vale igual y se anota
   // que no se pudo mover.
   if (evento.tipo === "aprobar" && !pieza.mudada) {
-    const mudanza = await mudarAFinales(clienteId, piezaId, carpetaId);
+    const mudanza = await mudarAFinales(donde.cliente.id, piezaId, carpetaId);
     if (mudanza.movida) {
       pieza = anotar({ ...pieza, mudada: true }, "movida_a_finales", "La aplicación");
     } else {
@@ -168,13 +171,12 @@ export async function moverPieza(
   // Se le avisa al equipo. Es el bucle que este proyecto vino a cerrar: hasta
   // hoy, nadie se enteraba salvo que entrara a mirar.
   if (evento.tipo === "aprobar" || evento.tipo === "pedir_cambios") {
-    const nombres = await comoSeLlaman(clienteId, carpetaId);
     await avisar({
       clase: evento.tipo === "aprobar" ? "aprobo" : "pidio_cambios",
-      clienteId,
-      cliente: nombres.cliente,
+      clienteId: donde.cliente.id,
+      cliente: donde.cliente.nombre,
       carpetaId,
-      carpeta: nombres.carpeta,
+      carpeta: donde.nombreDeLaCarpeta,
     });
   }
 
@@ -248,13 +250,11 @@ export async function guardarCambiosDePieza(
  * Es el único acto de esta pantalla que la agencia ve, y no se deshace.
  */
 export async function enviarRevision(
-  clienteId: string,
   carpetaId: string,
   soloEsta?: string
 ): Promise<RespuestaDeCarpeta> {
-  if (!(await esCarpetaDelCliente(carpetaId))) {
-    return { ok: false, motivo: "No encontramos esa carpeta." };
-  }
+  const donde = await deQuienEs(carpetaId);
+  if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
   let archivos: string[];
   try {
@@ -299,13 +299,12 @@ export async function enviarRevision(
 
   const cuantas = Object.keys(aGuardar).length;
   if (cuantas > 0) {
-    const nombres = await comoSeLlaman(clienteId, carpetaId);
     await avisar({
       clase: "envio_revision",
-      clienteId,
-      cliente: nombres.cliente,
+      clienteId: donde.cliente.id,
+      cliente: donde.cliente.nombre,
       carpetaId,
-      carpeta: nombres.carpeta,
+      carpeta: donde.nombreDeLaCarpeta,
       detalle: `${cuantas} ${cuantas === 1 ? "pieza" : "piezas"}`,
     });
   }
@@ -316,15 +315,14 @@ export async function enviarRevision(
 // ---------------------------------------------------------------------------
 
 export async function escribirComoCliente(
-  clienteId: string,
   carpetaId: string,
   texto: string
 ): Promise<RespuestaDeChat> {
-  // La carpeta se sigue comprobando —es de donde vino el pedido— pero la
-  // conversación es **del cliente**: con él se habla de todo en un solo hilo.
-  if (!(await esCarpetaDelCliente(carpetaId))) {
-    return { ok: false, motivo: "No encontramos esa carpeta." };
-  }
+  // La conversación es **del cliente**, y el cliente sale de la carpeta: si
+  // llegara como parámetro, un pedido armado a mano podría escribir en la
+  // conversación de otro.
+  const donde = await deQuienEs(carpetaId);
+  if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
   const limpio = String(texto ?? "").trim();
   if (!limpio) return { ok: false, motivo: "El mensaje está vacío." };
@@ -333,15 +331,19 @@ export async function escribirComoCliente(
   }
 
   try {
-    const mensajes = await agregarMensaje(clienteId, "cliente", CLIENTE, limpio);
+    const mensajes = await agregarMensaje(
+      donde.cliente.id,
+      "cliente",
+      CLIENTE,
+      limpio
+    );
 
-    const nombres = await comoSeLlaman(clienteId, carpetaId);
     await avisar({
       clase: "escribio",
-      clienteId,
-      cliente: nombres.cliente,
+      clienteId: donde.cliente.id,
+      cliente: donde.cliente.nombre,
       carpetaId,
-      carpeta: nombres.carpeta,
+      carpeta: donde.nombreDeLaCarpeta,
     });
 
     return { ok: true, mensajes };

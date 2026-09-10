@@ -166,7 +166,7 @@ function Revision({
   async function enviarMensaje(texto: string) {
     setEnviandoMensaje(true);
     try {
-      const r = await escribirComoCliente(datos.cliente.id, carpeta.id, texto);
+      const r = await escribirComoCliente(carpeta.id, texto);
       if (r.ok) setMensajes(r.mensajes);
       else setRechazo(r.motivo);
     } catch {
@@ -191,7 +191,7 @@ function Revision({
   async function mover(id: string, evento: Evento) {
     setOcupada(id);
     try {
-      const r = await moverPieza(datos.cliente.id, carpeta.id, id, evento);
+      const r = await moverPieza(carpeta.id, id, evento);
       if (r.ok) {
         setRechazo(null);
         refrescar(id, r.pieza);
@@ -226,7 +226,7 @@ function Revision({
     setConfirmando(null);
     setOcupada(soloEsta ?? "todas");
     try {
-      const r = await enviarRevision(datos.cliente.id, carpeta.id, soloEsta);
+      const r = await enviarRevision(carpeta.id, soloEsta);
       if (r.ok) {
         setPiezas((antes) =>
           antes.map((p) => (r.piezas[p.id] ? { ...p, ...r.piezas[p.id] } : p))

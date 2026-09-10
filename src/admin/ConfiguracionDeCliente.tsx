@@ -20,16 +20,7 @@ import { Responsable } from "@/admin/Responsable";
 import type { ClienteEnGestion } from "@/admin/datos/carpetas";
 import type { Persona } from "@/lib/equipo";
 
-const TITULO = "text-micro font-extrabold uppercase tracking-widest text-apagado";
-
-const CAMPO =
-  "min-w-0 border border-linea bg-lienzo px-3 py-2 text-normal font-bold " +
-  "transition-colors placeholder:font-normal placeholder:text-apagado " +
-  "focus:border-acento focus:outline-none";
-
-const BOTON =
-  "min-h-toque shrink-0 border-2 border-tinta px-4 text-normal font-bold " +
-  "tracking-tight text-tinta transition-colors hover:bg-hueco disabled:opacity-40";
+import { BOTON, CAMPO, ETIQUETA, TITULO } from "@/admin/estilos";
 
 export function ConfiguracionDeCliente({
   cliente,
@@ -54,15 +45,13 @@ export function ConfiguracionDeCliente({
   }, [estado, estadoTag, estadoLink, alGuardar]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {/* ------------------------------- La clave ------------------------ */}
       <section>
         <div className="flex flex-wrap items-center gap-2">
           <h4 className={TITULO}>Clave del cliente</h4>
           {!cliente.tieneClave && (
-            <span className="bg-espera-borde px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-tinta">
-              Falta
-            </span>
+            <span className={ETIQUETA}>falta</span>
           )}
         </div>
 
@@ -175,7 +164,7 @@ export function ConfiguracionDeCliente({
             value="si"
             disabled={esperando}
             aria-pressed={!apagado}
-            className={`min-h-toque border-2 border-tinta px-5 text-normal font-bold tracking-tight
+            className={`h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
                         transition-colors disabled:opacity-40 ${
                           apagado ? "text-tinta hover:bg-hueco" : "bg-tinta text-lienzo"
                         }`}
@@ -188,7 +177,7 @@ export function ConfiguracionDeCliente({
             value="no"
             disabled={esperando}
             aria-pressed={apagado}
-            className={`min-h-toque border-2 border-l-0 border-tinta px-5 text-normal font-bold
+            className={`h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
                         tracking-tight transition-colors disabled:opacity-40 ${
                           apagado ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
                         }`}

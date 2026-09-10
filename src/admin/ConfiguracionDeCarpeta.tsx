@@ -11,11 +11,7 @@ import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import type { NodoCarpeta } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
-const TITULO = "text-micro font-extrabold uppercase tracking-widest text-apagado";
-
-const BOTON =
-  "min-h-toque border-2 border-tinta px-4 text-normal font-bold tracking-tight " +
-  "text-tinta transition-colors hover:bg-hueco disabled:opacity-40";
+import { BOTON, TITULO } from "@/admin/estilos";
 
 /**
  * Dos botones que dicen qué está pasando, no qué va a pasar.
@@ -47,7 +43,7 @@ function SiONo({
         value={valorSi}
         disabled={esperando}
         aria-pressed={activo}
-        className={`min-h-toque border-2 border-tinta px-5 text-normal font-bold tracking-tight
+        className={`h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
                     transition-colors disabled:opacity-40 ${
                       activo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
                     }`}
@@ -60,7 +56,7 @@ function SiONo({
         value={valorNo}
         disabled={esperando}
         aria-pressed={!activo}
-        className={`min-h-toque border-2 border-l-0 border-tinta px-5 text-normal font-bold
+        className={`h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
                     tracking-tight transition-colors disabled:opacity-40 ${
                       activo ? "text-tinta hover:bg-hueco" : "bg-tinta text-lienzo"
                     }`}
@@ -107,7 +103,7 @@ export function ConfiguracionDeCarpeta({
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {/* -------------------------- Mostrar en el portal ----------------- */}
       <section>
         <h4 className={TITULO}>Mostrar en el portal</h4>
@@ -157,7 +153,7 @@ export function ConfiguracionDeCarpeta({
           {carpeta.vista === "calendario" && !oculta && (
             <Link
               href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}`}
-              className="inline-flex min-h-toque items-center bg-acento px-4 text-normal font-bold
+              className="inline-flex h-8 items-center bg-acento px-3 text-menudo font-bold
                          tracking-tight text-white transition-colors hover:bg-acento-hover"
             >
               Armar calendario

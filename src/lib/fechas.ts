@@ -7,7 +7,7 @@
 // Los plazos son en días corridos, no hábiles: es más simple de explicar del
 // lado del cliente, y no hay que mantener un calendario de feriados.
 
-export const ZONA = "America/Argentina/Buenos_Aires";
+const ZONA = "America/Argentina/Buenos_Aires";
 
 const DIA_EN_MS = 24 * 60 * 60 * 1000;
 
@@ -107,11 +107,3 @@ export function fechaCorta(momento: Date): string {
   }).format(momento);
 }
 
-/** Fecha y hora, para el registro de aprobaciones: «14/3/2026, 18:42». */
-export function fechaYHora(momento: Date): string {
-  return new Intl.DateTimeFormat("es-AR", {
-    timeZone: ZONA,
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(momento);
-}

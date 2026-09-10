@@ -1482,3 +1482,42 @@ Comprobar que un archivo existe es distinto que comprobar una carpeta: no
 alcanza con el identificador, hay que saber en qué carpeta está. Por eso la
 acción recibe también la carpeta y verifica que el archivo esté adentro —el
 identificador llega de afuera y no se puede creer—.
+
+## 99. De lo que llega de afuera se acepta la referencia mínima.
+
+Encontrado revisando las acciones del portal, no probando: **recibían el
+cliente como parámetro y le creían.**
+
+`moverPieza(clienteId, carpetaId, piezaId, evento)` comprobaba que la pieza
+estuviera en la carpeta y que la carpeta fuera de *algún* cliente habilitado.
+Lo que no comprobaba es que el `clienteId` fuera el dueño de esa carpeta. Un
+pedido armado a mano podía entonces aprobar la pieza del cliente A diciendo ser
+B, y el archivo terminaba en las «Entregas finales» **de B**. Lo mismo con
+`escribirComoCliente`, que escribía el mensaje en la conversación del cliente
+que nombrara el pedido.
+
+Ninguna de las dos cosas se ve desde el navegador: la pantalla siempre manda el
+cliente correcto. Aparecen leyendo qué se cree y qué se comprueba.
+
+La regla que deja, y que vale para todo lo que venga: **de afuera se acepta la
+referencia mínima —esta carpeta, esta pieza— y todo lo demás se deduce en el
+servidor.** Las tres acciones dejaron de recibir el cliente; lo buscan con
+`clienteDeCarpeta`.
+
+## 100. Una configuración abierta a la vez, y del tamaño de un panel.
+
+Tres cosas de los paneles de configuración, y las tres son la misma idea: son
+un panel adentro de una lista, no una pantalla.
+
+- **Una sola abierta.** Con varias, la lista se estira, hay que desplazar para
+  volver a ver de qué cliente era cada panel, y es fácil guardar un cambio
+  creyendo que se estaba en otro.
+- **Un escalón más chicos**: 32 píxeles de alto en vez de 44, texto menudo.
+  Con controles del tamaño de los de una pantalla, abrir uno empujaba media
+  lista fuera de la vista.
+- **No se guarda al elegir.** Elegir del desplegable y que eso ya reasigne doce
+  archivos es demasiado para un movimiento del mouse. Aparece **Guardar** y
+  hasta apretarlo no pasa nada.
+
+Las clases viven en `src/admin/estilos.ts`: el tamaño es una decisión del
+conjunto, y repartida por seis archivos se pierde en la primera pantalla nueva.
