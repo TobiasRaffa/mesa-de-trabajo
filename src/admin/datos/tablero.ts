@@ -18,7 +18,7 @@ import { correoConfigurado } from "@/lib/correo";
 import { personaPorId } from "@/lib/equipo";
 import { responsableDe, responsableQueCorre } from "@/lib/responsables";
 import { subcarpetasDe } from "@/lib/google";
-import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
+import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { calcularVencimiento } from "@/lib/fechas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones } from "@/lib/versiones";
@@ -66,7 +66,7 @@ export async function elTablero(): Promise<Tablero> {
           .filter((c) => !esCarpetaReservada(c.name))
           .map(async (carpeta): Promise<CarpetaEnElTablero> => {
             const [archivos, diasDeLaCarpeta, deQuienEsLaCarpeta] = await Promise.all([
-              archivosConLasMudadas(carpeta.id),
+              piezasDeLaCarpeta(carpeta.id),
               plazoDe(carpeta.id),
               responsableDe(carpeta.id),
             ]);

@@ -8,7 +8,7 @@
 import { ajustesDe, esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
 import { personaPorId } from "@/lib/equipo";
 import { subcarpetasDe } from "@/lib/google";
-import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
+import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import {
   responsableDe,
@@ -105,7 +105,7 @@ export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[
       // De una carpeta reservada no se cuenta nada: no se revisa.
       if (reservada) return { ...base, piezas: 0, sinRevisar: 0 };
 
-      const agrupadas = agruparVersiones(await archivosConLasMudadas(carpeta.id));
+      const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpeta.id));
       const ultimas = agrupadas.map((p) => p.versiones[p.versiones.length - 1].archivo.id);
       const estados = await estadosDe(carpeta.id, ultimas);
 
@@ -125,7 +125,7 @@ export async function archivosDeCarpeta(
   /** Lo que hereda esta carpeta. Los archivos parten de acá. */
   heredado: { dias: number; responsable: string | null }
 ): Promise<NodoArchivo[]> {
-  const agrupadas = agruparVersiones(await archivosConLasMudadas(carpetaId));
+  const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
   const ultimas = agrupadas.map((p) => p.versiones[p.versiones.length - 1].archivo.id);
 
   const [estados, dias, propios, responsables] = await Promise.all([

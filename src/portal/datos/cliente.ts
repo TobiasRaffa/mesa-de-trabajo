@@ -17,7 +17,7 @@
 // lleva el navegador hasta que exista dónde guardarlo de verdad.
 
 import { ajustesDe, soloLasVisibles, type Vista } from "@/lib/ajustesDeCarpeta";
-import { archivosConLasMudadas, estadosDe, type EstadoDePieza } from "@/lib/piezas";
+import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones } from "@/lib/versiones";
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
@@ -93,7 +93,7 @@ export async function portalDelCliente(
       const { vista } = await ajustesDe(carpeta.id);
       // Incluye las que ya se mudaron a «Entregas finales»: aprobar no puede
       // costarle al cliente perder de vista lo que acaba de aprobar.
-      const archivos = (await archivosConLasMudadas(carpeta.id)).filter((a) =>
+      const archivos = (await piezasDeLaCarpeta(carpeta.id)).filter((a) =>
         MOSTRABLES.test(a.mimeType)
       );
 

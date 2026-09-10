@@ -55,6 +55,33 @@ const frontera = [
     },
   },
   {
+    // `archivosDe` le pregunta a Drive qué hay en una carpeta. Es verdad sobre
+    // Drive y mentira sobre el trabajo: aprobar muda el archivo a «Entregas
+    // finales», así que las piezas aprobadas desaparecen de esa respuesta.
+    //
+    // Se coló en cinco lugares distintos, de a uno por vez, y cada uno rompía
+    // algo diferente. La pregunta correcta es `piezasDeLaCarpeta`, y para que
+    // sea también la fácil de escribir, la otra queda prohibida en todos lados
+    // menos donde se la envuelve.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/lib/piezas.ts", "src/lib/google.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/google",
+              importNames: ["archivosDe", "listarCarpeta"],
+              message:
+                "Usá piezasDeLaCarpeta() de @/lib/piezas. archivosDe le pregunta a Drive, y Drive no lista las piezas ya aprobadas: se mudaron a «Entregas finales».",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // El dominio es el corazón: no puede depender de nada de afuera.
     // Si necesitara Drive o la base de datos, dejaría de ser probable
     // sin infraestructura, que es todo su valor.

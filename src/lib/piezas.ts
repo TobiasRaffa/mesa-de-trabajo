@@ -217,17 +217,23 @@ export const EN_PALABRAS: Record<Hito, string> = {
 // ---------------------------------------------------------------------------
 
 /**
- * Los archivos de una carpeta, **incluidas las piezas que ya se mudaron**.
+ * **Las piezas de una carpeta.** Es la única forma correcta de preguntarlo.
  *
  * Aprobar muda el archivo a «Entregas finales», así que Drive deja de listarlo
- * en la carpeta de trabajo. Cualquier pantalla que cuente desde el listado
- * crudo termina diciendo que la pieza aprobada no existe —el portal la perdía
- * de vista, y el tablero contaba «0 aprobadas» justo después de aprobar—.
+ * en la carpeta de trabajo. Preguntarle a Drive directamente —`archivosDe`—
+ * devuelve una respuesta que es verdadera sobre Drive y falsa sobre el
+ * trabajo: las piezas aprobadas desaparecen.
  *
- * Vive acá y no repetido en cada pantalla porque ya se escribió tres veces, y
- * la tercera fue la que faltaba.
+ * Eso se coló en cinco lugares distintos, de a uno por vez, y cada uno rompía
+ * algo diferente: el portal perdía de vista lo aprobado, el tablero contaba
+ * «0 aprobadas» justo después de aprobar, el calendario decía que guardaba y
+ * descartaba, enviar la revisión salteaba lo aprobado, y no se le podía poner
+ * plazo a una pieza aprobada.
+ *
+ * Por eso `archivosDe` está prohibido fuera de este archivo, y el linter lo
+ * verifica: la pregunta correcta tiene que ser también la fácil de escribir.
  */
-export async function archivosConLasMudadas(carpetaId: string): Promise<ArchivoDrive[]> {
+export async function piezasDeLaCarpeta(carpetaId: string): Promise<ArchivoDrive[]> {
   const presentes = await archivosDe(carpetaId);
   const mudadas = await mudadasDe(carpetaId);
   const faltantes = mudadas.filter((id) => !presentes.some((a) => a.id === id));

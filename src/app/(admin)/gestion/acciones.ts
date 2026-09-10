@@ -39,7 +39,7 @@ import {
   LARGO_MAXIMO,
   type Mensaje,
 } from "@/lib/conversaciones";
-import { archivosDe } from "@/lib/google";
+import { piezasDeLaCarpeta } from "@/lib/piezas";
 import { correoValido } from "@/lib/equipo";
 import {
   archivosDeCarpeta,
@@ -258,15 +258,22 @@ export async function guardarCalendario(
     return { ok: false, motivo: "No pude leer los cambios." };
   }
 
-  // Los archivos que llegan tienen que estar de verdad en esa carpeta: si no,
+  // Las piezas que llegan tienen que estar de verdad en esa carpeta: si no,
   // esto sería una forma de ponerle fecha a cualquier archivo de cualquier
   // cliente.
-  const adentro = new Set((await archivosDe(carpetaId)).map((a) => a.id));
+  const adentro = new Set((await piezasDeLaCarpeta(carpetaId)).map((a) => a.id));
 
   const aGuardar: Record<string, DiaSuelto | null> = {};
   for (const cambio of cambios) {
     const archivo = String(cambio?.archivo ?? "");
-    if (!adentro.has(archivo)) continue;
+
+    // **Descartar en silencio y contestar que sí es lo peor que puede hacer
+    // esto.** Pasó: una pieza aprobada ya no estaba en el listado de Drive, su
+    // cambio se salteaba, y la pantalla decía «Listo, el cliente ya lo ve
+    // así». Si algo no se puede guardar, se dice.
+    if (!adentro.has(archivo)) {
+      return { ok: false, motivo: "Una de las piezas ya no está en la carpeta." };
+    }
 
     if (cambio.dia === null) aGuardar[archivo] = null;
     else if (esDiaValido(cambio.dia)) aGuardar[archivo] = cambio.dia;
@@ -353,7 +360,7 @@ async function nivelReal(
   if (nivel === "cliente") {
     if (!(await esClienteReal(id))) return { ok: false, motivo: "Ese cliente no existe." };
     const carpetas = await subcarpetasDe(id);
-    const archivos = await Promise.all(carpetas.map((c) => archivosDe(c.id)));
+    const archivos = await Promise.all(carpetas.map((c) => piezasDeLaCarpeta(c.id)));
     return {
       ok: true,
       debajo: [...carpetas.map((c) => c.id), ...archivos.flat().map((a) => a.id)],
@@ -364,13 +371,13 @@ async function nivelReal(
     if (!(await esCarpetaDelCliente(id))) {
       return { ok: false, motivo: "Esa carpeta no existe." };
     }
-    return { ok: true, debajo: (await archivosDe(id)).map((a) => a.id) };
+    return { ok: true, debajo: (await piezasDeLaCarpeta(id)).map((a) => a.id) };
   }
 
   if (!carpetaId || !(await esCarpetaDelCliente(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
-  if (!(await archivosDe(carpetaId)).some((a) => a.id === id)) {
+  if (!(await piezasDeLaCarpeta(carpetaId)).some((a) => a.id === id)) {
     return { ok: false, motivo: "Ese archivo no está en la carpeta." };
   }
   // Un archivo no tiene nada debajo.

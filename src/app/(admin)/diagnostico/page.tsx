@@ -4,6 +4,9 @@
 
 import { variablesFaltantes } from "@/lib/entorno";
 import { clientesHabilitados } from "@/lib/clientes";
+// Acá sí corresponde preguntarle a Drive directamente: esta pantalla existe
+// para mirar la conexión con Drive, no el estado del trabajo.
+// eslint-disable-next-line no-restricted-imports
 import { listarCarpeta, type ArchivoDrive } from "@/lib/google";
 
 // Sin esto Next intentaría resolver la página al compilar, y queremos

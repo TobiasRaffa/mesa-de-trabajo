@@ -18,7 +18,7 @@
 // cuántas quedan, qué se puede enviar. Dos copias del mismo número es la forma
 // segura de que un día no coincidan.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Evento, Pieza } from "@/dominio/pieza";
 import { Ampliada, type Lamina } from "@/ui/Ampliada";
 import { Boton, BotonEnlace } from "@/ui/Boton";
@@ -47,6 +47,9 @@ import type { CarpetaDeTrabajo, PortalDeCliente } from "@/portal/datos/cliente";
 import { RevisarPieza, type PiezaAbierta } from "@/portal/RevisarPieza";
 
 type EnPantalla = PiezaAbierta;
+
+/** Dónde recuerda este navegador hasta cuándo leyó el chat. */
+const claveDeLeido = (clienteId: string) => `mesa-de-trabajo:leido:${clienteId}`;
 
 /** Un identificador para un cambio recién escrito. */
 function nuevoId(): string {
@@ -101,13 +104,47 @@ function Revision({
   // El estado viene del servidor y vuelve al servidor. El navegador ya no es
   // la memoria de nada: revisar desde el teléfono y seguir en la computadora
   // tiene que encontrar lo mismo, y la agencia tiene que poder enterarse.
-  const [piezas, setPiezas] = useState<EnPantalla[]>(() =>
-    carpeta.piezas.map((p) => ({
-      ...p,
-      rondasIncluidas: datos.rondasIncluidas,
-      rondasExtra: p.rondasExtra,
-    }))
+  const desdeElServidor = useCallback(
+    () =>
+      carpeta.piezas.map((p) => ({
+        ...p,
+        rondasIncluidas: datos.rondasIncluidas,
+        rondasExtra: p.rondasExtra,
+      })),
+    [carpeta.piezas, datos.rondasIncluidas]
   );
+
+  const [piezas, setPiezas] = useState<EnPantalla[]>(desdeElServidor);
+
+  /**
+   * Cuando el servidor manda datos nuevos, la pantalla se vuelve a sembrar.
+   *
+   * Sin esto, `useState` guardaba una foto del primer dibujo y no la soltaba
+   * más: la agencia cambiaba una fecha en el calendario, el servidor la
+   * mandaba bien, y la pantalla seguía mostrando la vieja. **El servidor manda
+   * sobre lo suyo**, y lo que el cliente hace vuelve por las acciones.
+   *
+   * La firma es de contenido y no de identidad: React arma un arreglo nuevo en
+   * cada dibujo, así que comparar por referencia se dispararía siempre.
+   */
+  const firma = JSON.stringify(
+    carpeta.piezas.map((p) => [
+      p.id,
+      p.estado,
+      p.ronda,
+      p.enviada,
+      p.publicaEl?.getTime() ?? 0,
+      p.cambios.length,
+    ])
+  );
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPiezas(desdeElServidor());
+    // `desdeElServidor` cambia en cada dibujo; la firma es lo que de verdad
+    // dice si el servidor mandó otra cosa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firma]);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [ampliada, setAmpliada] = useState<Lamina[] | null>(null);
   const [confirmando, setConfirmando] = useState<null | { soloEsta?: string }>(null);
@@ -115,6 +152,14 @@ function Revision({
   const [vista, setVista] = useState<"mes" | "semana" | "lista">("mes");
   const [conversando, setConversando] = useState(false);
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
+  /**
+   * Hasta cuándo leyó este cliente.
+   *
+   * Del lado del portal no hay sesión de persona, así que la marca vive en el
+   * navegador: es el único lugar que sabe quién está mirando. Del lado de la
+   * agencia sí está en el servidor, porque ahí el equipo comparte la bandeja.
+   */
+  const [leidoHasta, setLeidoHasta] = useState<string>("");
   const [enviandoMensaje, setEnviandoMensaje] = useState(false);
   const [rechazo, setRechazo] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -156,6 +201,33 @@ function Revision({
       clearInterval(cada);
     };
   }, [datos.cliente.id, conversando]);
+
+  // Hasta cuándo leyó este navegador. Se recupera una vez, al montar.
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLeidoHasta(localStorage.getItem(claveDeLeido(datos.cliente.id)) ?? "");
+    } catch {}
+  }, [datos.cliente.id]);
+
+  /** Abrir el chat es leerlo. */
+  function abrirElChat() {
+    setConversando(true);
+    const ahora = new Date().toISOString();
+    setLeidoHasta(ahora);
+    try {
+      localStorage.setItem(claveDeLeido(datos.cliente.id), ahora);
+    } catch {}
+  }
+
+  /**
+   * Lo que el equipo dijo y este cliente todavía no leyó.
+   *
+   * Los avisos de la aplicación no cuentan: no son alguien hablando.
+   */
+  const sinLeer = mensajes.filter(
+    (m) => m.de === "agencia" && m.cuando > leidoHasta
+  ).length;
 
   /**
    * Manda un mensaje al equipo.
@@ -366,15 +438,17 @@ function Revision({
 
           <button
             type="button"
-            onClick={() => setConversando(true)}
+            onClick={abrirElChat}
             className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-4
                        text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
           >
             <IconoEditar />
             Hablar con el equipo
-            {mensajes.length > 0 && (
-              <span className="bg-lienzo/20 px-1.5 text-micro font-extrabold">
-                {mensajes.length}
+            {/* Lo que falta leer, no cuántos hay. Un número que dice «14» para
+                siempre no dice nada; el que importa baja a cero al abrir. */}
+            {sinLeer > 0 && (
+              <span className="bg-acento px-1.5 text-micro font-extrabold text-white">
+                {sinLeer}
               </span>
             )}
           </button>
@@ -389,11 +463,6 @@ function Revision({
           >
             <IconoDescargar />
             Descargar archivos
-            {aprobadas.length > 0 && (
-              <span className="bg-lienzo/20 px-1.5 text-micro font-extrabold">
-                {aprobadas.length}
-              </span>
-            )}
           </button>
         </div>
 

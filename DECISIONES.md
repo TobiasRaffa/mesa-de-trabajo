@@ -1521,3 +1521,71 @@ un panel adentro de una lista, no una pantalla.
 
 Las clases viven en `src/admin/estilos.ts`: el tamaño es una decisión del
 conjunto, y repartida por seis archivos se pierde en la primera pantalla nueva.
+
+## 101. La pregunta equivocada estaba a mano, y se coló cinco veces.
+
+`archivosDe` le pregunta a Drive qué hay en una carpeta. La respuesta es
+**verdadera sobre Drive y falsa sobre el trabajo**: aprobar muda el archivo a
+«Entregas finales», así que las piezas aprobadas desaparecen de esa lista.
+
+Se coló en cinco lugares, de a uno por vez, y cada uno rompía algo distinto:
+
+| Dónde | Qué rompía |
+|---|---|
+| El portal | Perdía de vista lo recién aprobado |
+| El tablero | Contaba «0 aprobadas» un segundo después de aprobar |
+| El calendario | **Decía que guardaba y descartaba** |
+| Enviar la revisión | Salteaba las piezas aprobadas |
+| Plazos y responsables | No se le podía poner nada a una pieza aprobada |
+
+Los dos primeros los arreglé de a uno cuando aparecieron. Eso fue el error: no
+eran cinco errores, era uno solo apareciendo de a poco, y arreglarlo donde se
+ve deja las otras cuatro esperando.
+
+Ahora la pregunta correcta se llama `piezasDeLaCarpeta`, y **`archivosDe` está
+prohibido fuera del archivo que lo envuelve**, con una regla del linter que lo
+verifica. La única excepción está anotada: la pantalla de diagnóstico, que
+existe justamente para mirar lo que ve Drive.
+
+La lección, que vale para lo que venga: cuando el mismo síntoma aparece dos
+veces en lugares distintos, no son dos errores. Y si la forma equivocada de
+preguntar algo sigue estando a mano, se vuelve a usar.
+
+## 102. Una acción no puede decir que guardó cuando descartó.
+
+El caso concreto: `guardarCalendario` recorría los cambios y salteaba con
+`continue` los que no reconocía —las piezas aprobadas—, y después contestaba
+`{ ok: true }`. La pantalla mostraba «Listo. El cliente ya lo ve así» sobre un
+archivo que no se había tocado.
+
+Descartar en silencio y contestar que sí es lo peor que puede hacer una
+acción: el que la usó se va convencido de que quedó hecho, y se entera días
+después. Ahora, si hay algo que no puede guardar, no guarda nada y lo dice.
+
+Queda probado en `guardarCalendario.test.ts`, y la prueba está comprobada:
+restaurando el `continue` a propósito, falla.
+
+## 103. El servidor manda sobre lo suyo, también en el portal.
+
+El portal guardaba las piezas con `useState(() => ...)`, cuyo inicializador
+corre **una sola vez**. Desde ese momento, nada de lo que mandara el servidor
+volvía a entrar: la fecha que la agencia acomodaba en el calendario llegaba
+bien y la pantalla seguía mostrando la vieja.
+
+Ahora se vuelve a sembrar cuando cambia el contenido que manda el servidor. La
+firma se compara por contenido y no por referencia, porque React arma un
+arreglo nuevo en cada dibujo y comparar por identidad se dispararía siempre.
+
+## 104. El número de un chat es lo que falta leer.
+
+Del lado de la agencia ya era así. Faltaba el del portal, que mostraba
+**todos** los mensajes: un contador que dice «14» para siempre no dice nada.
+
+La marca de leído del cliente vive en su navegador y no en el servidor, y la
+diferencia es a propósito: en el portal no hay sesión de persona —el navegador
+es lo único que sabe quién está mirando—, mientras que del lado de la agencia
+el equipo comparte una sola bandeja.
+
+De paso: «Descargar archivos» dejó de tener número. No era algo pendiente que
+alguien tuviera que atender, y competía por la misma atención que el que sí lo
+es.

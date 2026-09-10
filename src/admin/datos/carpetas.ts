@@ -9,7 +9,7 @@ import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajus
 import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { datosDeCarpeta, subcarpetasDe, type ArchivoDrive } from "@/lib/google";
-import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
+import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { plazosDe } from "@/lib/plazos";
 import { responsablesDe } from "@/lib/responsables";
 import { DIAS_POR_OMISION } from "@/lib/dias";
@@ -50,7 +50,7 @@ export async function carpetaParaFechar(
   const [datos, ajustes, archivos] = await Promise.all([
     datosDeCarpeta(carpetaId),
     ajustesDe(carpetaId),
-    archivosConLasMudadas(carpetaId),
+    piezasDeLaCarpeta(carpetaId),
   ]);
 
   // Una pieza aprobada se mudó a «Entregas finales» y Drive ya no la lista acá.

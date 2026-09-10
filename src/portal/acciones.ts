@@ -21,13 +21,14 @@ import { clienteDeCarpeta, esCarpetaDelCliente } from "@/lib/carpetas";
 import { datosDeCarpeta } from "@/lib/google";
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
 import { mudarAFinales } from "@/lib/entregasFinales";
-import { archivosDe } from "@/lib/google";
+
 import {
   anotar,
   estadoDe,
   estadosDe,
   guardarPieza,
   guardarPiezas,
+  piezasDeLaCarpeta,
   type Cambio,
   type EstadoDePieza,
 } from "@/lib/piezas";
@@ -77,11 +78,7 @@ export type RespuestaDeChat =
 async function piezaDeLaCarpeta(carpetaId: string, piezaId: string): Promise<boolean> {
   if (!(await esCarpetaDelCliente(carpetaId))) return false;
   try {
-    const adentro = await archivosDe(carpetaId);
-    if (adentro.some((a) => a.id === piezaId)) return true;
-
-    const guardada = await estadoDe(carpetaId, piezaId);
-    return guardada.mudada && guardada.carpetaId === carpetaId;
+    return (await piezasDeLaCarpeta(carpetaId)).some((a) => a.id === piezaId);
   } catch {
     return false;
   }
@@ -258,7 +255,7 @@ export async function enviarRevision(
 
   let archivos: string[];
   try {
-    archivos = (await archivosDe(carpetaId)).map((a) => a.id);
+    archivos = (await piezasDeLaCarpeta(carpetaId)).map((a) => a.id);
   } catch {
     return { ok: false, motivo: "No pudimos leer la carpeta. Probá de nuevo." };
   }
