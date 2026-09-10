@@ -15,7 +15,9 @@ const SECCIONES = [
   { href: "/gestion", texto: "Clientes" },
   { href: "/gestion/chats", texto: "Conversaciones" },
   { href: "/gestion/equipo", texto: "Equipo" },
-  { href: "/diagnostico", texto: "Diagnóstico" },
+  // El diagnóstico ya no está en la barra: cuando Drive falla, cada pantalla
+  // lo dice donde pasa. La ruta sigue existiendo para cuando haga falta mirar
+  // la conexión de cerca.
 ] as const;
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

@@ -134,7 +134,9 @@ function Revision({
 
     async function traer() {
       try {
-        const r = await fetch(`/api/conversacion/${carpeta.id}`, { cache: "no-store" });
+        const r = await fetch(`/api/conversacion/${datos.cliente.id}`, {
+          cache: "no-store",
+        });
         if (!r.ok) return;
         const { mensajes: llegaron } = (await r.json()) as { mensajes: Mensaje[] };
         // Si la pantalla ya se desmontó, guardar sería escribir en el aire.
@@ -153,7 +155,7 @@ function Revision({
       vivo = false;
       clearInterval(cada);
     };
-  }, [carpeta.id, conversando]);
+  }, [datos.cliente.id, conversando]);
 
   /**
    * Manda un mensaje al equipo.
@@ -613,7 +615,7 @@ function Revision({
 
       {conversando && (
         <Conversacion
-          carpeta={carpeta.nombre}
+          carpeta={datos.cliente.nombre}
           mensajes={mensajes}
           yo="cliente"
           enviando={enviandoMensaje}
@@ -710,7 +712,6 @@ function Descargas({
   return (
     <Ventana
       titulo="Descargar archivos"
-      bajada="Los originales de todo lo que aprobaste."
       onCerrar={onCerrar}
     >
       <ul className="flex flex-col divide-y divide-linea">
@@ -837,9 +838,7 @@ function Confirmacion({
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-menudo text-espera">
-              Estas quedan esperándote. Podés volver más tarde y resolverlas.
-            </p>
+
           </section>
         )}
 

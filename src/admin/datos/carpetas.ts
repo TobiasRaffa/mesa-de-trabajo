@@ -7,9 +7,11 @@
 
 import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustesDeCarpeta";
 import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
-import { cuentaPorCarpeta } from "@/lib/conversaciones";
+import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { datosDeCarpeta, subcarpetasDe, type ArchivoDrive } from "@/lib/google";
 import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
+import { plazosDe } from "@/lib/plazos";
+import { DIAS_POR_OMISION } from "@/lib/dias";
 import { publicacionesDe, type DiaSuelto } from "@/lib/publicaciones";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { agruparVersiones } from "@/lib/versiones";
@@ -99,22 +101,36 @@ export type ClienteEnGestion = Omit<Cliente, "tag"> & {
   /** Cuántas carpetas de trabajo tiene, sin contar las reservadas. */
   carpetas: number;
   carpetasVisibles: number;
-  mensajes: number;
+  /** Mensajes del cliente que la agencia todavía no leyó. */
+  sinLeer: number;
+  /** Los días que corren para este cliente, ya con el de omisión aplicado. */
+  dias: number;
+  /** Los días están puestos acá y no son el de omisión. */
+  diasPropios: boolean;
 };
 
 /** Todos los clientes que el robot ve, para la pantalla que los administra. */
 export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
-  const [clientes, charlas] = await Promise.all([todosLosClientes(), cuentaPorCarpeta()]);
+  const [clientes, sinLeer] = await Promise.all([
+    todosLosClientes(),
+    sinLeerPorCliente("agencia"),
+  ]);
+  const propios = await plazosDe(clientes.map((c) => c.id));
 
   return Promise.all(
     clientes.map(async (cliente): Promise<ClienteEnGestion> => {
       // De un cliente apagado no se cuenta nada: no se le pide a Drive lo que
       // no se va a mostrar.
       const { tag, ...sinTag } = cliente;
-      const comun = { ...sinTag, tieneClave: tag.trim() !== "" };
+      const comun = {
+        ...sinTag,
+        tieneClave: tag.trim() !== "",
+        dias: propios[cliente.id] ?? DIAS_POR_OMISION,
+        diasPropios: propios[cliente.id] !== undefined,
+      };
 
       if (!cliente.habilitado) {
-        return { ...comun, carpetas: 0, carpetasVisibles: 0, mensajes: 0 };
+        return { ...comun, carpetas: 0, carpetasVisibles: 0, sinLeer: 0 };
       }
 
       const subcarpetas = await subcarpetasDe(cliente.id);
@@ -127,7 +143,7 @@ export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
         ...comun,
         carpetas: deTrabajo.length,
         carpetasVisibles: visibles.filter(Boolean).length,
-        mensajes: subcarpetas.reduce((suma, c) => suma + (charlas[c.id] ?? 0), 0),
+        sinLeer: sinLeer[cliente.id] ?? 0,
       };
     })
   );

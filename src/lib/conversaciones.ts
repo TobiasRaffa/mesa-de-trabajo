@@ -4,6 +4,11 @@
 // el cliente escribe desde el portal y la agencia contesta desde la app de
 // gestión. Guardado en el navegador, cada uno hablaría solo.
 //
+// **Es una conversación por cliente, no por carpeta.** Al principio había una
+// por carpeta y en la práctica no funciona así: con el cliente se habla de
+// todo en el mismo hilo, y tener que adivinar en cuál de sus cinco carpetas
+// dijo algo es peor que no tenerlo separado.
+//
 // Hoy vive en un archivo al lado de la aplicación, igual que los ajustes. Es
 // lo que corresponde mientras corre en una computadora: se abre con el Bloc de
 // notas y se copia. **Cuando exista Supabase se cambia el cuerpo de estas tres
@@ -75,8 +80,8 @@ async function leerTodo(): Promise<Guardado> {
   }
 }
 
-export async function leerConversacion(carpetaId: string): Promise<Mensaje[]> {
-  return (await leerTodo())[carpetaId] ?? [];
+export async function leerConversacion(clienteId: string): Promise<Mensaje[]> {
+  return (await leerTodo())[clienteId] ?? [];
 }
 
 /**
@@ -90,30 +95,88 @@ export async function leerConversacion(carpetaId: string): Promise<Mensaje[]> {
  * en vez de una nueva por la mitad.
  */
 export async function agregarMensaje(
-  carpetaId: string,
+  clienteId: string,
   de: Quien,
   quien: string,
   texto: string
 ): Promise<Mensaje[]> {
   const limpio = texto.trim().slice(0, LARGO_MAXIMO);
-  if (!limpio) return leerConversacion(carpetaId);
+  if (!limpio) return leerConversacion(clienteId);
 
   const todo = await leerTodo();
   const mensajes = [
-    ...(todo[carpetaId] ?? []),
+    ...(todo[clienteId] ?? []),
     { id: randomUUID(), de, quien, texto: limpio, cuando: new Date().toISOString() },
   ];
 
   await mkdir(CARPETA_DE_DATOS, { recursive: true });
   const temporal = `${ARCHIVO}.${process.pid}.tmp`;
-  await writeFile(temporal, JSON.stringify({ ...todo, [carpetaId]: mensajes }, null, 2), "utf8");
+  await writeFile(temporal, JSON.stringify({ ...todo, [clienteId]: mensajes }, null, 2), "utf8");
   await rename(temporal, ARCHIVO);
 
   return mensajes;
 }
 
-/** Cuántos mensajes hay en cada carpeta. Para las listas de administración. */
-export async function cuentaPorCarpeta(): Promise<Record<string, number>> {
-  const todo = await leerTodo();
-  return Object.fromEntries(Object.entries(todo).map(([id, m]) => [id, m.length]));
+// ---------------------------------------------------------------------------
+// Lo que falta leer
+//
+// El número que se muestra al lado de «Conversación» es **lo que no leíste**,
+// no cuántos mensajes hay. Un contador que dice «14» para siempre no dice
+// nada: el que importa es el que baja a cero cuando mirás.
+//
+// Se guarda hasta qué momento leyó cada lado. Un mensaje cuenta como sin leer
+// si es del otro y es posterior a esa marca. Los avisos de la aplicación no
+// cuentan: no son alguien hablando.
+
+const LEIDOS = path.join(CARPETA_DE_DATOS, "leidos.json");
+
+type Lado = "agencia" | "cliente";
+type Marcas = Record<Lado, Record<string, string>>;
+
+async function leerMarcas(): Promise<Marcas> {
+  try {
+    const datos = JSON.parse(await readFile(LEIDOS, "utf8")) as unknown;
+    const crudo = (datos ?? {}) as Record<string, unknown>;
+    const lado = (cual: Lado): Record<string, string> => {
+      const x = crudo[cual];
+      if (!x || typeof x !== "object") return {};
+      return Object.fromEntries(
+        Object.entries(x as Record<string, unknown>).filter(
+          ([, v]) => typeof v === "string"
+        ) as Array<[string, string]>
+      );
+    };
+    return { agencia: lado("agencia"), cliente: lado("cliente") };
+  } catch {
+    return { agencia: {}, cliente: {} };
+  }
+}
+
+export async function marcarLeido(lado: Lado, clienteId: string): Promise<void> {
+  const marcas = await leerMarcas();
+  marcas[lado][clienteId] = new Date().toISOString();
+
+  await mkdir(CARPETA_DE_DATOS, { recursive: true });
+  const temporal = `${LEIDOS}.${process.pid}.tmp`;
+  await writeFile(temporal, JSON.stringify(marcas, null, 2), "utf8");
+  await rename(temporal, LEIDOS);
+}
+
+/** Cuántos mensajes del otro lado quedaron sin leer, por cliente. */
+export async function sinLeerPorCliente(lado: Lado): Promise<Record<string, number>> {
+  const [todo, marcas] = await Promise.all([leerTodo(), leerMarcas()]);
+  const delOtro = lado === "agencia" ? "cliente" : "agencia";
+
+  const salida: Record<string, number> = {};
+  for (const [clienteId, mensajes] of Object.entries(todo)) {
+    const desde = marcas[lado][clienteId] ?? "";
+    salida[clienteId] = mensajes.filter(
+      (m) => m.de === delOtro && m.cuando > desde
+    ).length;
+  }
+  return salida;
+}
+
+export async function sinLeerDe(lado: Lado, clienteId: string): Promise<number> {
+  return (await sinLeerPorCliente(lado))[clienteId] ?? 0;
 }

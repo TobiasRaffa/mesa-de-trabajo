@@ -23,7 +23,9 @@ function comoSeCuenta(clase: ClaseDeAviso, carpeta: string, detalle?: string): s
     case "envio_revision":
       return `Envió la revisión de ${carpeta}${detalle ? ` (${detalle})` : ""}.`;
     case "escribio":
-      return `Escribió en la conversación de ${carpeta}.`;
+      // La conversación es del cliente, no de una carpeta: nombrar una acá
+      // mandaría a buscar el mensaje donde no está.
+      return "Escribió en la conversación.";
     case "vencio":
       return `Se cumplió el plazo de ${carpeta} y todavía falta revisar.`;
   }

@@ -187,3 +187,46 @@ export function anotarIntentoFallido(token: string): void {
 export function olvidarIntentos(token: string): void {
   intentos.delete(token);
 }
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Si este navegador ya entró a algo de este cliente.
+ *
+ * Sirve para las rutas que devuelven datos del cliente sin ser la página del
+ * portal —la conversación, por ejemplo—. Sin esto, alcanzaba con saber el
+ * identificador de la carpeta en Drive para leer los mensajes **sin haber
+ * escrito nunca la clave**, y ese identificador lo ve cualquiera con quien la
+ * agencia haya compartido la carpeta.
+ *
+ * Vale tanto el link del cliente como el de cualquiera de sus carpetas: las
+ * dos puertas llevan al mismo cliente.
+ */
+export async function entroAlCliente(
+  clienteId: string,
+  galletas: { get(nombre: string): { value: string } | undefined }
+): Promise<boolean> {
+  let cliente: Cliente | undefined;
+  try {
+    cliente = (await clientesHabilitados()).find((c) => c.id === clienteId);
+  } catch {
+    return false;
+  }
+  if (!cliente) return false;
+
+  const candidatos = [cliente.token];
+  try {
+    for (const carpeta of await subcarpetasDe(cliente.id)) {
+      const { token } = await ajustesDe(carpeta.id);
+      if (token) candidatos.push(token);
+    }
+  } catch {
+    // Si Drive no contesta, queda el link del cliente, que es el principal.
+  }
+
+  for (const token of candidatos) {
+    const valor = galletas.get(await nombreDeGalleta(token))?.value;
+    if (await galletaValida(token, valor)) return true;
+  }
+  return false;
+}

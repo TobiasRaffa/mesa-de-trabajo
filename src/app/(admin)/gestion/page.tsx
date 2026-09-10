@@ -20,18 +20,12 @@ export default async function Clientes() {
   }
 
   const equipo = await elEquipo();
-  const conAcceso = clientes.filter((c) => c.habilitado).length;
   const sinClave = clientes.filter((c) => c.habilitado && !c.tieneClave).length;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <header className="border-b-2 border-tinta pb-6">
         <h1 className="text-grande font-extrabold tracking-tight">Clientes</h1>
-        <p className="mt-2 text-normal text-tinta-suave">
-          {clientes.length === 0
-            ? "Todavía no hay ninguna carpeta compartida con el robot."
-            : `${conAcceso} de ${clientes.length} con acceso al portal.`}
-        </p>
       </header>
 
       {sinClave > 0 && (

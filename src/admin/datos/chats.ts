@@ -1,66 +1,42 @@
 // Todas las conversaciones juntas, para no entrar cliente por cliente.
 //
 // Lo que la agencia necesita saber de un vistazo es una sola cosa: **dónde le
-// están esperando una respuesta**. Por eso el orden no es alfabético ni por
-// cliente, sino por quién habló último y cuándo: arriba lo que el cliente dijo
-// y nadie contestó.
+// están esperando una respuesta**. Por eso el orden no es alfabético, sino por
+// lo que quedó sin leer y por quién habló último.
 
-import { esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
 import { clientesHabilitados } from "@/lib/clientes";
-import { leerConversacion, type Mensaje } from "@/lib/conversaciones";
-import { subcarpetasDe } from "@/lib/google";
+import { leerConversacion, sinLeerPorCliente, type Mensaje } from "@/lib/conversaciones";
 
 export type ChatEnLista = {
   clienteId: string;
   cliente: string;
-  carpetaId: string;
-  carpeta: string;
-  mensajes: number;
   ultimo: Mensaje | null;
-  /**
-   * El último que habló fue el cliente.
-   *
-   * Es lo más parecido a «sin responder» que se puede saber sin registrar
-   * quién leyó qué. Cuando existan los usuarios, esto pasa a ser «no leído»
-   * de verdad, por persona.
-   */
-  esperandoRespuesta: boolean;
+  /** Mensajes del cliente que nadie leyó todavía. */
+  sinLeer: number;
 };
 
 export async function todasLasConversaciones(): Promise<ChatEnLista[]> {
-  const clientes = await clientesHabilitados();
+  const [clientes, sinLeer] = await Promise.all([
+    clientesHabilitados(),
+    sinLeerPorCliente("agencia"),
+  ]);
 
-  const porCliente = await Promise.all(
-    clientes.map(async (cliente) => {
-      const carpetas = await subcarpetasDe(cliente.id);
-
-      return Promise.all(
-        carpetas
-          .filter((c) => !esCarpetaReservada(c.name))
-          .map(async (carpeta): Promise<ChatEnLista> => {
-            const mensajes = await leerConversacion(carpeta.id);
-            const ultimo = mensajes[mensajes.length - 1] ?? null;
-
-            return {
-              clienteId: cliente.id,
-              cliente: cliente.nombre,
-              carpetaId: carpeta.id,
-              carpeta: carpeta.name,
-              mensajes: mensajes.length,
-              ultimo,
-              esperandoRespuesta: ultimo?.de === "cliente",
-            };
-          })
-      );
+  const chats = await Promise.all(
+    clientes.map(async (cliente): Promise<ChatEnLista> => {
+      const mensajes = await leerConversacion(cliente.id);
+      return {
+        clienteId: cliente.id,
+        cliente: cliente.nombre,
+        ultimo: mensajes[mensajes.length - 1] ?? null,
+        sinLeer: sinLeer[cliente.id] ?? 0,
+      };
     })
   );
 
-  const todas = porCliente.flat();
-
-  // Primero lo que espera respuesta; después, lo más reciente. Una carpeta sin
-  // una sola palabra dicha va al final: no es una conversación todavía.
-  return todas.sort((a, b) => {
-    if (a.esperandoRespuesta !== b.esperandoRespuesta) return a.esperandoRespuesta ? -1 : 1;
+  // Primero lo que falta leer; después, lo más reciente. Un cliente con el que
+  // no se habló nunca va al final: no es una conversación todavía.
+  return chats.sort((a, b) => {
+    if ((a.sinLeer > 0) !== (b.sinLeer > 0)) return a.sinLeer > 0 ? -1 : 1;
     const cuandoA = a.ultimo?.cuando ?? "";
     const cuandoB = b.ultimo?.cuando ?? "";
     if (cuandoA !== cuandoB) return cuandoB.localeCompare(cuandoA);

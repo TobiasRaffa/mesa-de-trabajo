@@ -320,6 +320,8 @@ export async function escribirComoCliente(
   carpetaId: string,
   texto: string
 ): Promise<RespuestaDeChat> {
+  // La carpeta se sigue comprobando —es de donde vino el pedido— pero la
+  // conversación es **del cliente**: con él se habla de todo en un solo hilo.
   if (!(await esCarpetaDelCliente(carpetaId))) {
     return { ok: false, motivo: "No encontramos esa carpeta." };
   }
@@ -331,7 +333,7 @@ export async function escribirComoCliente(
   }
 
   try {
-    const mensajes = await agregarMensaje(carpetaId, "cliente", CLIENTE, limpio);
+    const mensajes = await agregarMensaje(clienteId, "cliente", CLIENTE, limpio);
 
     const nombres = await comoSeLlaman(clienteId, carpetaId);
     await avisar({

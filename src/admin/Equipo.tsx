@@ -2,10 +2,14 @@
 
 // Sumar gente al equipo y editarla.
 //
+// Los campos no se pueden escribir de una: hay que apretar **Editar**. Una
+// lista de campos abiertos invita a cambiar algo sin querer al pasar el mouse,
+// y acá lo que se cambia es a dónde le llegan los avisos a alguien.
+//
 // Cada fila es un formulario suelto: se guarda una persona sin tocar las
 // demás, y un error de una no borra lo que se estaba escribiendo en otra.
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   agregarAlEquipo,
   editarDelEquipo,
@@ -22,8 +26,25 @@ const BOTON =
   "text-tinta transition-colors hover:bg-hueco disabled:opacity-40";
 
 export function FilaDePersona({ persona }: { persona: Persona }) {
+  const [editando, setEditando] = useState(false);
   const [estado, guardar, guardando] = useActionState(editarDelEquipo, null);
   const [estadoQuitar, quitar, quitando] = useActionState(quitarDelEquipo, null);
+
+  if (!editando) {
+    return (
+      <li className="flex flex-wrap items-center gap-3 border-b border-linea px-4 py-4">
+        <div className="min-w-0 flex-1">
+          <p className="font-bold tracking-tight">{persona.nombre}</p>
+          <p className="mt-0.5 text-menudo text-apagado">
+            {persona.correo || "sin correo"}
+          </p>
+        </div>
+        <button type="button" onClick={() => setEditando(true)} className={BOTON}>
+          Editar
+        </button>
+      </li>
+    );
+  }
 
   return (
     <li className="border-b border-linea px-4 py-4">
@@ -40,7 +61,7 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
             name="correo"
             type="email"
             defaultValue={persona.correo}
-            placeholder="correo (para los avisos)"
+            placeholder="correo"
             aria-label="Correo"
             className={CAMPO}
           />
@@ -49,12 +70,15 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
           </button>
         </form>
 
+        <button type="button" onClick={() => setEditando(false)} className={BOTON}>
+          Cancelar
+        </button>
+
         <form action={quitar}>
           <input type="hidden" name="id" value={persona.id} />
           <button
             type="submit"
             disabled={quitando}
-            title="Lo que tenía asignado queda sin asignar"
             className="min-h-toque px-3 text-menudo font-semibold text-apagado underline
                        underline-offset-2 transition-colors hover:text-alerta disabled:opacity-40"
           >
@@ -62,7 +86,6 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
           </button>
         </form>
       </div>
-
 
       {[estado, estadoQuitar]
         .filter((r) => r && !r.ok)
@@ -76,22 +99,35 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
 }
 
 export function SumarPersona() {
+  const [abierto, setAbierto] = useState(false);
   const [estado, sumar, sumando] = useActionState(agregarAlEquipo, null);
+
+  if (!abierto) {
+    return (
+      <div className="mt-8 border-t-2 border-tinta pt-6">
+        <button type="button" onClick={() => setAbierto(true)} className={BOTON}>
+          Agregar a alguien
+        </button>
+      </div>
+    );
+  }
 
   return (
     <section className="mt-8 border-t-2 border-tinta pt-6">
-      <h2 className="text-titulo font-extrabold tracking-tight">Sumar a alguien</h2>
-      <form action={sumar} className="mt-4 flex flex-wrap items-center gap-2">
+      <form action={sumar} className="flex flex-wrap items-center gap-2">
         <input name="nombre" placeholder="Nombre" aria-label="Nombre" className={CAMPO} />
         <input
           name="correo"
           type="email"
-          placeholder="correo (para los avisos)"
+          placeholder="correo"
           aria-label="Correo"
           className={CAMPO}
         />
         <button type="submit" disabled={sumando} className={BOTON}>
-          Sumar
+          Agregar
+        </button>
+        <button type="button" onClick={() => setAbierto(false)} className={BOTON}>
+          Cancelar
         </button>
       </form>
 

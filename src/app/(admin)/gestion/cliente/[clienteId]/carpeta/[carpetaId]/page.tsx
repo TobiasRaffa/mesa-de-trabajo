@@ -40,10 +40,6 @@ export default async function Calendario({
         <h1 className="mt-2 text-grande font-extrabold tracking-tight">
           {datos.carpeta.nombre}
         </h1>
-        <p className="mt-2 text-normal text-tinta-suave">
-          {datos.piezas.length} {datos.piezas.length === 1 ? "pieza" : "piezas"} ·{" "}
-          {datos.piezas.filter((p) => p.dia).length} con fecha
-        </p>
       </header>
 
       {!enCalendario ? (

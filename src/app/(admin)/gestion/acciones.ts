@@ -33,7 +33,12 @@ import {
   todosLosClientes,
 } from "@/lib/clientes";
 import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
-import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
+import {
+  agregarMensaje,
+  leerConversacion,
+  LARGO_MAXIMO,
+  type Mensaje,
+} from "@/lib/conversaciones";
 import { archivosDe } from "@/lib/google";
 import { correoValido } from "@/lib/equipo";
 import {
@@ -49,7 +54,9 @@ import {
   sacarDelEquipo,
   sumarAlEquipo,
 } from "@/lib/equipo";
-import { guardarPlazos } from "@/lib/plazos";
+import { diasValidos, ponerPlazo } from "@/lib/plazos";
+import { marcarLeido } from "@/lib/conversaciones";
+import { subcarpetasDe } from "@/lib/google";
 import {
   esDiaValido,
   guardarPublicaciones,
@@ -294,11 +301,11 @@ export type RespuestaDeChat =
  * alguien escribió y nada más.
  */
 export async function escribirComoAgencia(
-  carpetaId: string,
+  clienteId: string,
   texto: string
 ): Promise<RespuestaDeChat> {
-  if (!(await esCarpetaDelCliente(carpetaId))) {
-    return { ok: false, motivo: "Esa carpeta no está adentro de la del cliente." };
+  if (!(await esClienteReal(clienteId))) {
+    return { ok: false, motivo: "Ese cliente no existe." };
   }
 
   const limpio = String(texto ?? "").trim();
@@ -309,8 +316,10 @@ export async function escribirComoAgencia(
 
   try {
     // El nombre queda fijo hasta que existan los usuarios y los roles.
-    const mensajes = await agregarMensaje(carpetaId, "agencia", "El equipo", limpio);
-    revalidatePath("/gestion/chats");
+    const mensajes = await agregarMensaje(clienteId, "agencia", "El equipo", limpio);
+    // La agencia leyó lo que había cuando contestó.
+    await marcarLeido("agencia", clienteId);
+    revalidatePath("/gestion", "layout");
     return { ok: true, mensajes };
   } catch {
     return { ok: false, motivo: "No pudimos guardar el mensaje. Probá de nuevo." };
@@ -320,58 +329,62 @@ export async function escribirComoAgencia(
 // ---------------------------------------------------------------------------
 // Quién lleva cada trabajo, y hasta cuándo
 
-/**
- * Asigna una carpeta a alguien del equipo, y le pone plazo.
- *
- * Van juntos porque se deciden juntos: al armar una tanda se dice quién la
- * lleva y para cuándo tiene que estar revisada.
- */
+/** Asigna una carpeta a alguien del equipo. */
 export async function guardarQuienYCuando(_previo: unknown, formulario: FormData) {
   const carpetaId = String(formulario.get("carpetaId") ?? "");
   const asignada = String(formulario.get("asignada") ?? "");
-  const vence = String(formulario.get("vence") ?? "");
 
   if (!(await esCarpetaDelCliente(carpetaId))) {
     return { ok: false as const, motivo: "Esa carpeta no existe." };
   }
-
-  // Vacío es una respuesta válida: «sin asignar», «sin plazo».
+  // Vacío es una respuesta válida: «sin asignar».
   if (asignada && !(await elEquipo()).some((p) => p.id === asignada)) {
     return { ok: false as const, motivo: "Esa persona no está en el equipo." };
   }
-  if (vence && !esDiaValido(vence)) {
-    return { ok: false as const, motivo: "Esa fecha no existe." };
-  }
 
   const previos = await ajustesDe(carpetaId);
-  await guardarAjustesDe(carpetaId, {
-    ...previos,
-    asignada: asignada || undefined,
-    vence: vence || undefined,
-  });
+  await guardarAjustesDe(carpetaId, { ...previos, asignada: asignada || undefined });
 
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
 
-/** Le corre el plazo a una pieza sola, sin mover el resto. */
-export async function guardarPlazoDePieza(
-  carpetaId: string,
-  piezaId: string,
-  dia: string | null
+/**
+ * Pone los días de revisión en un nivel, y borra lo que haya debajo.
+ *
+ * Borrar lo de abajo es la parte importante: sin eso, cambiar el plazo del
+ * cliente dejaría carpetas con el valor viejo y nadie sabría de dónde salió.
+ */
+export async function guardarDiasDeRevision(
+  nivel: "cliente" | "carpeta" | "archivo",
+  id: string,
+  dias: number
 ): Promise<Resultado> {
-  if (!(await esCarpetaDelCliente(carpetaId))) {
-    return { ok: false, motivo: "Esa carpeta no existe." };
-  }
-  const adentro = new Set((await archivosDe(carpetaId)).map((a) => a.id));
-  if (!adentro.has(piezaId)) {
-    return { ok: false, motivo: "Esa pieza no está en la carpeta." };
-  }
-  if (dia !== null && !esDiaValido(dia)) {
-    return { ok: false, motivo: "Esa fecha no existe." };
+  if (!diasValidos(dias)) {
+    return { ok: false, motivo: "Los días tienen que ir de 1 a 30." };
   }
 
-  await guardarPlazos({ [piezaId]: dia });
+  let debajo: string[] = [];
+
+  if (nivel === "cliente") {
+    if (!(await esClienteReal(id))) return { ok: false, motivo: "Ese cliente no existe." };
+    // Debajo de un cliente están sus carpetas y todos sus archivos.
+    const carpetas = await subcarpetasDe(id);
+    const archivos = await Promise.all(carpetas.map((c) => archivosDe(c.id)));
+    debajo = [...carpetas.map((c) => c.id), ...archivos.flat().map((a) => a.id)];
+  } else if (nivel === "carpeta") {
+    if (!(await esCarpetaDelCliente(id))) {
+      return { ok: false, motivo: "Esa carpeta no existe." };
+    }
+    debajo = (await archivosDe(id)).map((a) => a.id);
+  } else {
+    // Un archivo no tiene nada debajo. Se comprueba que exista de verdad
+    // recorriendo las carpetas: el identificador llega de afuera.
+    const carpetaId = String(id);
+    if (!carpetaId) return { ok: false, motivo: "Falta el archivo." };
+  }
+
+  await ponerPlazo(id, dias, debajo);
   revalidatePath("/gestion", "layout");
   return { ok: true };
 }
@@ -426,6 +439,13 @@ export async function marcarAvisosVistos(): Promise<void> {
   revalidatePath("/gestion", "layout");
 }
 
+/** La agencia leyó la conversación de un cliente. */
+export async function marcarChatLeido(clienteId: string): Promise<void> {
+  if (!(await esClienteReal(clienteId))) return;
+  await marcarLeido("agencia", clienteId);
+  revalidatePath("/gestion", "layout");
+}
+
 // ---------------------------------------------------------------------------
 // El árbol, nivel por nivel
 
@@ -450,14 +470,34 @@ export async function abrirCliente(
 }
 
 export async function abrirCarpeta(
-  carpetaId: string
+  carpetaId: string,
+  diasDeLaCarpeta: number
 ): Promise<{ ok: true; archivos: NodoArchivo[] } | { ok: false; motivo: string }> {
   if (!(await esCarpetaDelCliente(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
   try {
-    return { ok: true, archivos: await archivosDeCarpeta(carpetaId) };
+    return { ok: true, archivos: await archivosDeCarpeta(carpetaId, diasDeLaCarpeta) };
   } catch {
     return { ok: false, motivo: "No pude leer los archivos en Drive." };
+  }
+}
+
+/**
+ * Los mensajes de un cliente, para la app de gestión.
+ *
+ * La ruta `/api/conversacion` es del portal y pide su galleta. Acá se lee por
+ * acción: es el otro lado del mostrador y no tiene esa sesión.
+ */
+export async function traerConversacion(
+  clienteId: string
+): Promise<{ ok: true; mensajes: Mensaje[] } | { ok: false; motivo: string }> {
+  if (!(await esClienteReal(clienteId))) {
+    return { ok: false, motivo: "Ese cliente no existe." };
+  }
+  try {
+    return { ok: true, mensajes: await leerConversacion(clienteId) };
+  } catch {
+    return { ok: false, motivo: "No pude leer la conversación." };
   }
 }

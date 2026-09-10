@@ -6,12 +6,12 @@
 // arranca cerrada sería pagar por adelantado algo que casi nunca se mira.
 
 import { ajustesDe, esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
-import { cuentaPorCarpeta } from "@/lib/conversaciones";
 import { personaPorId } from "@/lib/equipo";
 import { subcarpetasDe } from "@/lib/google";
 import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
-import { plazosDe } from "@/lib/plazos";
-import { publicacionesDe } from "@/lib/publicaciones";
+import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
+import { diaDe, publicacionesDe } from "@/lib/publicaciones";
+import { calcularVencimiento } from "@/lib/fechas";
 import { agruparVersiones } from "@/lib/versiones";
 import type { Estado } from "@/dominio/pieza";
 
@@ -24,10 +24,12 @@ export type NodoCarpeta = {
   token?: string;
   asignada?: string;
   asignadaA: string | null;
-  vence?: string;
+  /** Los días de revisión puestos a mano en esta carpeta, si los tiene. */
+  dias?: number;
+  /** Los que de verdad corren acá, ya heredados. */
+  diasQueCorren: number;
   piezas: number;
   sinRevisar: number;
-  mensajes: number;
   /** `Entregas finales` no es un trabajo: no se configura. */
   reservada: boolean;
 };
@@ -43,15 +45,21 @@ export type NodoArchivo = {
   mudada: boolean;
   /** Cuándo sale publicada, si tiene fecha. */
   publicaEl?: string;
-  /** Su plazo propio, si le corrieron la fecha a esta sola. */
+  /** Los días puestos a mano en este archivo, si los tiene. */
+  dias?: number;
+  /** Los que de verdad corren, ya heredados. */
+  diasQueCorren: number;
+  /** Cuándo vence, calculado: el día que se subió más los días. */
   vence?: string;
 };
 
 export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[]> {
-  const [carpetas, charlas] = await Promise.all([
+  const [carpetas, diasDelCliente] = await Promise.all([
     subcarpetasDe(clienteId),
-    cuentaPorCarpeta(),
+    plazoDe(clienteId),
   ]);
+
+  const propios = await plazosDe(carpetas.map((c) => c.id));
 
   return Promise.all(
     carpetas.map(async (carpeta): Promise<NodoCarpeta> => {
@@ -68,8 +76,8 @@ export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[
         token: ajustes.token,
         asignada: ajustes.asignada,
         asignadaA: persona?.nombre ?? null,
-        vence: ajustes.vence,
-        mensajes: charlas[carpeta.id] ?? 0,
+        dias: propios[carpeta.id],
+        diasQueCorren: plazoQueCorre(undefined, propios[carpeta.id], diasDelCliente),
         reservada,
       };
 
@@ -91,11 +99,15 @@ export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[
   );
 }
 
-export async function archivosDeCarpeta(carpetaId: string): Promise<NodoArchivo[]> {
+export async function archivosDeCarpeta(
+  carpetaId: string,
+  /** Los días que hereda esta carpeta. Los archivos parten de acá. */
+  diasDeLaCarpeta: number
+): Promise<NodoArchivo[]> {
   const agrupadas = agruparVersiones(await archivosConLasMudadas(carpetaId));
   const ultimas = agrupadas.map((p) => p.versiones[p.versiones.length - 1].archivo.id);
 
-  const [estados, dias, plazos] = await Promise.all([
+  const [estados, dias, propios] = await Promise.all([
     estadosDe(carpetaId, ultimas),
     publicacionesDe(ultimas),
     plazosDe(ultimas),
@@ -104,6 +116,8 @@ export async function archivosDeCarpeta(carpetaId: string): Promise<NodoArchivo[
   return agrupadas.map((pieza): NodoArchivo => {
     const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
     const estado = estados[ultima.id];
+    const corren = plazoQueCorre(propios[ultima.id], diasDeLaCarpeta, undefined);
+
     return {
       id: ultima.id,
       nombre: pieza.titulo,
@@ -113,7 +127,11 @@ export async function archivosDeCarpeta(carpetaId: string): Promise<NodoArchivo[
       vueltas: pieza.versiones.length,
       mudada: estado.mudada,
       publicaEl: dias[ultima.id],
-      vence: plazos[ultima.id],
+      dias: propios[ultima.id],
+      diasQueCorren: corren,
+      vence: ultima.modifiedTime
+        ? diaDe(calcularVencimiento(new Date(ultima.modifiedTime), corren))
+        : undefined,
     };
   });
 }

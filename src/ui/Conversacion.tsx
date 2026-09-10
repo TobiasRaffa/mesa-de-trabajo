@@ -114,9 +114,8 @@ export function Conversacion({
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-papel px-5 py-5">
           {mensajes.length === 0 ? (
-            <p className="mx-auto max-w-sm py-10 text-center text-normal text-apagado">
-              Todavía no hablaron por acá. Lo que se escriba queda junto a esta carpeta, no
-              perdido en un chat con todo mezclado.
+            <p className="py-10 text-center text-normal text-apagado">
+              Todavía no hablaron por acá.
             </p>
           ) : (
             <ul className="flex flex-col gap-4">

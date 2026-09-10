@@ -30,16 +30,13 @@ export default async function EquipoPagina() {
       )}
 
       {hayCorreo && sinCorreo > 0 && (
-        <p className="mt-6 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-menudo text-espera">
-          {sinCorreo} {sinCorreo === 1 ? "persona no tiene" : "personas no tienen"} correo
-          cargado: a {sinCorreo === 1 ? "esa persona" : "esas personas"} no le llega nada.
+        <p className="mt-6 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-menudo font-semibold text-espera">
+          {sinCorreo} sin correo: no les llega nada.
         </p>
       )}
 
       {gente.length === 0 ? (
-        <p className="mt-8 border-l-4 border-linea bg-hueco/50 px-4 py-3 text-normal text-tinta-suave">
-          Todavía no hay nadie cargado. Sumá a quien lleve los trabajos.
-        </p>
+        <p className="mt-8 text-normal text-apagado">Todavía no hay nadie.</p>
       ) : (
         <ul className="mt-8 border-t border-linea">
           {gente.map((persona) => (

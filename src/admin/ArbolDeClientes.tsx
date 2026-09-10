@@ -274,9 +274,9 @@ function FilaCliente({
               Falta la clave
             </span>
           )}
-          {cliente.mensajes > 0 && (
-            <span className="bg-acento-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-acento">
-              {cliente.mensajes}
+          {cliente.sinLeer > 0 && (
+            <span className="bg-acento px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-white">
+              {cliente.sinLeer} sin leer
             </span>
           )}
         </div>
@@ -353,7 +353,7 @@ function FilaCarpeta({
 
     setCargando(true);
     try {
-      const r = await abrirCarpeta(carpeta.id);
+      const r = await abrirCarpeta(carpeta.id, carpeta.diasQueCorren);
       if (r.ok) setArchivos(r.archivos);
       else setError(r.motivo);
     } catch {
@@ -404,11 +404,7 @@ function FilaCarpeta({
               Calendario
             </span>
           )}
-          {carpeta.mensajes > 0 && (
-            <span className="bg-acento-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-acento">
-              {carpeta.mensajes}
-            </span>
-          )}
+
         </div>
 
         <p className="mt-0.5 text-menudo text-apagado">
@@ -417,8 +413,8 @@ function FilaCarpeta({
           ) : (
             <>
               {carpeta.piezas} {carpeta.piezas === 1 ? "pieza" : "piezas"} ·{" "}
-              {carpeta.sinRevisar} sin revisar
-              {carpeta.vence && ` · vence el ${comoFecha(carpeta.vence)}`}
+              {carpeta.sinRevisar} sin revisar · {carpeta.diasQueCorren}{" "}
+              {carpeta.diasQueCorren === 1 ? "día" : "días"} para revisar
               {carpeta.asignadaA ? ` · ${carpeta.asignadaA}` : " · sin asignar"}
             </>
           )}
@@ -474,13 +470,12 @@ function FilaCarpeta({
                         </span>
                       )}
                     </div>
-                    {(archivo.publicaEl || archivo.vence) && (
-                      <p className="mt-0.5 text-micro text-apagado">
-                        {archivo.publicaEl && `sale el ${comoFecha(archivo.publicaEl)}`}
-                        {archivo.publicaEl && archivo.vence && " · "}
-                        {archivo.vence && `vence el ${comoFecha(archivo.vence)}`}
-                      </p>
-                    )}
+                    <p className="mt-0.5 text-micro text-apagado">
+                      {archivo.diasQueCorren}{" "}
+                      {archivo.diasQueCorren === 1 ? "día" : "días"}
+                      {archivo.vence && ` · vence el ${comoFecha(archivo.vence)}`}
+                      {archivo.publicaEl && ` · sale el ${comoFecha(archivo.publicaEl)}`}
+                    </p>
                   </Fila>
                 </li>
               ))}

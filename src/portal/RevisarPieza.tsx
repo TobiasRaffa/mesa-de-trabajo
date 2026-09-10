@@ -275,14 +275,6 @@ export function RevisarPieza({
                 aprobada={pieza.estado === "final"}
               />
 
-              {pendiente && (
-                <p className="border-l-4 border-linea bg-hueco/70 px-4 py-3 text-normal text-tinta-suave">
-                  Mirá la pieza y decidí. Si está lista, <b>Aprobar</b>. Si hay algo
-                  para corregir, <b>Pedir cambios</b> y anotá los puntos de a uno: los
-                  vas a poder editar y borrar hasta que envíes la revisión.
-                </p>
-              )}
-
               {pieza.enviada && (
                 <p className="bg-hueco px-4 py-3 text-normal font-semibold text-tinta-suave">
                   Ya se lo mandamos al equipo.
@@ -386,12 +378,6 @@ export function RevisarPieza({
                     </p>
                   )}
 
-                  {sePuedeTocar && (
-                    <p className="text-menudo text-apagado">
-                      Nada de esto llegó a la agencia. Podés seguir agregando y se manda
-                      todo junto.
-                    </p>
-                  )}
                 </div>
               )}
 

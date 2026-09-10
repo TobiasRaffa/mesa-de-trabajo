@@ -10,7 +10,7 @@ import { carpetasDeCliente } from "@/admin/datos/arbol";
 import { ArbolDeClientes } from "@/admin/ArbolDeClientes";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { MensajesListos } from "@/admin/MensajesListos";
-import { ChatDeCarpeta } from "@/admin/ChatDeCarpeta";
+import { ChatDeCliente } from "@/admin/ChatDeCliente";
 import { elEquipo } from "@/lib/equipo";
 
 export const dynamic = "force-dynamic";
@@ -91,13 +91,11 @@ export default async function UnCliente({
           pendientes: principal?.sinRevisar,
         }}
         alLado={
-          principal && (
-            <ChatDeCarpeta
-              carpetaId={principal.id}
-              nombre={`${cliente.nombre} - ${principal.nombre}`}
-              cuantos={principal.mensajes}
-            />
-          )
+          <ChatDeCliente
+            clienteId={cliente.id}
+            nombre={cliente.nombre}
+            sinLeer={cliente.sinLeer}
+          />
         }
       />
     </main>

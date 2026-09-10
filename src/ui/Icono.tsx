@@ -103,10 +103,12 @@ export const IconoDrive = (p: Props) => (
   </Trazo>
 );
 
-// El engranaje: configuración. Seis dientes bastan para que se lea el gesto.
+// El engranaje de siempre: la ruedita dentada que todo el mundo reconoce como
+// «configuración». Ocho dientes y el agujero del medio; menos que eso se lee
+// como un sol, y más se empasta a este tamaño.
 export const IconoConfig = (p: Props) => (
   <Trazo {...p}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2" />
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.9-1.5-1.9-3.3-2.3.9a7.6 7.6 0 0 0-2.6-1.5L14.2 2h-3.8l-.3 2.4a7.6 7.6 0 0 0-2.6 1.5l-2.3-.9-1.9 3.3 1.9 1.5a7.6 7.6 0 0 0 0 3l-1.9 1.5 1.9 3.3 2.3-.9a7.6 7.6 0 0 0 2.6 1.5l.3 2.4h3.8l.3-2.4a7.6 7.6 0 0 0 2.6-1.5l2.3.9 1.9-3.3-1.9-1.5z" />
   </Trazo>
 );

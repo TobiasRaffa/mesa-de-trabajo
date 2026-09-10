@@ -91,8 +91,13 @@ export function Bandeja({
                 <span className="cifras shrink-0 text-menudo text-apagado">
                   {cuando.format(new Date(aviso.cuando))}
                 </span>
+                {/* Un mensaje se lee en Conversaciones; lo demás, en su carpeta. */}
                 <Link
-                  href={`/gestion/cliente/${aviso.clienteId}/carpeta/${aviso.carpetaId}`}
+                  href={
+                    aviso.clase === "escribio"
+                      ? "/gestion/chats"
+                      : `/gestion/cliente/${aviso.clienteId}/carpeta/${aviso.carpetaId}`
+                  }
                   className="min-w-0 flex-1 text-normal underline-offset-4 hover:underline"
                 >
                   {aviso.texto}

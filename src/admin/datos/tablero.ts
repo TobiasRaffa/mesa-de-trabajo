@@ -13,13 +13,13 @@
 import { ajustesDe, esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
 import { losAvisos, type Aviso } from "@/lib/avisos";
 import { clientesHabilitados } from "@/lib/clientes";
-import { leerConversacion } from "@/lib/conversaciones";
+import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { correoConfigurado } from "@/lib/correo";
 import { personaPorId } from "@/lib/equipo";
 import { subcarpetasDe } from "@/lib/google";
 import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
-import { fechaDeDia } from "@/lib/publicaciones";
-import { plazosDe, plazoQueCorre } from "@/lib/plazos";
+import { calcularVencimiento } from "@/lib/fechas";
+import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones } from "@/lib/versiones";
 
 export type CarpetaEnElTablero = {
@@ -36,8 +36,8 @@ export type CarpetaEnElTablero = {
   sinRevisar: number;
   aprobadas: number;
   conCambios: number;
-  /** El cliente escribió y nadie contestó. */
-  esperandoRespuesta: boolean;
+  /** Mensajes del cliente que nadie leyó. */
+  sinLeer: number;
 };
 
 export type Tablero = {
@@ -50,25 +50,30 @@ export type Tablero = {
 export async function elTablero(): Promise<Tablero> {
   const [avisos, clientes] = await Promise.all([losAvisos(), clientesHabilitados()]);
 
+  const sinLeer = await sinLeerPorCliente("agencia");
+
   const porCliente = await Promise.all(
     clientes.map(async (cliente) => {
-      const carpetas = await subcarpetasDe(cliente.id);
+      const [carpetas, diasDelCliente] = await Promise.all([
+        subcarpetasDe(cliente.id),
+        plazoDe(cliente.id),
+      ]);
 
       return Promise.all(
         carpetas
           .filter((c) => !esCarpetaReservada(c.name))
           .map(async (carpeta): Promise<CarpetaEnElTablero> => {
-            const [ajustes, archivos, mensajes] = await Promise.all([
+            const [ajustes, archivos, diasDeLaCarpeta] = await Promise.all([
               ajustesDe(carpeta.id),
               archivosConLasMudadas(carpeta.id),
-              leerConversacion(carpeta.id),
+              plazoDe(carpeta.id),
             ]);
 
             const agrupadas = agruparVersiones(archivos);
             const ultimas = agrupadas.map(
               (p) => p.versiones[p.versiones.length - 1].archivo.id
             );
-            const [estados, plazos] = await Promise.all([
+            const [estados, propios] = await Promise.all([
               estadosDe(carpeta.id, ultimas),
               plazosDe(ultimas),
             ]);
@@ -78,18 +83,27 @@ export async function elTablero(): Promise<Tablero> {
               (p) => p.estado === "entregada" || p.estado === "en_revision"
             ).length;
 
-            // El plazo de la carpeta, salvo que alguna pieza tenga el suyo más
-            // temprano: lo que importa es la primera fecha que se cumple.
-            const fechas = ultimas
-              .map((id) => plazoQueCorre(plazos[id], ajustes.vence))
+            // Cada pieza vence el día que se subió más sus días. La carpeta
+            // vence cuando vence la primera: es la fecha que hay que mirar.
+            const fechas = agrupadas
+              .map((pieza) => {
+                const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
+                if (!ultima.modifiedTime) return null;
+                const dias = plazoQueCorre(
+                  propios[ultima.id],
+                  diasDeLaCarpeta,
+                  diasDelCliente
+                );
+                return calcularVencimiento(new Date(ultima.modifiedTime), dias);
+              })
               .filter((f): f is Date => f !== null);
-            const propio = ajustes.vence ? fechaDeDia(ajustes.vence) : null;
-            const vence = fechas.length > 0
-              ? new Date(Math.min(...fechas.map((f) => f.getTime())))
-              : propio;
+
+            const vence =
+              fechas.length > 0
+                ? new Date(Math.min(...fechas.map((f) => f.getTime())))
+                : null;
 
             const persona = await personaPorId(ajustes.asignada);
-            const ultimo = mensajes[mensajes.length - 1] ?? null;
 
             return {
               clienteId: cliente.id,
@@ -105,7 +119,7 @@ export async function elTablero(): Promise<Tablero> {
               sinRevisar,
               aprobadas: piezas.filter((p) => p.estado === "final").length,
               conCambios: piezas.filter((p) => p.estado === "cambios_marcados").length,
-              esperandoRespuesta: ultimo?.de === "cliente",
+              sinLeer: sinLeer[cliente.id] ?? 0,
             };
           })
       );

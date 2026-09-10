@@ -100,9 +100,8 @@ De cada uno podés:
   muestra; ocultarla es la acción deliberada.
 - **Pasarla a calendario o a lista.**
 - **Armar el calendario**, si está en modo calendario.
-- **Hablar con el cliente**, con la conversación de esa carpeta.
-- **Quién la lleva y hasta cuándo.** El plazo es de la carpeta entera; una
-  pieza suelta puede tener el suyo si hay que correrle la fecha a una sola.
+- **Quién la lleva.**
+- **Tiempo de revisión**, en días.
 - **Su propio link**, si querés mandarle esa carpeta sola.
 
 Y abajo de todo, los **mensajes listos**: los textos que se mandan siempre, ya
@@ -111,8 +110,9 @@ le escribís siempre. **Los escribe el equipo, no la aplicación.**
 
 ### Conversaciones (`/gestion/chats`)
 
-Todas juntas, sin entrar cliente por cliente. Arriba de todo, **las que están
-esperando tu respuesta** —o sea, donde el último que habló fue el cliente—.
+Una por cliente, no por carpeta: con el cliente se habla de todo en el mismo
+hilo. Arriba las que tienen mensajes **sin leer**. El número baja a cero cuando
+abrís.
 
 ### Equipo (`/gestion/equipo`)
 
@@ -129,7 +129,8 @@ Todo lo que elegís queda guardado al lado de la aplicación, en la carpeta
 | `publicaciones.json` | Qué día sale publicada cada pieza |
 | `conversaciones.json` | Los chats |
 | `piezas.json` | En qué anda cada pieza, y su historia |
-| `plazos.json` | Los plazos de piezas sueltas |
+| `plazos.json` | Los días de revisión puestos a mano |
+| `leidos.json` | Hasta dónde leyó cada lado el chat |
 | `equipo.json` | Quiénes son y sus correos |
 | `avisos.json` | La bandeja de novedades |
 | `secreto.txt` | La llave con la que se firman las sesiones del portal |
@@ -253,3 +254,26 @@ sobra. Se configura una sola vez.
 > No se usa el correo de Gmail directamente a propósito: mandar mails desde una
 > casa suele estar bloqueado por el proveedor de internet, y lo que llega
 > termina en spam.
+
+
+---
+
+## El tiempo de revisión
+
+Se cuenta en **días**, no en fechas: una fecha hay que volver a poner en cada
+tanda, «tres días» se pone una vez. La fecha en que vence cada pieza sale sola:
+el día que se subió el archivo, más los días.
+
+Se hereda de arriba hacia abajo:
+
+    Cliente ─────────► 3 días
+      └ Carpeta ─────► hereda 3, salvo que le pongas otro
+          └ Archivo ─► hereda el de su carpeta, salvo que le pongas otro
+
+**Lo de arriba pisa lo de abajo.** Si cambiás el del cliente, todas sus
+carpetas y archivos vuelven a esa cifra. Si cambiás el de una carpeta, alcanza
+a sus archivos y no a las otras carpetas. Si cambiás el de un archivo, alcanza
+solo a ese.
+
+Es a propósito: si no, poner cinco días en el cliente dejaría carpetas con tres
+y nadie sabría por qué. Donde dice **heredado**, el número viene de arriba.

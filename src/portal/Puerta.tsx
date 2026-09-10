@@ -26,9 +26,6 @@ export function Puerta({ token }: { token: string }) {
         <h1 className="mt-2 text-grande font-extrabold leading-none tracking-tighter">
           ¿Cuál es tu clave?
         </h1>
-        <p className="mt-3 text-normal text-tinta-suave">
-          Es la palabra que te pasó el equipo. No distingue mayúsculas ni acentos.
-        </p>
 
         <form action={entrar} className="mt-6 flex flex-col gap-3">
           <input type="hidden" name="token" value={token} />

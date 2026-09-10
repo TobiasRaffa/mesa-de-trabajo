@@ -15,6 +15,7 @@ import {
   verClaveDeCliente,
 } from "@/app/(admin)/gestion/acciones";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
+import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import type { ClienteEnGestion } from "@/admin/datos/carpetas";
 
 const TITULO = "text-micro font-extrabold uppercase tracking-widest text-apagado";
@@ -129,6 +130,20 @@ export function ConfiguracionDeCliente({
           </div>
         </section>
       )}
+
+      {/* -------------------------- Tiempo de revisión ------------------- */}
+      <section>
+        <h4 className={TITULO}>Tiempo de revisión</h4>
+        <div className="mt-2">
+          <DiasDeRevision
+            nivel="cliente"
+            id={cliente.id}
+            dias={cliente.dias}
+            propio={cliente.diasPropios}
+            alGuardar={alGuardar}
+          />
+        </div>
+      </section>
 
       {/* ------------------------------- El acceso ----------------------- */}
       <section>

@@ -9,6 +9,7 @@ import {
   guardarQuienYCuando,
   pedirLinkDeCarpeta,
 } from "@/app/(admin)/gestion/acciones";
+import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import type { NodoCarpeta } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
@@ -176,12 +177,11 @@ export function ConfiguracionDeCarpeta({
         </div>
       </section>
 
-      {/* ------------------------ Quién y hasta cuándo ------------------- */}
+      {/* ---------------------------- Quién lo lleva --------------------- */}
       <section>
-        <h4 className={TITULO}>Quién lo lleva, y hasta cuándo</h4>
+        <h4 className={TITULO}>Quién lo lleva</h4>
         <form action={guardarQuien} className="mt-2 flex flex-wrap items-center gap-2">
           <input type="hidden" name="carpetaId" value={carpeta.id} />
-
           <select
             name="asignada"
             defaultValue={carpeta.asignada ?? ""}
@@ -195,23 +195,27 @@ export function ConfiguracionDeCarpeta({
               </option>
             ))}
           </select>
-
-          <input
-            name="vence"
-            type="date"
-            defaultValue={carpeta.vence ?? ""}
-            aria-label="Hasta cuándo"
-            className={CAMPO}
-          />
-
           <button type="submit" disabled={guardandoQuien} className={BOTON}>
             Guardar
           </button>
-
           {equipo.length === 0 && (
             <span className="text-menudo text-espera">Cargá gente en «Equipo».</span>
           )}
         </form>
+      </section>
+
+      {/* -------------------------- Tiempo de revisión ------------------- */}
+      <section>
+        <h4 className={TITULO}>Tiempo de revisión</h4>
+        <div className="mt-2">
+          <DiasDeRevision
+            nivel="carpeta"
+            id={carpeta.id}
+            dias={carpeta.diasQueCorren}
+            propio={carpeta.dias !== undefined}
+            alGuardar={alGuardar}
+          />
+        </div>
       </section>
 
       {/* ------------------------- El link de la carpeta ----------------- */}

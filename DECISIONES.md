@@ -1386,3 +1386,68 @@ para cada uno. `/probar` lleva al portal del primero.
 **En producción no existe**: ahí devuelve 404. Una dirección fija que lleva al
 portal de un cliente es justamente lo que el link al azar viene a evitar. Y aun
 en la máquina no saltea nada: del otro lado sigue pidiendo la clave.
+
+## 92. La conversación es del cliente, no de la carpeta.
+
+Al principio había una por carpeta. En la práctica no se habla así: con el
+cliente se habla de todo en el mismo hilo, y tener que adivinar en cuál de sus
+cinco carpetas dijo algo es peor que no tenerlo separado.
+
+Y el número que se muestra al lado es **lo que no leíste**, no cuántos mensajes
+hay. Un contador que dice «14» para siempre no dice nada; el que importa es el
+que baja a cero cuando mirás. Se guarda hasta qué momento leyó cada lado, y
+abrir el chat marca leído.
+
+La pantalla de conversaciones muestra lo único que hace falta para decidir a
+quién contestar: **el cliente, lo último que se dijo y cuándo**. El nombre de
+la carpeta no estaba ayudando a nada.
+
+## 93. El tiempo de revisión se cuenta en días y se hereda.
+
+Una fecha hay que volver a poner en cada tanda; «tres días» se pone una vez y
+sirve siempre. La fecha de vencimiento sale sola: el día que se subió el
+archivo, más los días.
+
+Se hereda cliente → carpeta → archivo, y **lo de arriba borra lo de abajo**.
+Cambiar el del cliente vuelve a poner a todos en esa cifra. Sin eso, poner
+cinco días arriba dejaría carpetas con tres y nadie sabría de dónde salió ese
+tres. La pantalla marca **heredado** cuando el número viene de arriba, porque
+un «3» solo no distingue entre «alguien eligió tres» y «nadie eligió nada».
+
+## 94. `node:fs` se coló al navegador y rompió la compilación entera.
+
+El desplegable de días importaba sus constantes de `plazos.ts`, que lee y
+escribe archivos. Turbopack falló con «the chunking context does not support
+external modules (request: node:fs/promises)» —un mensaje que no nombra al
+culpable ni al archivo que lo importó—.
+
+La regla que deja: **lo que una pantalla necesita saber va en un módulo que no
+toque el servidor.** Las constantes y la regla de herencia viven ahora en
+`src/lib/dias.ts`, que no importa nada de Node.
+
+## 95. La ruta del chat pedía el identificador y nada más.
+
+Encontrado probando la ruta a mano, no desde el navegador: `GET
+/api/conversacion/<id>` devolvía la conversación entera **a cualquiera que
+supiera el identificador de la carpeta en Drive** —que lo ve cualquiera con
+quien la agencia haya compartido esa carpeta—, sin haber escrito nunca la
+clave.
+
+La página del portal pedía la clave; la ruta que la página usa, no. Es el error
+clásico de poner el control en la pantalla y no en la puerta.
+
+Ahora la ruta pide la misma galleta que el portal, y vale tanto el link del
+cliente como el de cualquiera de sus carpetas. La app de gestión dejó de usar
+esa ruta: pide los mensajes por una acción, que es su lado del mostrador.
+
+## 96. Sin textos que expliquen los controles.
+
+Se sacaron de las dos aplicaciones. Lo que quedó son estados, avisos que
+cambian una decisión, y mensajes de error. La explicación vive en
+`COMO-USAR.md`, que se lee una vez, y no al lado de un botón que se usa todos
+los días.
+
+En el mismo pasada: el engranaje es la ruedita dentada de siempre, «Ocultar»
+pasó a ser Sí/No, la gente del equipo no se edita hasta apretar **Editar**, y
+el diagnóstico salió de la barra —cuando Drive falla, cada pantalla lo dice
+donde pasa—.

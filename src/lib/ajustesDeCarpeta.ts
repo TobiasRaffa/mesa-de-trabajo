@@ -19,7 +19,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { esDiaValido } from "@/lib/publicaciones";
 
 export type Vista = "lista" | "calendario";
 
@@ -42,16 +41,6 @@ export type AjustesDeCarpeta = {
    * pero nadie lo recibe en su correo—.
    */
   asignada?: string;
-  /**
-   * Hasta cuándo tiene el cliente para revisar, en `AAAA-MM-DD`.
-   *
-   * Es de la carpeta entera. Una pieza puede tener el suyo propio si hace
-   * falta correrle la fecha a una sola: el de la pieza gana.
-   *
-   * **El plazo avisa, no decide.** Que se cumpla no aprueba ni cierra nada:
-   * dispara un aviso y sigue esperando a una persona.
-   */
-  vence?: string;
 };
 
 export type Ajustes = {
@@ -111,14 +100,12 @@ function normalizar(datos: unknown): Record<string, AjustesDeCarpeta> {
       vista?: unknown;
       token?: unknown;
       asignada?: unknown;
-      vence?: unknown;
     };
     salida[id] = {
       visible: typeof v.visible === "boolean" ? v.visible : POR_OMISION.visible,
       vista: v.vista === "calendario" ? "calendario" : "lista",
       token: typeof v.token === "string" && v.token ? v.token : undefined,
       asignada: typeof v.asignada === "string" && v.asignada ? v.asignada : undefined,
-      vence: esDiaValido(v.vence) ? v.vence : undefined,
     };
   }
   return salida;
