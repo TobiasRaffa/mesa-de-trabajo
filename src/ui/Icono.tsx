@@ -102,3 +102,11 @@ export const IconoDrive = (p: Props) => (
     <path d="M8.5 3l5.5 9.5M15.5 3l-5.5 9.5M3 12.5h11" />
   </Trazo>
 );
+
+// El engranaje: configuración. Seis dientes bastan para que se lea el gesto.
+export const IconoConfig = (p: Props) => (
+  <Trazo {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2" />
+  </Trazo>
+);

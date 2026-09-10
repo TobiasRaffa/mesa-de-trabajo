@@ -19,14 +19,18 @@ En el escritorio hay tres accesos directos:
 
 | | |
 |---|---|
-| **Mesa de trabajo — ENCENDER** | Prende el servidor y abre el portal del cliente |
-| **Mesa de trabajo — ENCENDER gestion** | Prende el servidor y abre donde configurás vos |
-| **Mesa de trabajo — Portal del cliente** | Lo que ve el cliente |
-| **Mesa de trabajo — Administración** | Donde configurás vos |
+| **Mesa de trabajo — ENCENDER** | Prende el servidor y abre Administración |
+| **Mesa de trabajo — ENCENDER gestion** | Lo mismo (quedó de antes) |
+| **Mesa de trabajo — Administración** | Solo abre, con el servidor ya prendido |
 
-Los dos que dicen **ENCENDER** hacen lo mismo con el servidor: cambian solo en
-qué pantalla abren. Da igual cuál toques primero; si el servidor ya está
-prendido, el segundo lo reusa.
+**Los dos ENCENDER hacen lo mismo.** Si el servidor ya está prendido, no
+prenden otro: abren la aplicación y te avisan. Antes no chequeaban, y el
+segundo fallaba con la ventana cerrándose sola —parecía que el acceso no hacía
+nada—.
+
+> El acceso directo **ya no abre el portal del cliente**, porque el portal
+> ahora se abre con el link de cada cliente y esos links son distintos para
+> cada uno. Los sacás de Administración, en Configuración.
 
 Se toca uno de los **ENCENDER**, se espera unos segundos y el navegador se abre
 solo. Se

@@ -1306,3 +1306,39 @@ Dos decisiones:
 La pantalla de un cliente solo usa **el mismo árbol** y no una copia. Dos
 formas distintas de configurar lo mismo terminan divergiendo, y la que se usa
 menos queda vieja sin que nadie se entere.
+
+## 86. El acceso directo no abría por dos razones a la vez.
+
+La primera: **abría `/t/ejemplo`**, una dirección que quedó muerta cuando los
+links pasaron a ser aleatorios por cliente. Contestaba «este link no está
+disponible», que es exactamente lo que tiene que contestar.
+
+La segunda, la que hacía que no abriera nada: **si el servidor ya estaba
+prendido, el segundo fallaba** al chocar contra el mismo puerto, y la ventana
+se cerraba sola. Desde afuera parecía que el acceso no hacía nada.
+
+Ahora mira si el puerto ya está ocupado. Si lo está, no prende otro: abre la
+aplicación y avisa que el servidor lo tiene la otra ventana. Y abre
+`/gestion`, que es la puerta de la agencia y siempre existe; el portal se abre
+con el link de cada cliente, que sale de ahí.
+
+Los dos `.bat` son uno: el de gestión llama al otro con una variable. Dos
+copias de un script se separan, y la que se usa menos queda vieja.
+
+## 87. Los botones de la derecha van siempre en la misma columna.
+
+La sangría del árbol se dibuja **adentro** de la fila, como un espacio en
+blanco al principio, y no como relleno de la lista. Con relleno, cada nivel
+angostaba la fila y los botones de la derecha se corrían hacia adentro: la
+columna de Drive quedaba en escalera.
+
+Cuando una fila no tiene un botón —un archivo no se configura— va **un hueco
+del mismo ancho**. Una columna donde algunos botones faltan se lee como rota;
+una donde hay lugares vacíos se lee como una columna.
+
+Por lo mismo, las carpetas reservadas también tienen engranaje: adentro está lo
+único que hay para ellas —el link a Drive y por qué no hay nada más—.
+
+La configuración pasó a ser un icono. Un botón con la palabra «Configuración»
+en cada fila competía por atención con el nombre, que es lo que se viene a
+leer.

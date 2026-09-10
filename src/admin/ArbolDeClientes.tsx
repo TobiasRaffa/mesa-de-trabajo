@@ -5,16 +5,23 @@
 // La forma imita la de Drive porque **es** la de Drive: cliente, sus carpetas,
 // los archivos de cada una. Quien la usa ya tiene ese mapa en la cabeza.
 //
-// Dos decisiones sobre cómo se abre:
+// Tres decisiones sobre cómo se dibuja:
 //
 //   1. **Cada nivel se pide al abrirlo.** Leer de Drive todos los archivos de
 //      todos los clientes para dibujar una lista cerrada sería pagar por
 //      adelantado algo que casi nunca se mira.
 //
-//   2. **La configuración está aparte de la navegación.** Abrir una fila
-//      muestra qué hay adentro; el botón de configuración muestra qué se puede
-//      cambiar. Mezclarlos hacía que buscar un archivo obligara a pasar por
-//      encima de los botones que apagan cosas.
+//   2. **La configuración está aparte de la navegación.** La flecha muestra
+//      qué hay adentro; el engranaje, qué se puede cambiar. Mezclarlos hacía
+//      que buscar un archivo obligara a pasar por encima de los botones que
+//      apagan cosas.
+//
+//   3. **Los botones de la derecha están siempre a la misma altura.** La
+//      sangría del árbol va **adentro** de la fila, como un espacio en blanco
+//      al principio, y no como relleno de la lista. Con relleno, cada nivel
+//      angostaba la fila y los botones de la derecha se corrían hacia adentro:
+//      la columna de Drive quedaba en escalera. Cuando una fila no tiene algo
+//      —un archivo no se configura—, va un hueco del mismo ancho.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -25,13 +32,19 @@ import type { Persona } from "@/lib/equipo";
 import { ConfiguracionDeCliente } from "@/admin/ConfiguracionDeCliente";
 import { ConfiguracionDeCarpeta } from "@/admin/ConfiguracionDeCarpeta";
 import { Estado } from "@/ui/Estado";
-import { IconoDrive, IconoFlecha } from "@/ui/Icono";
+import { IconoConfig, IconoDrive, IconoFlecha } from "@/ui/Icono";
 
 const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
 const comoFecha = (dia: string) => {
   const [a, m, d] = dia.split("-").map(Number);
   return fecha.format(new Date(a, m - 1, d));
 };
+
+/** Cuánto se corre cada nivel del árbol, en píxeles. */
+const SANGRIA = 22;
+
+/** El hueco de un botón que no está, para que la columna no se mueva. */
+const Hueco = () => <span aria-hidden="true" className="h-9 w-9 shrink-0" />;
 
 /** El triángulo que abre y cierra. Gira, para que se vea qué está abierto. */
 function Abridor({
@@ -51,7 +64,7 @@ function Abridor({
       onClick={onAbrir}
       aria-expanded={abierto}
       aria-label={etiqueta}
-      className="grid h-8 w-8 shrink-0 place-items-center text-apagado transition-colors hover:bg-hueco hover:text-tinta"
+      className="grid h-9 w-9 shrink-0 place-items-center text-apagado transition-colors hover:bg-hueco hover:text-tinta"
     >
       {cargando ? (
         <span className="text-micro font-extrabold">…</span>
@@ -64,7 +77,7 @@ function Abridor({
 
 /** El botón de Drive: abre la carpeta o el archivo allá. */
 function EnDrive({ href, que }: { href?: string; que: string }) {
-  if (!href) return null;
+  if (!href) return <Hueco />;
   return (
     <a
       href={href}
@@ -82,22 +95,71 @@ function EnDrive({ href, que }: { href?: string; que: string }) {
 function BotonDeConfig({
   abierta,
   onTocar,
+  que,
 }: {
   abierta: boolean;
   onTocar: () => void;
+  que: string;
 }) {
   return (
     <button
       type="button"
       onClick={onTocar}
       aria-expanded={abierta}
-      className={`min-h-toque shrink-0 border-2 border-tinta px-3 text-menudo font-bold
-                  tracking-tight transition-colors ${
-                    abierta ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
-                  }`}
+      title={`Configuración de ${que}`}
+      className={`grid h-9 w-9 shrink-0 place-items-center transition-colors ${
+        abierta ? "bg-tinta text-lienzo" : "text-apagado hover:bg-hueco hover:text-tinta"
+      }`}
     >
-      Configuración
+      <IconoConfig />
+      <span className="sr-only">Configuración de {que}</span>
     </button>
+  );
+}
+
+/**
+ * Una fila del árbol, con todo en su columna.
+ *
+ * Recibe la sangría como número y la dibuja adentro. Así todas las filas miden
+ * lo mismo de ancho y los botones de la derecha caen siempre en el mismo lugar.
+ */
+function Fila({
+  nivel,
+  abridor,
+  children,
+  drive,
+  config,
+  atenuada,
+}: {
+  nivel: number;
+  abridor: React.ReactNode;
+  children: React.ReactNode;
+  drive: React.ReactNode;
+  config: React.ReactNode;
+  atenuada?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-2 px-2 py-2.5 ${atenuada ? "bg-hueco/40" : ""}`}
+    >
+      <span aria-hidden="true" style={{ width: nivel * SANGRIA }} className="shrink-0" />
+      {abridor}
+      <div className="min-w-0 flex-1">{children}</div>
+      {drive}
+      {config}
+    </div>
+  );
+}
+
+/** El panel que se abre debajo de una fila, alineado con su contenido. */
+function Panel({ nivel, children }: { nivel: number; children: React.ReactNode }) {
+  return (
+    <div
+      className="border-t border-linea-tenue bg-lienzo py-4 pr-4"
+      style={{ paddingLeft: nivel * SANGRIA + 44 }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -156,59 +218,66 @@ function FilaCliente({
   }
 
   return (
-    <li className={`border-b border-linea ${apagado ? "bg-hueco/40" : ""}`}>
-      <div className="flex flex-wrap items-center gap-2 px-2 py-3">
-        <Abridor
-          abierto={abierto}
-          onAbrir={alternar}
-          cargando={cargando}
-          etiqueta={`Ver las carpetas de ${cliente.nombre}`}
-        />
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3
-              className={`text-guia font-bold tracking-tight ${apagado ? "text-apagado" : ""}`}
-            >
-              {cliente.nombre}
-            </h3>
-            {apagado && (
-              <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
-                Sin acceso
-              </span>
-            )}
-            {!apagado && sinTag && (
-              <span className="bg-espera-borde px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-tinta">
-                Falta la clave
-              </span>
-            )}
-            {cliente.mensajes > 0 && (
-              <span className="bg-acento-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-acento">
-                {cliente.mensajes}
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 text-menudo text-apagado">
-            {apagado
-              ? "El robot ve su carpeta, pero el portal no la muestra."
-              : `${cliente.carpetasVisibles} de ${cliente.carpetas} ${
-                  cliente.carpetas === 1 ? "carpeta visible" : "carpetas visibles"
-                }`}
-          </p>
+    <li className="border-b border-linea">
+      <Fila
+        nivel={0}
+        atenuada={apagado}
+        abridor={
+          <Abridor
+            abierto={abierto}
+            onAbrir={alternar}
+            cargando={cargando}
+            etiqueta={`Ver las carpetas de ${cliente.nombre}`}
+          />
+        }
+        drive={<EnDrive href={cliente.enlaceDrive} que="la carpeta del cliente" />}
+        config={
+          <BotonDeConfig
+            abierta={config}
+            onTocar={() => setConfig(!config)}
+            que={cliente.nombre}
+          />
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <h3
+            className={`text-guia font-bold tracking-tight ${apagado ? "text-apagado" : ""}`}
+          >
+            {cliente.nombre}
+          </h3>
+          {apagado && (
+            <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+              Sin acceso
+            </span>
+          )}
+          {!apagado && sinTag && (
+            <span className="bg-espera-borde px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-tinta">
+              Falta la clave
+            </span>
+          )}
+          {cliente.mensajes > 0 && (
+            <span className="bg-acento-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-acento">
+              {cliente.mensajes}
+            </span>
+          )}
         </div>
-
-        <EnDrive href={cliente.enlaceDrive} que="la carpeta del cliente" />
-        <BotonDeConfig abierta={config} onTocar={() => setConfig(!config)} />
-      </div>
+        <p className="mt-0.5 text-menudo text-apagado">
+          {apagado
+            ? "El robot ve su carpeta, pero el portal no la muestra."
+            : `${cliente.carpetasVisibles} de ${cliente.carpetas} ${
+                cliente.carpetas === 1 ? "carpeta visible" : "carpetas visibles"
+              }`}
+        </p>
+      </Fila>
 
       {config && (
-        <div className="border-t border-linea-tenue bg-lienzo px-4 py-4 pl-12">
+        <Panel nivel={0}>
           <ConfiguracionDeCliente cliente={cliente} />
-        </div>
+        </Panel>
       )}
 
       {abierto && (
-        <div className="border-t border-linea-tenue pl-6">
+        <div className="border-t border-linea-tenue">
           {error && (
             <p className="px-4 py-3 text-menudo font-semibold text-alerta">{error}</p>
           )}
@@ -274,67 +343,82 @@ function FilaCarpeta({
 
   return (
     <li className="border-t border-linea-tenue">
-      <div className={`flex flex-wrap items-center gap-2 px-2 py-2.5 ${oculta ? "bg-hueco/40" : ""}`}>
-        <Abridor
-          abierto={abierta}
-          onAbrir={alternar}
-          cargando={cargando}
-          etiqueta={`Ver los archivos de ${carpeta.nombre}`}
-        />
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`font-bold tracking-tight ${oculta ? "text-apagado" : ""}`}>
-              {carpeta.nombre}
+      <Fila
+        nivel={1}
+        atenuada={oculta}
+        abridor={
+          <Abridor
+            abierto={abierta}
+            onAbrir={alternar}
+            cargando={cargando}
+            etiqueta={`Ver los archivos de ${carpeta.nombre}`}
+          />
+        }
+        drive={<EnDrive href={carpeta.enlaceDrive} que="la carpeta" />}
+        config={
+          <BotonDeConfig
+            abierta={config}
+            onTocar={() => setConfig(!config)}
+            que={carpeta.nombre}
+          />
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`font-bold tracking-tight ${oculta ? "text-apagado" : ""}`}>
+            {carpeta.nombre}
+          </span>
+          {carpeta.reservada && (
+            <span className="bg-hueco px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-apagado">
+              Reservada
             </span>
-            {carpeta.reservada && (
-              <span className="bg-hueco px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-apagado">
-                Reservada
-              </span>
-            )}
-            {oculta && (
-              <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
-                Oculta
-              </span>
-            )}
-            {carpeta.vista === "calendario" && !oculta && !carpeta.reservada && (
-              <span className="bg-acento-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-acento">
-                Calendario
-              </span>
-            )}
-          </div>
+          )}
+          {oculta && (
+            <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+              Oculta
+            </span>
+          )}
+          {carpeta.vista === "calendario" && !oculta && !carpeta.reservada && (
+            <span className="bg-acento-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-acento">
+              Calendario
+            </span>
+          )}
+          {carpeta.mensajes > 0 && (
+            <span className="bg-acento-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-acento">
+              {carpeta.mensajes}
+            </span>
+          )}
+        </div>
 
-          {!carpeta.reservada && (
-            <p className="mt-0.5 text-menudo text-apagado">
+        <p className="mt-0.5 text-menudo text-apagado">
+          {carpeta.reservada ? (
+            "Acá se mueve lo aprobado."
+          ) : (
+            <>
               {carpeta.piezas} {carpeta.piezas === 1 ? "pieza" : "piezas"} ·{" "}
               {carpeta.sinRevisar} sin revisar
               {carpeta.vence && ` · vence el ${comoFecha(carpeta.vence)}`}
               {carpeta.asignadaA ? ` · ${carpeta.asignadaA}` : " · sin asignar"}
-            </p>
+            </>
           )}
-          {carpeta.reservada && (
-            <p className="mt-0.5 text-menudo text-apagado">Acá se mueve lo aprobado.</p>
+        </p>
+      </Fila>
+
+      {config && (
+        <Panel nivel={1}>
+          {carpeta.reservada ? (
+            <ConfiguracionDeReservada carpeta={carpeta} />
+          ) : (
+            <ConfiguracionDeCarpeta
+              carpeta={carpeta}
+              clienteId={clienteId}
+              equipo={equipo}
+            />
           )}
-        </div>
-
-        <EnDrive href={carpeta.enlaceDrive} que="la carpeta" />
-        {!carpeta.reservada && (
-          <BotonDeConfig abierta={config} onTocar={() => setConfig(!config)} />
-        )}
-      </div>
-
-      {config && !carpeta.reservada && (
-        <div className="border-t border-linea-tenue bg-lienzo px-4 py-4 pl-12">
-          <ConfiguracionDeCarpeta
-            carpeta={carpeta}
-            clienteId={clienteId}
-            equipo={equipo}
-          />
-        </div>
+        </Panel>
       )}
 
       {abierta && (
-        <div className="border-t border-linea-tenue pl-6">
+        <div className="border-t border-linea-tenue">
           {error && (
             <p className="px-4 py-2 text-menudo font-semibold text-alerta">{error}</p>
           )}
@@ -346,12 +430,13 @@ function FilaCarpeta({
           {archivos && archivos.length > 0 && (
             <ul>
               {archivos.map((archivo) => (
-                <li
-                  key={archivo.id}
-                  className="flex flex-wrap items-center gap-2 border-t border-linea-tenue px-2 py-2"
-                >
-                  <span className="w-8 shrink-0" />
-                  <div className="min-w-0 flex-1">
+                <li key={archivo.id} className="border-t border-linea-tenue">
+                  <Fila
+                    nivel={2}
+                    abridor={<Hueco />}
+                    drive={<EnDrive href={archivo.enlaceDrive} que="el archivo" />}
+                    config={<Hueco />}
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-normal">{archivo.nombre}</span>
                       <Estado estado={archivo.estado} />
@@ -373,15 +458,17 @@ function FilaCarpeta({
                         {archivo.vence && `vence el ${comoFecha(archivo.vence)}`}
                       </p>
                     )}
-                  </div>
-                  <EnDrive href={archivo.enlaceDrive} que="el archivo" />
+                  </Fila>
                 </li>
               ))}
             </ul>
           )}
 
           {carpeta.vista === "calendario" && !carpeta.reservada && (
-            <div className="border-t border-linea-tenue px-2 py-2">
+            <div
+              className="border-t border-linea-tenue py-2"
+              style={{ paddingLeft: 2 * SANGRIA + 44 }}
+            >
               <Link
                 href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}`}
                 className="text-menudo font-bold text-acento underline underline-offset-4"
@@ -393,5 +480,38 @@ function FilaCarpeta({
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * La configuración de una carpeta reservada.
+ *
+ * No se configura nada —no es un trabajo— pero el engranaje está igual, porque
+ * una columna donde algunos botones faltan se lee como rota. Adentro va lo
+ * único que hay: el link a Drive y por qué no hay nada más.
+ */
+function ConfiguracionDeReservada({ carpeta }: { carpeta: NodoCarpeta }) {
+  return (
+    <div>
+      <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+        Carpeta con nombre reservado
+      </h4>
+      <p className="mt-1 max-w-xl text-menudo text-tinta-suave">
+        «{carpeta.nombre}» no es un trabajo: no se muestra como carpeta para revisar y no
+        tiene ajustes. Es a donde se mueve solo lo que el cliente aprueba.
+      </p>
+      {carpeta.enlaceDrive && (
+        <a
+          href={carpeta.enlaceDrive}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="mt-3 inline-flex min-h-toque items-center gap-2 border-2 border-tinta px-4
+                     text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
+        >
+          <IconoDrive />
+          Abrirla en Drive
+        </a>
+      )}
+    </div>
   );
 }
