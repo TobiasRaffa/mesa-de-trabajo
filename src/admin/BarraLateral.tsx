@@ -1,0 +1,90 @@
+"use client";
+
+// La barra de gestión: al costado y a lo largo.
+//
+// Estaba arriba. Al costado hay dos ganancias: la pantalla es más ancha que
+// alta —así que el lugar que sobra está a los lados, no arriba—, y una lista
+// en columna tiene espacio para decir **dónde estás parado**, que en una fila
+// de cuatro palabras no entraba.
+//
+// Ese señalamiento no es decoración. Las pantallas de gestión se parecen entre
+// sí —listas, botones de configuración, un panel a la derecha— y sin una marca
+// clara es fácil creer que estás configurando un cliente cuando estás en otro.
+//
+// En el teléfono vuelve a ser una fila que se corre de costado: en columna se
+// comía la pantalla entera antes de llegar al trabajo.
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const SECCIONES = [
+  { href: "/gestion/tablero", texto: "Qué pasó" },
+  // «Clientes» es la raíz, y la ficha de cada cliente cuelga de ella: estando
+  // adentro de un cliente, la sección que corresponde marcar sigue siendo esta.
+  { href: "/gestion", texto: "Clientes", tambien: "/gestion/cliente" },
+  { href: "/gestion/chats", texto: "Conversaciones" },
+  { href: "/gestion/equipo", texto: "Equipo" },
+  // El diagnóstico no está acá: cuando Drive falla, cada pantalla lo dice donde
+  // pasa. La ruta sigue existiendo para cuando haga falta mirar la conexión.
+] as const;
+
+/**
+ * Si una sección es la que se está mirando.
+ *
+ * `/gestion` necesita comparación exacta porque es prefijo de todas las demás:
+ * sin eso quedarían dos secciones marcadas a la vez, que es peor que ninguna.
+ */
+function esLaActual(ruta: string, seccion: (typeof SECCIONES)[number]): boolean {
+  if (seccion.href === "/gestion") {
+    return ruta === "/gestion" || ruta.startsWith(`${seccion.tambien}/`);
+  }
+  return ruta === seccion.href || ruta.startsWith(`${seccion.href}/`);
+}
+
+export function BarraLateral() {
+  const ruta = usePathname();
+
+  return (
+    <aside
+      className="flex w-full flex-col gap-6 bg-tinta p-6 text-lienzo
+                 lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:shrink-0 lg:overflow-y-auto"
+    >
+      <Link
+        href="/gestion"
+        className="text-micro font-extrabold uppercase tracking-widest text-lienzo/45
+                   transition-colors hover:text-lienzo/70"
+      >
+        Mesa de trabajo
+      </Link>
+
+      <nav aria-label="Secciones">
+        <ul className="flex gap-2 overflow-x-auto lg:flex-col lg:gap-0 lg:overflow-visible">
+          {SECCIONES.map((seccion) => {
+            const actual = esLaActual(ruta, seccion);
+            return (
+              <li key={seccion.href} className="shrink-0 lg:shrink">
+                <Link
+                  href={seccion.href}
+                  aria-current={actual ? "page" : undefined}
+                  // Un filo marca dónde estás: se ve de reojo, sin leer. Va del
+                  // lado por donde corre la lista —abajo cuando es una fila, a
+                  // la izquierda cuando es una columna—; puesto al costado en
+                  // una fila horizontal parece que separa, no que señala.
+                  className={`flex min-h-toque items-center whitespace-nowrap border-b-4 px-3
+                              text-normal font-bold tracking-tight transition-colors
+                              lg:border-b-0 lg:border-l-4 ${
+                                actual
+                                  ? "border-lienzo bg-lienzo/10 text-lienzo"
+                                  : "border-transparent text-lienzo/70 hover:bg-lienzo/5 hover:text-lienzo"
+                              }`}
+                >
+                  {seccion.texto}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </aside>
+  );
+}
