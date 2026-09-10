@@ -29,6 +29,12 @@ import { habilitarCliente, ponerTag, renovarLink, todosLosClientes } from "@/lib
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
 import { archivosDe } from "@/lib/google";
 import { correoValido } from "@/lib/equipo";
+import {
+  archivosDeCarpeta,
+  carpetasDeCliente,
+  type NodoArchivo,
+  type NodoCarpeta,
+} from "@/admin/datos/arbol";
 import { marcarTodosVistos } from "@/lib/avisos";
 import {
   cambiarPersona,
@@ -374,4 +380,40 @@ export async function quitarDelEquipo(_previo: unknown, formulario: FormData) {
 export async function marcarAvisosVistos(): Promise<void> {
   await marcarTodosVistos();
   revalidatePath("/gestion", "layout");
+}
+
+// ---------------------------------------------------------------------------
+// El árbol, nivel por nivel
+
+/**
+ * Las carpetas de un cliente, para cuando se abre su fila.
+ *
+ * Cada nivel se pide al abrirlo: leer de Drive todos los archivos de todos los
+ * clientes para dibujar una lista cerrada sería pagar por adelantado algo que
+ * casi nunca se mira.
+ */
+export async function abrirCliente(
+  clienteId: string
+): Promise<{ ok: true; carpetas: NodoCarpeta[] } | { ok: false; motivo: string }> {
+  if (!(await esClienteReal(clienteId))) {
+    return { ok: false, motivo: "Ese cliente no existe." };
+  }
+  try {
+    return { ok: true, carpetas: await carpetasDeCliente(clienteId) };
+  } catch {
+    return { ok: false, motivo: "No pude leer las carpetas en Drive." };
+  }
+}
+
+export async function abrirCarpeta(
+  carpetaId: string
+): Promise<{ ok: true; archivos: NodoArchivo[] } | { ok: false; motivo: string }> {
+  if (!(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no existe." };
+  }
+  try {
+    return { ok: true, archivos: await archivosDeCarpeta(carpetaId) };
+  } catch {
+    return { ok: false, motivo: "No pude leer los archivos en Drive." };
+  }
 }

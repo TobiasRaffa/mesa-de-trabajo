@@ -1,71 +1,73 @@
-// Las carpetas de un cliente: qué ve y cómo lo ve.
+// Un cliente solo: sus carpetas y sus mensajes listos.
+//
+// Es la misma pantalla de Clientes pero mirando a uno, con los mensajes para
+// copiar debajo. Usa **el mismo árbol** a propósito: dos formas distintas de
+// configurar lo mismo terminan divergiendo, y la que se usa menos queda vieja.
 
 import Link from "next/link";
-import { carpetasDelCliente } from "@/admin/datos/carpetas";
-import { elEquipo } from "@/lib/equipo";
+import { panelDeClientes } from "@/admin/datos/carpetas";
+import { carpetasDeCliente } from "@/admin/datos/arbol";
+import { ArbolDeClientes } from "@/admin/ArbolDeClientes";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
-import { FilaDeCarpeta } from "@/admin/FilaDeCarpeta";
 import { MensajesListos } from "@/admin/MensajesListos";
 import { ChatDeCarpeta } from "@/admin/ChatDeCarpeta";
+import { elEquipo } from "@/lib/equipo";
 
 export const dynamic = "force-dynamic";
 
-export default async function CarpetasDeCliente({
+export default async function UnCliente({
   params,
 }: PageProps<"/gestion/cliente/[clienteId]">) {
   const { clienteId } = await params;
 
-  let datos;
-  const equipo = await elEquipo();
+  let cliente;
+  let carpetas;
+  let equipo;
   try {
-    datos = await carpetasDelCliente(clienteId);
+    const todos = await panelDeClientes();
+    cliente = todos.find((c) => c.id === clienteId);
+    if (!cliente) throw new Error("No encontre ese cliente.");
+    [carpetas, equipo] = await Promise.all([carpetasDeCliente(clienteId), elEquipo()]);
   } catch (error) {
     return <ErrorDeDrive error={error} />;
   }
 
-  const deTrabajo = datos.carpetas.filter((c) => !c.reservada);
-  const reservadas = datos.carpetas.filter((c) => c.reservada);
-  const visibles = deTrabajo.filter((c) => c.visible).length;
+  // La primera carpeta de trabajo visible: es de la que se suele hablar, y la
+  // que se nombra en los mensajes listos.
+  const principal = carpetas.find((c) => !c.reservada && c.visible);
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
+    <main className="mx-auto max-w-5xl px-6 py-10">
       <header className="border-b-2 border-tinta pb-6">
         <Link
           href="/gestion"
           className="text-micro font-extrabold uppercase tracking-widest text-apagado
                      transition-colors hover:text-tinta"
         >
-          ← Clientes
+          &larr; Clientes
         </Link>
         <h1 className="mt-2 text-grande font-extrabold tracking-tight">
-          {datos.cliente.nombre}
+          {cliente.nombre}
         </h1>
-        <p className="mt-2 text-normal text-tinta-suave">
-          {visibles} de {deTrabajo.length}{" "}
-          {deTrabajo.length === 1 ? "carpeta visible" : "carpetas visibles"} para el
-          cliente.
-        </p>
-
         <div className="mt-4 flex flex-wrap gap-2">
           {/*
-            Se abre en una pestaña nueva a propósito. Así la de gestión queda
-            atrás —que era lo que faltaba: entrar al portal no tenía vuelta— y
-            **el portal no lleva ningún link de vuelta a administración**. Un
-            link adentro del portal sería una puerta de un mundo al otro, y la
-            vería también el cliente.
+            Se abre en una pestana nueva a proposito. Asi esta pantalla queda
+            atras -entrar al portal no tenia vuelta- y el portal no lleva
+            ningun link de vuelta a administracion: eso seria una puerta de un
+            mundo al otro, y la veria tambien el cliente.
           */}
           <a
-            href={`/t/${datos.cliente.token}`}
+            href={`/t/${cliente.token}`}
             target="_blank"
             rel="noreferrer noopener"
             className="inline-flex min-h-toque items-center bg-acento px-5 text-normal font-bold
                        tracking-tight text-white transition-colors hover:bg-acento-hover"
           >
-            Ver el portal como el cliente ↗
+            Ver el portal como el cliente
           </a>
-          {datos.cliente.enlaceDrive && (
+          {cliente.enlaceDrive && (
             <a
-              href={datos.cliente.enlaceDrive}
+              href={cliente.enlaceDrive}
               target="_blank"
               rel="noreferrer noopener"
               className="inline-flex min-h-toque items-center border-2 border-tinta px-5
@@ -77,79 +79,23 @@ export default async function CarpetasDeCliente({
         </div>
       </header>
 
-      <section className="mt-8">
-        <h2 className="text-titulo font-extrabold tracking-tight">Carpetas de trabajo</h2>
-        <p className="mt-1 text-menudo text-apagado">
-          Aparecen solas al crearlas en Drive. Se muestran por defecto; ocultar es la
-          acción deliberada.
-        </p>
+      <div className="mt-6">
+        <ArbolDeClientes clientes={[cliente]} equipo={equipo} />
+      </div>
 
-        {deTrabajo.length === 0 ? (
-          <p className="mt-5 border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-normal text-espera">
-            La carpeta de este cliente no tiene ninguna carpeta adentro todavía.
-          </p>
-        ) : (
-          <ul className="mt-5 border-t border-linea">
-            {deTrabajo.map((carpeta) => (
-              <FilaDeCarpeta
-                key={carpeta.id}
-                carpeta={carpeta}
-                clienteId={datos.cliente.id}
-                equipo={equipo}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {reservadas.length > 0 && (
-        <section className="mt-10">
-          <h2 className="text-titulo font-extrabold tracking-tight">
-            Carpetas con nombre reservado
-          </h2>
-          <p className="mt-1 text-menudo text-apagado">
-            No son trabajos y no se configuran. El cliente no las revisa como piezas.
-          </p>
-          <ul className="mt-4 flex flex-col gap-2">
-            {reservadas.map((c) => (
-              <li
-                key={c.id}
-                className="flex flex-wrap items-center justify-between gap-3 bg-hueco/60 px-4 py-3"
-              >
-                <span className="font-bold">{c.nombre}</span>
-                <span className="text-menudo text-apagado">
-                  Acá se mueve lo aprobado
-                  {c.enlaceDrive && (
-                    <>
-                      {" · "}
-                      <a
-                        href={c.enlaceDrive}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="font-semibold text-tinta underline underline-offset-2"
-                      >
-                        abrir en Drive
-                      </a>
-                    </>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
       <MensajesListos
         datos={{
-          cliente: datos.cliente.nombre,
-          carpeta: deTrabajo[0]?.nombre ?? "lo nuevo",
-          link: `/t/${datos.cliente.token}`,
+          cliente: cliente.nombre,
+          carpeta: principal?.nombre ?? "lo nuevo",
+          link: `/t/${cliente.token}`,
+          pendientes: principal?.sinRevisar,
         }}
         alLado={
-          deTrabajo[0] && (
+          principal && (
             <ChatDeCarpeta
-              carpetaId={deTrabajo[0].id}
-              nombre={`${datos.cliente.nombre} · ${deTrabajo[0].nombre}`}
-              cuantos={deTrabajo[0].mensajes}
+              carpetaId={principal.id}
+              nombre={`${cliente.nombre} - ${principal.nombre}`}
+              cuantos={principal.mensajes}
             />
           )
         }

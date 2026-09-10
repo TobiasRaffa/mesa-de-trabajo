@@ -37,9 +37,19 @@ export function LinkParaCompartir({
       <span className="shrink-0 text-micro font-extrabold uppercase tracking-wider text-apagado">
         {etiqueta}
       </span>
-      <code className="min-w-0 flex-1 truncate font-mono text-menudo text-tinta-suave">
+      {/*
+        Es un enlace de verdad y no un texto: mostrarlo sin poder tocarlo hace
+        que parezca roto. Abre en otra pestaña para no perder esta pantalla.
+      */}
+      <a
+        href={camino}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="min-w-0 flex-1 truncate font-mono text-menudo text-tinta underline
+                   underline-offset-2 transition-colors hover:text-acento"
+      >
         {camino}
-      </code>
+      </a>
       <button
         type="button"
         onClick={copiar}

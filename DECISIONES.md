@@ -1271,3 +1271,38 @@ Las dos primeras se arreglaron con una copia cada una. La tercera obligó a lo
 que correspondía desde el principio: **una sola función**,
 `archivosConLasMudadas`, que todas usan. Tres copias de la misma idea es la
 señal de que la idea tenía que vivir en un solo lado.
+
+## 84. El link no andaba porque no era un link.
+
+Se mostraba en un `<code>`: el texto de la dirección, sin poder tocarlo. Quien
+lo veía hacía clic y no pasaba nada, y la conclusión razonable era «el link no
+anda».
+
+No había ningún problema con generarlos —comprobado: `/t/<token>` contesta y
+pide la clave—. El problema era de la pantalla. Ahora es un enlace de verdad y
+abre en otra pestaña.
+
+La otra mitad de la confusión es la dirección: mientras la aplicación corre en
+una computadora, lo que se copia es `http://localhost:3000/...`, que solo
+funciona en **esa** computadora. Mandado a un teléfono no abre. No es un error:
+es que todavía no está en internet. Los links de verdad nacen con el despliegue.
+
+## 85. Los clientes son un árbol, y la configuración está aparte.
+
+La pantalla de clientes se abre como Drive: cliente, sus carpetas, los archivos
+de cada una. Imita esa forma porque **es** esa forma, y quien la usa ya tiene
+ese mapa en la cabeza.
+
+Dos decisiones:
+
+- **Cada nivel se pide al abrirlo.** Leer de Drive todos los archivos de todos
+  los clientes para dibujar una lista que arranca cerrada sería pagar por
+  adelantado algo que casi nunca se mira.
+- **Navegar y configurar son dos cosas.** La flecha muestra qué hay adentro; el
+  botón de configuración muestra qué se puede cambiar. Antes estaban mezclados,
+  y buscar un archivo obligaba a pasar por encima del botón que le corta el
+  acceso a un cliente.
+
+La pantalla de un cliente solo usa **el mismo árbol** y no una copia. Dos
+formas distintas de configurar lo mismo terminan divergiendo, y la que se usa
+menos queda vieja sin que nadie se entere.

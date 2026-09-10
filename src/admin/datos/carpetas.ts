@@ -5,11 +5,7 @@
 // visible —no puede filtrar lo que nunca le llegó—. Acá llega todo, porque de
 // eso se trata la pantalla: decidir qué se muestra.
 
-import {
-  ajustesDe,
-  esCarpetaReservada,
-  type AjustesDeCarpeta,
-} from "@/lib/ajustesDeCarpeta";
+import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustesDeCarpeta";
 import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
 import { cuentaPorCarpeta } from "@/lib/conversaciones";
 import { datosDeCarpeta, subcarpetasDe, type ArchivoDrive } from "@/lib/google";
@@ -20,69 +16,6 @@ import { agruparVersiones } from "@/lib/versiones";
 
 const ultimoId = (versiones: Array<{ archivo: ArchivoDrive }>) =>
   versiones[versiones.length - 1].archivo.id;
-
-export type CarpetaEnGestion = AjustesDeCarpeta & {
-  id: string;
-  nombre: string;
-  enlaceDrive?: string;
-  /** Cuántas piezas hay adentro, ya agrupadas las versiones. */
-  piezas: number;
-  /** Cuántos archivos son una segunda vuelta o más. */
-  conVueltas: number;
-  /** De esas piezas, cuántas ya tienen día de publicación. */
-  conFecha: number;
-  /** `Entregas finales` no es un trabajo: no se configura ni se muestra. */
-  reservada: boolean;
-  /** Cuántos mensajes hay en la conversación de esta carpeta. */
-  mensajes: number;
-};
-
-export type VistaDeGestion = {
-  cliente: Cliente;
-  carpetas: CarpetaEnGestion[];
-};
-
-/** Las carpetas de un cliente, con todo lo que hace falta para configurarlas. */
-export async function carpetasDelCliente(clienteId: string): Promise<VistaDeGestion> {
-  const cliente = await clientePorId(clienteId);
-  if (!cliente) throw new Error("No encontré ese cliente.");
-
-  const [subcarpetas, charlas] = await Promise.all([
-    subcarpetasDe(cliente.id),
-    cuentaPorCarpeta(),
-  ]);
-
-  const carpetas = await Promise.all(
-    subcarpetas.map(async (carpeta): Promise<CarpetaEnGestion> => {
-      const reservada = esCarpetaReservada(carpeta.name);
-      const ajustes = await ajustesDe(carpeta.id);
-      const comun = {
-        id: carpeta.id,
-        nombre: carpeta.name,
-        enlaceDrive: carpeta.webViewLink,
-        reservada,
-        mensajes: charlas[carpeta.id] ?? 0,
-        ...ajustes,
-      };
-
-      // De una carpeta reservada no hace falta contar nada: no se revisa.
-      if (reservada) return { ...comun, piezas: 0, conVueltas: 0, conFecha: 0 };
-
-      const archivos = await archivosConLasMudadas(carpeta.id);
-      const piezas = agruparVersiones(archivos);
-      const dias = await publicacionesDe(piezas.map((p) => ultimoId(p.versiones)));
-
-      return {
-        ...comun,
-        piezas: piezas.length,
-        conVueltas: piezas.filter((p) => p.versiones.length > 1).length,
-        conFecha: piezas.filter((p) => dias[ultimoId(p.versiones)]).length,
-      };
-    })
-  );
-
-  return { cliente, carpetas };
-}
 
 // ---------------------------------------------------------------------------
 
