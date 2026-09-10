@@ -21,37 +21,45 @@
 // sirve para entrar a otro lado, y fabricarla necesita la llave del servidor.
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { documento } from "@/lib/almacen";
 import { ajustesDe } from "@/lib/ajustesDeCarpeta";
 import { clientesHabilitados, type Cliente } from "@/lib/clientes";
 import { subcarpetasDe } from "@/lib/google";
 
-const CARPETA_DE_DATOS = path.join(process.cwd(), "datos");
-const ARCHIVO_SECRETO = path.join(CARPETA_DE_DATOS, "secreto.txt");
+const esTexto = (v: unknown): v is string => typeof v === "string" && v.length >= 32;
 
-let secretoEnMemoria: string | null = null;
+const guardado = documento<string>("secreto", esTexto, "");
+
+let enMemoria: string | null = null;
 
 /**
  * La llave con la que se firman las galletas.
  *
- * Se genera sola la primera vez y queda en `datos/`. Borrarla no rompe nada:
- * lo único que pasa es que todos los clientes tienen que volver a poner su tag.
+ * Se genera sola la primera vez. Borrarla no rompe nada: lo único que pasa es
+ * que todos los clientes tienen que volver a poner su clave.
+ *
+ * En internet conviene ponerla como variable de entorno: si la aplicación
+ * corre en más de una máquina, cada una generaría la suya y las sesiones se
+ * caerían al saltar de una a otra.
  */
 async function secreto(): Promise<string> {
-  if (secretoEnMemoria) return secretoEnMemoria;
-  try {
-    const guardado = (await readFile(ARCHIVO_SECRETO, "utf8")).trim();
-    if (guardado.length >= 32) {
-      secretoEnMemoria = guardado;
-      return guardado;
-    }
-  } catch {}
+  if (enMemoria) return enMemoria;
+
+  const delEntorno = process.env.SECRETO_DE_SESION?.trim();
+  if (delEntorno && delEntorno.length >= 32) {
+    enMemoria = delEntorno;
+    return delEntorno;
+  }
+
+  const anotado = await guardado.leer();
+  if (anotado) {
+    enMemoria = anotado;
+    return anotado;
+  }
 
   const nuevo = randomBytes(32).toString("base64url");
-  await mkdir(CARPETA_DE_DATOS, { recursive: true });
-  await writeFile(ARCHIVO_SECRETO, nuevo, "utf8");
-  secretoEnMemoria = nuevo;
+  await guardado.escribir(nuevo);
+  enMemoria = nuevo;
   return nuevo;
 }
 

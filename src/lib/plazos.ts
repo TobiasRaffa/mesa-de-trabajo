@@ -17,7 +17,7 @@ import { diasValidos } from "@/lib/dias";
 
 export { DIAS_POSIBLES, DIAS_POR_OMISION, diasValidos, plazoQueCorre } from "@/lib/dias";
 
-const almacen = almacenHeredable<number>("plazos.json", diasValidos);
+const almacen = almacenHeredable<number>("plazos", diasValidos);
 
 /** Los días puestos a mano. Sin entrada significa «hereda». */
 export async function plazosDe(ids: string[]): Promise<Record<string, number>> {

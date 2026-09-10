@@ -2,6 +2,7 @@
 // Netlify → variables de entorno → Google Drive → miniaturas.
 // Se borra cuando empiece la aplicación de verdad.
 
+import { dondeSeGuarda } from "@/lib/almacen";
 import { variablesFaltantes } from "@/lib/entorno";
 import { clientesHabilitados } from "@/lib/clientes";
 // Acá sí corresponde preguntarle a Drive directamente: esta pantalla existe
@@ -37,6 +38,32 @@ export default async function Diagnostico() {
       <h1 className="mt-3 text-3xl font-semibold tracking-tight">
         ¿Llega la aplicación hasta Drive?
       </h1>
+
+      {/*
+        Dónde se guarda lo que la agencia carga. Es lo primero que hay que
+        mirar después de subir la aplicación: en internet tiene que decir
+        Supabase. Si dijera archivos, todo lo que se cargue se pierde en el
+        próximo despliegue, y se perdería en silencio.
+      */}
+      <div
+        className={`mt-8 border-l-2 p-5 ${
+          dondeSeGuarda === "Supabase"
+            ? "border-slate-300 bg-slate-50"
+            : "border-amber-600 bg-amber-50"
+        }`}
+      >
+        <p className="font-semibold">
+          Lo que se carga se guarda en: <span className="font-mono">{dondeSeGuarda}</span>
+        </p>
+        {dondeSeGuarda === "archivos" && (
+          <p className="mt-2 text-sm text-amber-900">
+            Sirve acá, en esta computadora. En internet no: el disco es de solo
+            lectura y se borra en cada despliegue. Antes de subir hay que cargar{" "}
+            <code className="font-mono">SUPABASE_URL</code> y{" "}
+            <code className="font-mono">SUPABASE_SERVICE_KEY</code>.
+          </p>
+        )}
+      </div>
 
       {faltantes.length > 0 && (
         <div className="mt-8 border-l-2 border-amber-600 bg-amber-50 p-5">

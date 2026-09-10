@@ -246,3 +246,94 @@ describe("no hay caracteres de control escondidos en el fuente", () => {
     ).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Las mismas fronteras que vigila ESLint, revisadas leyendo el texto.
+ *
+ * Está repetido a propósito. `no-restricted-imports` **no se suma** entre
+ * bloques de configuración: para un archivo que cae en dos, gana el último y
+ * el primero desaparece sin decir nada. Eso ya pasó —la regla de Drive dejó
+ * muda a la frontera portal↔administración— y no se notó, porque el guardián
+ * seguía ahí, en verde, sin revisar nada.
+ *
+ * Esta prueba no sabe de configuraciones ni de precedencias: abre los archivos
+ * y busca el texto. Es tosca, y esa es la idea.
+ */
+describe("las fronteras, revisadas a mano", () => {
+  const bajo = (carpeta: string) =>
+    SIN_PRUEBAS.filter((f) => relativo(f).startsWith(carpeta));
+
+  const importa = (texto: string, expresion: RegExp) =>
+    texto.split("\n").some((linea) => expresion.test(linea));
+
+  it("el portal no importa nada de administración", () => {
+    const culpables = [...bajo("src/portal/"), ...bajo("src/app/(portal)/")]
+      .filter((f) => importa(readFileSync(f, "utf8"), /from\s+["'](@\/admin|.*\/admin\/)/))
+      .map(relativo);
+
+    expect(
+      culpables,
+      "Un descuido acá deja que una pantalla del portal lea datos de la agencia."
+    ).toEqual([]);
+  });
+
+  it("administración no importa nada del portal", () => {
+    const culpables = [...bajo("src/admin/"), ...bajo("src/app/(admin)/")]
+      .filter((f) => importa(readFileSync(f, "utf8"), /from\s+["'](@\/portal|.*\/portal\/)/))
+      .map(relativo);
+
+    expect(culpables).toEqual([]);
+  });
+
+  it("solo el almacén toca el disco", () => {
+    const permitidos = ["src/lib/almacen/"];
+    const culpables = SIN_PRUEBAS.filter(
+      (f) =>
+        !permitidos.some((p) => relativo(f).startsWith(p)) &&
+        importa(readFileSync(f, "utf8"), /from\s+["']node:fs/)
+    ).map(relativo);
+
+    expect(
+      culpables,
+      "Escribir archivos a mano no funciona en internet: en Netlify el disco " +
+        "es de solo lectura y se borra en cada despliegue. Todo lo que se " +
+        "guarda pasa por coleccion() o documento() de @/lib/almacen, que es " +
+        "lo único que hay que cambiar para mudarse a Supabase."
+    ).toEqual([]);
+  });
+
+  it("nadie le pregunta a Drive en crudo, salvo quien envuelve la respuesta", () => {
+    const permitidos = ["src/lib/piezas.ts", "src/lib/google.ts"];
+    const culpables = SIN_PRUEBAS.filter((f) => {
+      if (permitidos.includes(relativo(f))) return false;
+      const texto = readFileSync(f, "utf8");
+      // El diagnóstico sí pregunta en crudo, y lo dice: muestra qué hay en
+      // Drive, no qué piezas hay. Se anota con la excepción de ESLint al lado.
+      if (texto.includes("eslint-disable-next-line no-restricted-imports")) return false;
+      return importa(texto, /import\s*\{[^}]*\b(archivosDe|listarCarpeta)\b[^}]*\}\s*from/);
+    }).map(relativo);
+
+    expect(
+      culpables,
+      "archivosDe le pregunta a Drive, y Drive no lista las piezas aprobadas: " +
+        "se mudaron a «Entregas finales». La pregunta correcta es " +
+        "piezasDeLaCarpeta() de @/lib/piezas."
+    ).toEqual([]);
+  });
+
+  it("el dominio no depende de nada", () => {
+    const culpables = bajo("src/dominio/")
+      .filter((f) =>
+        importa(readFileSync(f, "utf8"), /from\s+["'](@\/(lib|portal|admin)|node:)/)
+      )
+      .map(relativo);
+
+    expect(
+      culpables,
+      "Si el dominio necesitara Drive o el almacén, dejaría de poder probarse " +
+        "sin infraestructura, que es todo su valor."
+    ).toEqual([]);
+  });
+});

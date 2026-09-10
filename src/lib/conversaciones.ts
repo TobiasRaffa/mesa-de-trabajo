@@ -19,9 +19,8 @@
 // que escribe la aplicación son avisos de estado, con `de: "sistema"`, que la
 // pantalla dibuja distinto para que nadie los confunda con alguien hablando.
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { coleccion, documento } from "@/lib/almacen";
 
 export type Quien = "cliente" | "agencia" | "sistema";
 
@@ -38,11 +37,6 @@ export type Mensaje = {
 /** Nadie escribe un mensaje más largo que esto sin querer romper algo. */
 export const LARGO_MAXIMO = 4000;
 
-const CARPETA_DE_DATOS = path.join(process.cwd(), "datos");
-const ARCHIVO = path.join(CARPETA_DE_DATOS, "conversaciones.json");
-
-type Guardado = Record<string, Mensaje[]>;
-
 function esMensaje(m: unknown): m is Mensaje {
   if (!m || typeof m !== "object") return false;
   const x = m as Record<string, unknown>;
@@ -55,33 +49,19 @@ function esMensaje(m: unknown): m is Mensaje {
   );
 }
 
-/**
- * Todo lo guardado.
- *
- * Lo que sale del archivo se valida igual que lo que llega por la red: el
- * archivo se puede editar a mano, y un mensaje con la forma rota reventaría
- * la pantalla en vez de simplemente no aparecer.
- */
-async function leerTodo(): Promise<Guardado> {
-  try {
-    const crudo = await readFile(ARCHIVO, "utf8");
-    const datos = JSON.parse(crudo) as unknown;
-    if (!datos || typeof datos !== "object") return {};
+/** Una conversación es un documento: el hilo entero de un cliente. */
+type Hilo = { mensajes: Mensaje[] };
 
-    const salida: Guardado = {};
-    for (const [carpeta, mensajes] of Object.entries(datos as Record<string, unknown>)) {
-      if (Array.isArray(mensajes)) salida[carpeta] = mensajes.filter(esMensaje);
-    }
-    return salida;
-  } catch {
-    // No existe todavía, o quedó a medio escribir. En los dos casos la
-    // respuesta correcta es «no hay nada dicho», que es un estado válido.
-    return {};
-  }
-}
+const esHilo = (v: unknown): v is Hilo =>
+  Boolean(v) && typeof v === "object" && Array.isArray((v as Hilo).mensajes);
+
+const almacen = coleccion<Hilo>("conversaciones", esHilo);
 
 export async function leerConversacion(clienteId: string): Promise<Mensaje[]> {
-  return (await leerTodo())[clienteId] ?? [];
+  const hilo = await almacen.uno(clienteId);
+  // Lo que sale del almacén se valida igual que lo que llega por la red: un
+  // mensaje con la forma rota reventaría la pantalla en vez de no aparecer.
+  return (hilo?.mensajes ?? []).filter(esMensaje);
 }
 
 /**
@@ -89,10 +69,6 @@ export async function leerConversacion(clienteId: string): Promise<Mensaje[]> {
  *
  * Devuelve todo y no solo el mensaje nuevo para que quien escribió vea al
  * instante lo que el otro lado dijo mientras tanto.
- *
- * Escribe a un archivo temporal y después lo renombra encima. Renombrar es
- * atómico: si se corta la luz en el medio queda la conversación vieja entera,
- * en vez de una nueva por la mitad.
  */
 export async function agregarMensaje(
   clienteId: string,
@@ -103,17 +79,11 @@ export async function agregarMensaje(
   const limpio = texto.trim().slice(0, LARGO_MAXIMO);
   if (!limpio) return leerConversacion(clienteId);
 
-  const todo = await leerTodo();
   const mensajes = [
-    ...(todo[clienteId] ?? []),
+    ...(await leerConversacion(clienteId)),
     { id: randomUUID(), de, quien, texto: limpio, cuando: new Date().toISOString() },
   ];
-
-  await mkdir(CARPETA_DE_DATOS, { recursive: true });
-  const temporal = `${ARCHIVO}.${process.pid}.tmp`;
-  await writeFile(temporal, JSON.stringify({ ...todo, [clienteId]: mensajes }, null, 2), "utf8");
-  await rename(temporal, ARCHIVO);
-
+  await almacen.guardar(clienteId, { mensajes });
   return mensajes;
 }
 
@@ -128,50 +98,46 @@ export async function agregarMensaje(
 // si es del otro y es posterior a esa marca. Los avisos de la aplicación no
 // cuentan: no son alguien hablando.
 
-const LEIDOS = path.join(CARPETA_DE_DATOS, "leidos.json");
-
 type Lado = "agencia" | "cliente";
 type Marcas = Record<Lado, Record<string, string>>;
 
+const VACIAS: Marcas = { agencia: {}, cliente: {} };
+
+const esMarcas = (v: unknown): v is Marcas =>
+  Boolean(v) && typeof v === "object" && !Array.isArray(v);
+
+const marcas = documento<Marcas>("leidos", esMarcas, VACIAS);
+
 async function leerMarcas(): Promise<Marcas> {
-  try {
-    const datos = JSON.parse(await readFile(LEIDOS, "utf8")) as unknown;
-    const crudo = (datos ?? {}) as Record<string, unknown>;
-    const lado = (cual: Lado): Record<string, string> => {
-      const x = crudo[cual];
-      if (!x || typeof x !== "object") return {};
-      return Object.fromEntries(
-        Object.entries(x as Record<string, unknown>).filter(
-          ([, v]) => typeof v === "string"
-        ) as Array<[string, string]>
-      );
-    };
-    return { agencia: lado("agencia"), cliente: lado("cliente") };
-  } catch {
-    return { agencia: {}, cliente: {} };
-  }
+  const guardadas = await marcas.leer();
+  const lado = (cual: Lado): Record<string, string> => {
+    const x = (guardadas as Record<string, unknown>)[cual];
+    if (!x || typeof x !== "object") return {};
+    return Object.fromEntries(
+      Object.entries(x as Record<string, unknown>).filter(
+        ([, v]) => typeof v === "string"
+      ) as Array<[string, string]>
+    );
+  };
+  return { agencia: lado("agencia"), cliente: lado("cliente") };
 }
 
 export async function marcarLeido(lado: Lado, clienteId: string): Promise<void> {
-  const marcas = await leerMarcas();
-  marcas[lado][clienteId] = new Date().toISOString();
-
-  await mkdir(CARPETA_DE_DATOS, { recursive: true });
-  const temporal = `${LEIDOS}.${process.pid}.tmp`;
-  await writeFile(temporal, JSON.stringify(marcas, null, 2), "utf8");
-  await rename(temporal, LEIDOS);
+  const actuales = await leerMarcas();
+  actuales[lado][clienteId] = new Date().toISOString();
+  await marcas.escribir(actuales);
 }
 
 /** Cuántos mensajes del otro lado quedaron sin leer, por cliente. */
 export async function sinLeerPorCliente(lado: Lado): Promise<Record<string, number>> {
-  const [todo, marcas] = await Promise.all([leerTodo(), leerMarcas()]);
+  const [hilos, leidas] = await Promise.all([almacen.todo(), leerMarcas()]);
   const delOtro = lado === "agencia" ? "cliente" : "agencia";
 
   const salida: Record<string, number> = {};
-  for (const [clienteId, mensajes] of Object.entries(todo)) {
-    const desde = marcas[lado][clienteId] ?? "";
-    salida[clienteId] = mensajes.filter(
-      (m) => m.de === delOtro && m.cuando > desde
+  for (const [clienteId, hilo] of Object.entries(hilos)) {
+    const desde = leidas[lado][clienteId] ?? "";
+    salida[clienteId] = hilo.mensajes.filter(
+      (m) => esMensaje(m) && m.de === delOtro && m.cuando > desde
     ).length;
   }
   return salida;

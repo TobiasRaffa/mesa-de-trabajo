@@ -12,9 +12,8 @@
 // Nada de esto le escribe al cliente. Los avisos van **hacia adentro**, al
 // equipo. Lo que sale hacia el cliente lo escribe una persona.
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { coleccion } from "@/lib/almacen";
 
 export type ClaseDeAviso =
   | "aprobo"
@@ -42,54 +41,23 @@ export type Aviso = {
   visto: boolean;
 };
 
-const CARPETA_DE_DATOS = path.join(process.cwd(), "datos");
-const ARCHIVO = path.join(CARPETA_DE_DATOS, "avisos.json");
-
 /** Cuántos se guardan. Más viejo que esto es historia, y esa vive en la pieza. */
 const TOPE = 500;
 
-function normalizar(datos: unknown): Aviso[] {
-  if (!Array.isArray(datos)) return [];
-  const salida: Aviso[] = [];
-  for (const cruda of datos) {
-    if (!cruda || typeof cruda !== "object") continue;
-    const a = cruda as Record<string, unknown>;
-    if (typeof a.id !== "string" || typeof a.cuando !== "string") continue;
-    salida.push({
-      id: a.id,
-      clase: (a.clase as ClaseDeAviso) ?? "escribio",
-      cuando: a.cuando,
-      cliente: String(a.cliente ?? ""),
-      clienteId: String(a.clienteId ?? ""),
-      carpeta: String(a.carpeta ?? ""),
-      carpetaId: String(a.carpetaId ?? ""),
-      texto: String(a.texto ?? ""),
-      paraQuien: typeof a.paraQuien === "string" ? a.paraQuien : undefined,
-      correo: (a.correo as Aviso["correo"]) ?? "sin_configurar",
-      detalleDelCorreo:
-        typeof a.detalleDelCorreo === "string" ? a.detalleDelCorreo : undefined,
-      visto: a.visto === true,
-    });
-  }
-  return salida;
+function esAviso(v: unknown): v is Aviso {
+  if (!v || typeof v !== "object") return false;
+  const a = v as Record<string, unknown>;
+  return typeof a.id === "string" && typeof a.cuando === "string";
 }
+
+const almacen = coleccion<Aviso>("avisos", esAviso);
 
 export async function losAvisos(): Promise<Aviso[]> {
-  try {
-    return normalizar(JSON.parse(await readFile(ARCHIVO, "utf8")));
-  } catch {
-    return [];
-  }
-}
-
-async function guardar(avisos: Aviso[]): Promise<void> {
-  await mkdir(CARPETA_DE_DATOS, { recursive: true });
-  const temporal = `${ARCHIVO}.${process.pid}.tmp`;
-  // Lo más nuevo primero, y se corta: la bandeja es para enterarse, no un
-  // archivo histórico.
-  const recortados = avisos.slice(0, TOPE);
-  await writeFile(temporal, JSON.stringify(recortados, null, 2), "utf8");
-  await rename(temporal, ARCHIVO);
+  // Lo más nuevo primero. Se ordena al leer y no al guardar: el almacén guarda
+  // documentos sueltos, y el orden es una decisión de esta pantalla.
+  return Object.values(await almacen.todo()).sort((a, b) =>
+    b.cuando.localeCompare(a.cuando)
+  );
 }
 
 export async function anotarAviso(
@@ -101,11 +69,22 @@ export async function anotarAviso(
     cuando: new Date().toISOString(),
     visto: false,
   };
-  await guardar([nuevo, ...(await losAvisos())]);
+
+  const todos = await losAvisos();
+  // La bandeja es para enterarse, no un archivo histórico: lo que pasa el tope
+  // se va en la misma escritura que entra lo nuevo.
+  const sobran = todos.slice(TOPE - 1).map((a) => a.id);
+  const cambios: Record<string, Aviso | undefined> = { [nuevo.id]: nuevo };
+  for (const id of sobran) cambios[id] = undefined;
+
+  await almacen.guardarVarios(cambios);
   return nuevo;
 }
 
 export async function marcarTodosVistos(): Promise<void> {
-  await guardar((await losAvisos()).map((a) => ({ ...a, visto: true })));
+  const cambios: Record<string, Aviso> = {};
+  for (const aviso of await losAvisos()) {
+    if (!aviso.visto) cambios[aviso.id] = { ...aviso, visto: true };
+  }
+  await almacen.guardarVarios(cambios);
 }
-

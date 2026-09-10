@@ -17,9 +17,8 @@
 // Cuando exista Supabase se cambia el cuerpo de este módulo y no se toca
 // ninguna pantalla.
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomBytes } from "node:crypto";
+import { coleccion } from "@/lib/almacen";
 import { carpetasCompartidas, type CarpetaDrive } from "@/lib/google";
 
 export type AjustesDeCliente = {
@@ -42,49 +41,36 @@ export type Cliente = AjustesDeCliente & {
   enlaceDrive?: string;
 };
 
-const CARPETA_DE_DATOS = path.join(process.cwd(), "datos");
-const ARCHIVO = path.join(CARPETA_DE_DATOS, "clientes.json");
-
 /**
  * 24 caracteres al azar: 96 bits.
  *
  * Adivinarlo probando no es una estrategia. El link es la mitad del acceso; la
- * otra mitad es el tag del cliente, que todavía no está.
+ * otra mitad es el tag del cliente.
  */
 function nuevoToken(): string {
   return randomBytes(12).toString("base64url");
 }
 
-type Guardado = Record<string, AjustesDeCliente>;
-
-async function leerGuardado(): Promise<Guardado> {
-  try {
-    const crudo = await readFile(ARCHIVO, "utf8");
-    const datos = JSON.parse(crudo) as unknown;
-    if (!datos || typeof datos !== "object") return {};
-
-    const salida: Guardado = {};
-    for (const [id, valor] of Object.entries(datos as Record<string, unknown>)) {
-      if (!valor || typeof valor !== "object") continue;
-      const v = valor as { habilitado?: unknown; token?: unknown; tag?: unknown };
-      if (typeof v.token !== "string" || !v.token) continue;
-      salida[id] = {
-        habilitado: typeof v.habilitado === "boolean" ? v.habilitado : true,
-        token: v.token,
-        tag: typeof v.tag === "string" ? v.tag : "",
-      };
-    }
-    return salida;
-  } catch {
-    return {};
-  }
+function esAjuste(v: unknown): v is AjustesDeCliente {
+  if (!v || typeof v !== "object") return false;
+  const x = v as Record<string, unknown>;
+  return typeof x.token === "string" && x.token.length > 0;
 }
 
-async function escribirGuardado(datos: Guardado): Promise<void> {
-  await mkdir(CARPETA_DE_DATOS, { recursive: true });
-  const temporal = `${ARCHIVO}.${process.pid}.tmp`;
-  await writeFile(temporal, JSON.stringify(datos, null, 2), "utf8");
-  await rename(temporal, ARCHIVO);
+const almacen = coleccion<AjustesDeCliente>("clientes", esAjuste);
+
+/** Lo guardado, con los huecos completados. */
+async function leerGuardado(): Promise<Record<string, AjustesDeCliente>> {
+  const todo = await almacen.todo();
+  const salida: Record<string, AjustesDeCliente> = {};
+  for (const [id, v] of Object.entries(todo)) {
+    salida[id] = {
+      habilitado: typeof v.habilitado === "boolean" ? v.habilitado : true,
+      token: v.token,
+      tag: typeof v.tag === "string" ? v.tag : "",
+    };
+  }
+  return salida;
 }
 
 /**
@@ -99,14 +85,16 @@ export async function todosLosClientes(): Promise<Cliente[]> {
   const carpetas = await carpetasCompartidas();
   const guardado = await leerGuardado();
 
-  let hayQueGuardar = false;
+  // Los clientes recién descubiertos se guardan juntos: es una carpeta nueva
+  // compartida, o cinco de una, y de a uno serían cinco escrituras.
+  const nuevos: Record<string, AjustesDeCliente> = {};
   const clientes: Cliente[] = carpetas.map((carpeta: CarpetaDrive) => {
     let ajustes = guardado[carpeta.id];
     if (!ajustes) {
       // Sin tag, el portal no deja entrar: es lo que hay que completar.
       ajustes = { habilitado: true, token: nuevoToken(), tag: "" };
       guardado[carpeta.id] = ajustes;
-      hayQueGuardar = true;
+      nuevos[carpeta.id] = ajustes;
     }
     return {
       id: carpeta.id,
@@ -118,7 +106,7 @@ export async function todosLosClientes(): Promise<Cliente[]> {
 
   // El link se genera una sola vez y se recuerda: si cambiara en cada lectura,
   // el que el cliente tiene guardado dejaría de funcionar.
-  if (hayQueGuardar) await escribirGuardado(guardado);
+  if (Object.keys(nuevos).length > 0) await almacen.guardarVarios(nuevos);
 
   return clientes.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }
@@ -134,24 +122,22 @@ export async function clientePorId(id: string): Promise<Cliente | null> {
 export async function habilitarCliente(id: string, habilitado: boolean): Promise<void> {
   const guardado = await leerGuardado();
   const actual = guardado[id];
-  guardado[id] = {
+  await almacen.guardar(id, {
     habilitado,
     token: actual?.token ?? nuevoToken(),
     tag: actual?.tag ?? "",
-  };
-  await escribirGuardado(guardado);
+  });
 }
 
 /** Le pone o le cambia el tag a un cliente. */
 export async function ponerTag(id: string, tag: string): Promise<void> {
   const guardado = await leerGuardado();
   const actual = guardado[id];
-  guardado[id] = {
+  await almacen.guardar(id, {
     habilitado: actual?.habilitado ?? true,
     token: actual?.token ?? nuevoToken(),
     tag: tag.trim().slice(0, 60),
-  };
-  await escribirGuardado(guardado);
+  });
 }
 
 /**
@@ -163,11 +149,10 @@ export async function ponerTag(id: string, tag: string): Promise<void> {
 export async function renovarLink(id: string): Promise<string> {
   const guardado = await leerGuardado();
   const token = nuevoToken();
-  guardado[id] = {
+  await almacen.guardar(id, {
     habilitado: guardado[id]?.habilitado ?? true,
     token,
     tag: guardado[id]?.tag ?? "",
-  };
-  await escribirGuardado(guardado);
+  });
   return token;
 }

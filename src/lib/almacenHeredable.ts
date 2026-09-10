@@ -18,10 +18,7 @@
 // esa carpeta no la lleva nadie. Por eso el valor guardado puede ser `null` y
 // eso no es lo mismo que la ausencia de la clave.
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
-
-const CARPETA_DE_DATOS = path.join(process.cwd(), "datos");
+import { coleccion } from "@/lib/almacen";
 
 export type AlmacenHeredable<T> = {
   /** Lo puesto a mano en cada id. Sin entrada significa «hereda». */
@@ -31,54 +28,43 @@ export type AlmacenHeredable<T> = {
   poner(id: string, valor: T | null, debajo?: string[]): Promise<void>;
 };
 
+/**
+ * `null` es un valor puesto a mano; la ausencia de la clave es «hereda». Se
+ * guarda envuelto porque el almacén no distingue «guardado como nada» de «no
+ * guardado», y esa diferencia es justamente la regla.
+ */
+type Envuelto<T> = { valor: T | null };
+
 export function almacenHeredable<T>(
-  nombreDeArchivo: string,
+  nombre: string,
   esValido: (valor: unknown) => valor is T
 ): AlmacenHeredable<T> {
-  const ARCHIVO = path.join(CARPETA_DE_DATOS, nombreDeArchivo);
+  const esEnvuelto = (v: unknown): v is Envuelto<T> => {
+    if (!v || typeof v !== "object" || !("valor" in v)) return false;
+    const dentro = (v as { valor: unknown }).valor;
+    return dentro === null || esValido(dentro);
+  };
 
-  async function leerTodo(): Promise<Record<string, T | null>> {
-    try {
-      const datos = JSON.parse(await readFile(ARCHIVO, "utf8")) as unknown;
-      if (!datos || typeof datos !== "object") return {};
-
-      const salida: Record<string, T | null> = {};
-      for (const [id, valor] of Object.entries(datos as Record<string, unknown>)) {
-        // El archivo se puede editar a mano: se acepta solo lo que tiene forma.
-        if (valor === null || esValido(valor)) salida[id] = valor as T | null;
-      }
-      return salida;
-    } catch {
-      return {};
-    }
-  }
-
-  async function escribir(datos: Record<string, T | null>): Promise<void> {
-    await mkdir(CARPETA_DE_DATOS, { recursive: true });
-    const temporal = `${ARCHIVO}.${process.pid}.tmp`;
-    await writeFile(temporal, JSON.stringify(datos, null, 2), "utf8");
-    await rename(temporal, ARCHIVO);
-  }
+  const almacen = coleccion<Envuelto<T>>(nombre, esEnvuelto);
 
   return {
     async leerVarios(ids) {
-      const todo = await leerTodo();
+      const todo = await almacen.todo();
       const salida: Record<string, T | null> = {};
-      for (const id of ids) if (id in todo) salida[id] = todo[id];
+      for (const id of ids) if (id in todo) salida[id] = todo[id].valor;
       return salida;
     },
 
     async leerUno(id) {
-      const todo = await leerTodo();
-      return id in todo ? todo[id] : undefined;
+      const guardado = await almacen.uno(id);
+      return guardado ? guardado.valor : undefined;
     },
 
     async poner(id, valor, debajo = []) {
       if (valor !== null && !esValido(valor)) return;
-      const todo = await leerTodo();
-      todo[id] = valor;
-      for (const hijo of debajo) delete todo[hijo];
-      await escribir(todo);
+      const cambios: Record<string, Envuelto<T> | undefined> = { [id]: { valor } };
+      for (const hijo of debajo) cambios[hijo] = undefined;
+      await almacen.guardarVarios(cambios);
     },
   };
 }

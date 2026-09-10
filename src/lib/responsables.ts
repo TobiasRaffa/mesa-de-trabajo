@@ -13,7 +13,7 @@ import { almacenHeredable, heredado } from "@/lib/almacenHeredable";
 
 const esTexto = (v: unknown): v is string => typeof v === "string" && v.length > 0;
 
-const almacen = almacenHeredable<string>("responsables.json", esTexto);
+const almacen = almacenHeredable<string>("responsables", esTexto);
 
 /** Lo puesto a mano. `null` es «nadie»; la ausencia es «hereda». */
 export async function responsablesDe(

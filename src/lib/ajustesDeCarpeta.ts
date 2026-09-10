@@ -5,20 +5,17 @@
 // se mira como lista o como mes**. Eso no puede vivir en Drive, porque Drive
 // no tiene dónde anotarlo.
 //
-// Hoy se guarda en un archivo al lado de la aplicación. Es lo que corresponde
-// mientras la aplicación corre en una computadora: se puede abrir con el
-// Bloc de notas, se puede copiar, y no hace falta base de datos para empezar
-// a usarla. **Cuando exista Supabase se cambia el cuerpo de este módulo y no
-// se toca ninguna pantalla**: por eso todo pasa por acá.
+// Dónde se guarda no es asunto de este módulo: se lo pide al almacén, que hoy
+// escribe archivos y mañana habla con Supabase. Acá vive **qué significa** un
+// ajuste de carpeta y qué se asume cuando falta.
 //
 // La regla por omisión es «se muestra, como lista». Una carpeta nueva en Drive
 // aparece sola, sin configurar nada; ocultarla es la acción deliberada. Al
 // revés —tener que habilitar cada carpeta— convertiría cada trabajo nuevo en
 // un trámite, que es justo lo que el portal viene a sacar del medio.
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomBytes } from "node:crypto";
+import { coleccion } from "@/lib/almacen";
 
 export type Vista = "lista" | "calendario";
 
@@ -35,14 +32,7 @@ export type AjustesDeCarpeta = {
   token?: string;
 };
 
-export type Ajustes = {
-  carpetas: Record<string, AjustesDeCarpeta>;
-};
-
 const POR_OMISION: AjustesDeCarpeta = { visible: true, vista: "lista" };
-
-const CARPETA_DE_DATOS = path.join(process.cwd(), "datos");
-const ARCHIVO = path.join(CARPETA_DE_DATOS, "ajustes.json");
 
 /**
  * Carpetas con nombre reservado: no son trabajos y el cliente no las revisa
@@ -58,85 +48,36 @@ export function esCarpetaReservada(nombre: string): boolean {
   return RESERVADAS.includes(nombre.trim().toLowerCase().replace(/\s+/g, " "));
 }
 
-/** Lo guardado, o vacío si todavía no se configuró nada. */
-async function leerAjustes(): Promise<Ajustes> {
-  try {
-    const crudo = await readFile(ARCHIVO, "utf8");
-    const datos = JSON.parse(crudo) as unknown;
-    return { carpetas: normalizar(datos) };
-  } catch {
-    // No existe todavía, o alguien lo dejó a medio escribir. En los dos casos
-    // la respuesta correcta es «no hay nada configurado», que es un estado
-    // válido: se muestra todo como lista.
-    return { carpetas: {} };
-  }
-}
-
 /**
  * Acepta solo lo que tiene la forma esperada.
  *
- * El archivo se puede editar a mano, así que lo que sale de él es tan poco
- * confiable como lo que llega por la red.
+ * Lo que sale del almacén es tan poco confiable como lo que llega por la red:
+ * lo pudo escribir una versión anterior, o alguien a mano.
  */
-function normalizar(datos: unknown): Record<string, AjustesDeCarpeta> {
-  const salida: Record<string, AjustesDeCarpeta> = {};
-  if (!datos || typeof datos !== "object") return salida;
+function esAjuste(v: unknown): v is AjustesDeCarpeta {
+  return Boolean(v) && typeof v === "object";
+}
 
-  const carpetas = (datos as { carpetas?: unknown }).carpetas;
-  if (!carpetas || typeof carpetas !== "object") return salida;
+const almacen = coleccion<Record<string, unknown>>("ajustes", esAjuste);
 
-  for (const [id, valor] of Object.entries(carpetas as Record<string, unknown>)) {
-    if (!valor || typeof valor !== "object") continue;
-    const v = valor as {
-      visible?: unknown;
-      vista?: unknown;
-      token?: unknown;
-    };
-    salida[id] = {
-      visible: typeof v.visible === "boolean" ? v.visible : POR_OMISION.visible,
-      vista: v.vista === "calendario" ? "calendario" : "lista",
-      token: typeof v.token === "string" && v.token ? v.token : undefined,
-    };
-  }
-  return salida;
+function normalizar(v: Record<string, unknown> | undefined): AjustesDeCarpeta {
+  if (!v) return POR_OMISION;
+  return {
+    visible: typeof v.visible === "boolean" ? v.visible : POR_OMISION.visible,
+    vista: v.vista === "calendario" ? "calendario" : "lista",
+    token: typeof v.token === "string" && v.token ? v.token : undefined,
+  };
 }
 
 export async function ajustesDe(carpetaId: string): Promise<AjustesDeCarpeta> {
-  const { carpetas } = await leerAjustes();
-  return carpetas[carpetaId] ?? POR_OMISION;
+  return normalizar(await almacen.uno(carpetaId));
 }
 
-/**
- * Guarda los ajustes de una carpeta.
- *
- * Escribe primero un archivo al lado y después lo renombra encima del bueno.
- * Renombrar es atómico: si se corta la luz en el medio, queda el archivo
- * viejo entero en vez de uno nuevo por la mitad —que es como se pierde una
- * configuración—.
- */
 export async function guardarAjustesDe(
   carpetaId: string,
   ajustes: AjustesDeCarpeta
 ): Promise<void> {
-  const actuales = await leerAjustes();
-  const siguiente: Ajustes = {
-    carpetas: { ...actuales.carpetas, [carpetaId]: ajustes },
-  };
-
-  await mkdir(CARPETA_DE_DATOS, { recursive: true });
-  const temporal = `${ARCHIVO}.${process.pid}.tmp`;
-  await writeFile(temporal, JSON.stringify(siguiente, null, 2), "utf8");
-  await rename(temporal, ARCHIVO);
-}
-
-/** Deja solo las carpetas que el cliente puede ver. */
-export async function soloLasVisibles<T extends { id: string; name: string }>(
-  carpetas: T[]
-): Promise<T[]> {
-  const { carpetas: guardadas } = await leerAjustes();
-  return carpetas.filter(
-    (c) => !esCarpetaReservada(c.name) && (guardadas[c.id] ?? POR_OMISION).visible
-  );
+  await almacen.guardar(carpetaId, { ...ajustes });
 }
 
 /**
@@ -144,7 +85,7 @@ export async function soloLasVisibles<T extends { id: string; name: string }>(
  *
  * Se genera cuando alguien lo pide y no antes: una carpeta que nadie va a
  * compartir por separado no necesita link, y generarlos todos de entrada
- * llenaría el archivo de tokens que no se usan nunca.
+ * llenaría el almacén de tokens que no se usan nunca.
  */
 export async function linkDeCarpeta(carpetaId: string): Promise<string> {
   const ajustes = await ajustesDe(carpetaId);
@@ -153,4 +94,14 @@ export async function linkDeCarpeta(carpetaId: string): Promise<string> {
   const token = randomBytes(12).toString("base64url");
   await guardarAjustesDe(carpetaId, { ...ajustes, token });
   return token;
+}
+
+/** Deja solo las carpetas que el cliente puede ver. */
+export async function soloLasVisibles<T extends { id: string; name: string }>(
+  carpetas: T[]
+): Promise<T[]> {
+  const guardadas = await almacen.todo();
+  return carpetas.filter(
+    (c) => !esCarpetaReservada(c.name) && normalizar(guardadas[c.id]).visible
+  );
 }

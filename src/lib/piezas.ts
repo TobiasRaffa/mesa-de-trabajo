@@ -13,9 +13,8 @@
 // la discusión de «esto ya lo habíamos aprobado» sin que nadie tenga que
 // acordarse.
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { coleccion } from "@/lib/almacen";
 import type { Estado } from "@/dominio/pieza";
 import { archivosDe, metadatosArchivo, type ArchivoDrive } from "@/lib/google";
 
@@ -55,9 +54,6 @@ export type EstadoDePieza = {
   historia: EntradaDeHistoria[];
 };
 
-const CARPETA_DE_DATOS = path.join(process.cwd(), "datos");
-const ARCHIVO = path.join(CARPETA_DE_DATOS, "piezas.json");
-
 const ESTADOS: Estado[] = [
   "en_curso",
   "entregada",
@@ -82,8 +78,6 @@ function sinTocar(carpetaId: string): EstadoDePieza {
   };
 }
 
-type Guardado = Record<string, EstadoDePieza>;
-
 function esCambio(c: unknown): c is Cambio {
   const x = c as Record<string, unknown> | null;
   return !!x && typeof x.id === "string" && typeof x.texto === "string";
@@ -101,59 +95,41 @@ function esHito(h: unknown): h is EntradaDeHistoria {
 }
 
 /**
- * Acepta solo lo que tiene la forma esperada.
+ * Acepta solo lo que tiene la forma esperada, y completa el resto.
  *
- * El archivo se puede editar a mano y lo escribió una versión anterior de la
- * aplicación: lo que sale de él es tan poco confiable como lo que llega por la
- * red. Un estado que no existe se cae a «entregada», que es el más inofensivo
- * —no aprueba nada ni cierra nada—.
+ * Lo que sale del almacén lo pudo escribir una versión anterior de la
+ * aplicación, o alguien a mano. Un estado que no existe se cae a «entregada»,
+ * que es el más inofensivo: no aprueba nada ni cierra nada.
  */
-function normalizar(datos: unknown): Guardado {
-  const salida: Guardado = {};
-  if (!datos || typeof datos !== "object") return salida;
-
-  for (const [id, valor] of Object.entries(datos as Record<string, unknown>)) {
-    if (!valor || typeof valor !== "object") continue;
-    const v = valor as Record<string, unknown>;
-    if (typeof v.carpetaId !== "string") continue;
-
-    salida[id] = {
-      carpetaId: v.carpetaId,
-      estado: ESTADOS.includes(v.estado as Estado) ? (v.estado as Estado) : "entregada",
-      ronda: typeof v.ronda === "number" && v.ronda >= 0 ? v.ronda : 0,
-      rondasExtra: typeof v.rondasExtra === "number" && v.rondasExtra >= 0 ? v.rondasExtra : 0,
-      cambios: Array.isArray(v.cambios) ? v.cambios.filter(esCambio) : [],
-      enviada: v.enviada === true,
-      mudada: v.mudada === true,
-      historia: Array.isArray(v.historia) ? v.historia.filter(esHito) : [],
-    };
-  }
-  return salida;
+function esPieza(v: unknown): v is EstadoDePieza {
+  return Boolean(v) && typeof v === "object" && typeof (v as EstadoDePieza).carpetaId === "string";
 }
 
-async function leerTodo(): Promise<Guardado> {
-  try {
-    return normalizar(JSON.parse(await readFile(ARCHIVO, "utf8")));
-  } catch {
-    return {};
-  }
+function normalizar(v: EstadoDePieza): EstadoDePieza {
+  const crudo = v as unknown as Record<string, unknown>;
+  return {
+    carpetaId: v.carpetaId,
+    estado: ESTADOS.includes(crudo.estado as Estado) ? (crudo.estado as Estado) : "entregada",
+    ronda: typeof crudo.ronda === "number" && crudo.ronda >= 0 ? crudo.ronda : 0,
+    rondasExtra:
+      typeof crudo.rondasExtra === "number" && crudo.rondasExtra >= 0 ? crudo.rondasExtra : 0,
+    cambios: Array.isArray(crudo.cambios) ? crudo.cambios.filter(esCambio) : [],
+    enviada: crudo.enviada === true,
+    mudada: crudo.mudada === true,
+    historia: Array.isArray(crudo.historia) ? crudo.historia.filter(esHito) : [],
+  };
 }
 
-async function escribirTodo(datos: Guardado): Promise<void> {
-  await mkdir(CARPETA_DE_DATOS, { recursive: true });
-  const temporal = `${ARCHIVO}.${process.pid}.tmp`;
-  await writeFile(temporal, JSON.stringify(datos, null, 2), "utf8");
-  await rename(temporal, ARCHIVO);
-}
+const almacen = coleccion<EstadoDePieza>("piezas", esPieza);
 
 /** El estado de varias piezas de una carpeta. Las que nadie tocó vienen a nuevo. */
 export async function estadosDe(
   carpetaId: string,
   piezas: string[]
 ): Promise<Record<string, EstadoDePieza>> {
-  const todo = await leerTodo();
+  const todo = await almacen.todo();
   return Object.fromEntries(
-    piezas.map((id) => [id, todo[id] ?? sinTocar(carpetaId)])
+    piezas.map((id) => [id, todo[id] ? normalizar(todo[id]) : sinTocar(carpetaId)])
   );
 }
 
@@ -161,15 +137,27 @@ export async function estadoDe(
   carpetaId: string,
   piezaId: string
 ): Promise<EstadoDePieza> {
-  return (await leerTodo())[piezaId] ?? sinTocar(carpetaId);
+  const guardada = await almacen.uno(piezaId);
+  return guardada ? normalizar(guardada) : sinTocar(carpetaId);
 }
 
 /** Las piezas que se mudaron a «Entregas finales» pero salieron de esta carpeta. */
 async function mudadasDe(carpetaId: string): Promise<string[]> {
-  const todo = await leerTodo();
+  const todo = await almacen.todo();
   return Object.entries(todo)
     .filter(([, p]) => p.mudada && p.carpetaId === carpetaId)
     .map(([id]) => id);
+}
+
+export async function guardarPieza(piezaId: string, estado: EstadoDePieza): Promise<void> {
+  await almacen.guardar(piezaId, estado);
+}
+
+/** Guarda varias de una vez: cerrar una revisión toca todas las piezas juntas. */
+export async function guardarPiezas(
+  cambios: Record<string, EstadoDePieza>
+): Promise<void> {
+  await almacen.guardarVarios(cambios);
 }
 
 export function anotar(
@@ -185,19 +173,6 @@ export function anotar(
       { id: randomUUID(), que, quien, cuando: new Date().toISOString(), detalle },
     ],
   };
-}
-
-export async function guardarPieza(piezaId: string, estado: EstadoDePieza): Promise<void> {
-  const todo = await leerTodo();
-  await escribirTodo({ ...todo, [piezaId]: estado });
-}
-
-/** Guarda varias de una vez: cerrar una revisión toca todas las piezas juntas. */
-export async function guardarPiezas(
-  cambios: Record<string, EstadoDePieza>
-): Promise<void> {
-  const todo = await leerTodo();
-  await escribirTodo({ ...todo, ...cambios });
 }
 
 // ---------------------------------------------------------------------------

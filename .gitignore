@@ -30,8 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# Las llaves de verdad no se suben. El ejemplo si: es la lista de que hace
+# falta configurar, y sin el nadie sabe que variables existen. Ojo con el
+# orden, la excepcion tiene que ir DESPUES de la regla que la tapa.
 .env*
+!.env.example
 
 # vercel
 .vercel

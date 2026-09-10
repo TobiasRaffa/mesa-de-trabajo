@@ -11,14 +11,10 @@
 // «el 12», no «el 12 a las 03:00 UTC»: guardar una hora que nadie eligió es
 // pedir que un cambio de horario lo mueva un día.
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { coleccion } from "@/lib/almacen";
 
 /** `AAAA-MM-DD`. */
 export type DiaSuelto = string;
-
-const CARPETA_DE_DATOS = path.join(process.cwd(), "datos");
-const ARCHIVO = path.join(CARPETA_DE_DATOS, "publicaciones.json");
 
 const FORMA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -54,27 +50,10 @@ export function fechaDeDia(dia: DiaSuelto): Date {
   return new Date(a, m - 1, d);
 }
 
-type Guardado = Record<string, DiaSuelto>;
-
-async function leerTodo(): Promise<Guardado> {
-  try {
-    const crudo = await readFile(ARCHIVO, "utf8");
-    const datos = JSON.parse(crudo) as unknown;
-    if (!datos || typeof datos !== "object") return {};
-
-    const salida: Guardado = {};
-    for (const [archivo, dia] of Object.entries(datos as Record<string, unknown>)) {
-      // El archivo se puede editar a mano: se acepta solo lo que tiene forma.
-      if (esDiaValido(dia)) salida[archivo] = dia;
-    }
-    return salida;
-  } catch {
-    return {};
-  }
-}
+const almacen = coleccion<DiaSuelto>("publicaciones", esDiaValido);
 
 export async function publicacionesDe(archivos: string[]): Promise<Record<string, DiaSuelto>> {
-  const todo = await leerTodo();
+  const todo = await almacen.todo();
   const salida: Record<string, DiaSuelto> = {};
   for (const id of archivos) if (todo[id]) salida[id] = todo[id];
   return salida;
@@ -85,7 +64,7 @@ export async function publicacionesDe(archivos: string[]): Promise<Record<string
  *
  * Es una sola operación y no una por pieza porque así se guarda el calendario:
  * se acomodan varias piezas y recién ahí se aprieta guardar. Media docena de
- * escrituras sueltas podrían dejar el archivo a mitad de camino si algo falla
+ * escrituras sueltas podrían dejar el guardado a mitad de camino si algo falla
  * en el medio.
  *
  * Un archivo con `null` pierde su fecha: es cómo se saca una pieza del
@@ -94,15 +73,10 @@ export async function publicacionesDe(archivos: string[]): Promise<Record<string
 export async function guardarPublicaciones(
   cambios: Record<string, DiaSuelto | null>
 ): Promise<void> {
-  const todo = await leerTodo();
-
+  const aGuardar: Record<string, DiaSuelto | undefined> = {};
   for (const [archivo, dia] of Object.entries(cambios)) {
-    if (dia === null) delete todo[archivo];
-    else if (esDiaValido(dia)) todo[archivo] = dia;
+    if (dia === null) aGuardar[archivo] = undefined;
+    else if (esDiaValido(dia)) aGuardar[archivo] = dia;
   }
-
-  await mkdir(CARPETA_DE_DATOS, { recursive: true });
-  const temporal = `${ARCHIVO}.${process.pid}.tmp`;
-  await writeFile(temporal, JSON.stringify(todo, null, 2), "utf8");
-  await rename(temporal, ARCHIVO);
+  await almacen.guardarVarios(aGuardar);
 }
