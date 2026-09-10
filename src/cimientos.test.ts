@@ -1,0 +1,248 @@
+// Los cimientos: las reglas que no se ven en ninguna pantalla.
+//
+// Cada prueba de este archivo existe porque **algo se rompió de esa manera**, y
+// arreglarlo una vez no alcanza: mientras la forma equivocada siga siendo
+// posible, se vuelve a hacer. Acá está anotado qué pasó en cada caso.
+//
+// Son pruebas toscas —leen los archivos como texto, preguntan cosas simples— y
+// eso es a propósito: una regla lista se le escapa el caso raro, que es
+// justamente el que rompe.
+
+import { execFileSync } from "node:child_process";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+const RAIZ = process.cwd();
+const FUENTE = path.join(RAIZ, "src");
+
+function archivosBajo(carpeta: string, extensiones = /\.(ts|tsx)$/): string[] {
+  const salida: string[] = [];
+  for (const entrada of readdirSync(carpeta)) {
+    const completo = path.join(carpeta, entrada);
+    if (statSync(completo).isDirectory()) salida.push(...archivosBajo(completo, extensiones));
+    else if (extensiones.test(entrada)) salida.push(completo);
+  }
+  return salida;
+}
+
+const TODOS = archivosBajo(FUENTE);
+const SIN_PRUEBAS = TODOS.filter((f) => !f.endsWith(".test.ts") && !f.endsWith(".test.tsx"));
+const relativo = (f: string) => path.relative(RAIZ, f).replace(/\\/g, "/");
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Resuelve un import `@/loquesea` al archivo real.
+ *
+ * Prueba las cuatro formas en que puede estar escrito en disco. Devuelve
+ * `null` para lo que no es nuestro —`react`, `node:fs`, `next/link`—.
+ */
+function resolver(especificador: string): string | null {
+  if (!especificador.startsWith("@/")) return null;
+  const base = path.join(FUENTE, especificador.slice(2));
+  for (const intento of [`${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")]) {
+    try {
+      if (statSync(intento).isFile()) return intento;
+    } catch {}
+  }
+  return null;
+}
+
+/** Lo que un archivo importa **de verdad**, sin contar los tipos. */
+function importaDe(archivo: string): { modulos: string[]; deNode: boolean } {
+  const texto = readFileSync(archivo, "utf8");
+  const modulos: string[] = [];
+  let deNode = false;
+
+  // `import ... from "x"` y `import "x"`, en una o varias líneas.
+  for (const m of texto.matchAll(/import\s+([\s\S]*?)from\s+["']([^"']+)["']/g)) {
+    const especificadores = m[1];
+    const modulo = m[2];
+
+    if (modulo.startsWith("node:")) {
+      deNode = true;
+      continue;
+    }
+
+    // Un import de tipos desaparece al compilar: no arrastra nada al paquete
+    // del navegador. `import type {...}` y `{ type A, type B }` cuentan igual.
+    const soloTipos =
+      /^\s*type\s/.test(especificadores) ||
+      (especificadores.includes("{") &&
+        especificadores
+          .replace(/[\s\S]*\{([\s\S]*)\}[\s\S]*/, "$1")
+          .split(",")
+          .filter((x) => x.trim())
+          .every((x) => x.trim().startsWith("type ")));
+
+    if (!soloTipos) modulos.push(modulo);
+  }
+
+  return { modulos, deNode };
+}
+
+const esCliente = (archivo: string) =>
+  /^\s*["']use client["']/.test(readFileSync(archivo, "utf8"));
+const esServidor = (archivo: string) =>
+  /^\s*["']use server["']/.test(readFileSync(archivo, "utf8"));
+
+// ---------------------------------------------------------------------------
+
+describe("nada del servidor llega al navegador", () => {
+  /**
+   * Pasó, y no fue barato: el desplegable de días importaba sus constantes de
+   * `plazos.ts`, que lee y escribe archivos. Turbopack falló con «the chunking
+   * context does not support external modules (request: node:fs/promises)» y
+   * **se cayó la compilación entera**, con un mensaje que no nombra ni al
+   * archivo culpable ni al que lo importó.
+   *
+   * El recorrido se corta en los archivos `"use server"`: una acción de
+   * servidor importada desde el navegador no arrastra sus dependencias, Next
+   * la reemplaza por una referencia.
+   */
+  it.each(TODOS.filter(esCliente).map(relativo))(
+    "%s no alcanza ningún módulo que use node:",
+    (relativoDelCliente) => {
+      const inicio = path.join(RAIZ, relativoDelCliente);
+      const vistos = new Set<string>([inicio]);
+      const camino = new Map<string, string[]>([[inicio, [relativoDelCliente]]]);
+      const pendientes = [inicio];
+
+      while (pendientes.length > 0) {
+        const actual = pendientes.shift()!;
+        const { modulos, deNode } = importaDe(actual);
+
+        expect(
+          deNode ? camino.get(actual)!.join("  →  ") : null,
+          "Esta cadena termina en un módulo que usa node:, y eso rompe la " +
+            "compilación del navegador. Lo que una pantalla necesita saber va " +
+            "en un módulo que no toque el servidor."
+        ).toBeNull();
+
+        for (const modulo of modulos) {
+          const destino = resolver(modulo);
+          if (!destino || vistos.has(destino)) continue;
+          // Una acción de servidor es una puerta, no una dependencia.
+          if (esServidor(destino)) continue;
+          vistos.add(destino);
+          camino.set(destino, [...camino.get(actual)!, relativo(destino)]);
+          pendientes.push(destino);
+        }
+      }
+    }
+  );
+});
+
+describe("ningún archivo del proyecto queda invisible para git", () => {
+  /**
+   * Pasó: una regla `datos/` sin anclar tapó también `src/admin/datos` y
+   * `src/portal/datos`, que son código fuente. Un archivo se creó y **nunca se
+   * commiteó**, sin error ni aviso: `git status` simplemente no lo mostraba.
+   */
+  it("no hay fuentes ignoradas por .gitignore", () => {
+    const rutas = SIN_PRUEBAS.map(relativo);
+    let ignorados: string[] = [];
+    try {
+      // `--no-index` es lo que hace que esto sirva: sin él, `check-ignore`
+      // saltea los archivos que ya están rastreados y la regla mala pasa
+      // desapercibida hasta que alguien crea un archivo nuevo ahí.
+      // Devuelve 1 cuando no ignora ninguno: eso es lo bueno.
+      const salida = execFileSync("git", ["check-ignore", "--no-index", "--", ...rutas], {
+        cwd: RAIZ,
+        encoding: "utf8",
+      });
+      ignorados = salida.split("\n").filter(Boolean);
+    } catch {
+      ignorados = [];
+    }
+
+    expect(
+      ignorados,
+      "Estos archivos existen pero git no los ve, así que no se commitean y " +
+        "nadie se entera. Suele ser una regla de .gitignore sin anclar: " +
+        "`datos/` tapa cualquier carpeta con ese nombre, `/datos/` solo la raíz."
+    ).toEqual([]);
+  });
+});
+
+describe("las acciones del portal no reciben de quién son", () => {
+  /**
+   * Pasó: `moverPieza(clienteId, ...)` recibía el cliente del navegador y le
+   * creía. Un pedido armado a mano podía aprobar la pieza de un cliente
+   * diciendo ser otro, y el archivo terminaba en las «Entregas finales» del
+   * otro.
+   *
+   * De afuera se acepta la referencia mínima —esta carpeta, esta pieza— y todo
+   * lo demás se deduce en el servidor.
+   */
+  it("ninguna acción del portal toma un clienteId", () => {
+    const texto = readFileSync(path.join(FUENTE, "portal", "acciones.ts"), "utf8");
+    const culpables: string[] = [];
+
+    for (const m of texto.matchAll(/export async function (\w+)\(([\s\S]*?)\)\s*:/g)) {
+      if (/\bclienteId\s*:/.test(m[2])) culpables.push(m[1]);
+    }
+
+    expect(
+      culpables,
+      "Estas acciones reciben el cliente del navegador. Se deduce de la " +
+        "carpeta con clienteDeCarpeta(), que no se puede falsear."
+    ).toEqual([]);
+  });
+});
+
+describe("las cabeceras de seguridad siguen puestas", () => {
+  /**
+   * Se agregaron después de sondear la aplicación y encontrar que no había
+   * ninguna. Sin una prueba, desaparecen el día que alguien reordene el
+   * archivo de configuración y nadie lo note hasta que sea tarde.
+   */
+  const config = readFileSync(path.join(RAIZ, "next.config.ts"), "utf8");
+
+  it.each([
+    ["frame-ancestors", "que la aplicación no se pueda meter en un iframe ajeno"],
+    ["Referrer-Policy", "que la dirección con el link del cliente no viaje a otros sitios"],
+    ["X-Content-Type-Options", "que el navegador no adivine el tipo de un archivo"],
+    ["base-uri", "que nadie pueda cambiar de dónde cuelgan las direcciones relativas"],
+    ["form-action", "que un formulario no se pueda mandar a otro servidor"],
+  ])("%s sigue configurada", (cabecera) => {
+    expect(config).toContain(cabecera);
+  });
+});
+
+describe("no hay caracteres de control escondidos en el fuente", () => {
+  /**
+   * Pasó dos veces, y las dos por la misma razón: escribir archivos con
+   * secuencias de escape que la herramienta del medio interpretó. Una vez
+   * `\n` quedó como salto real y dejó una función sin hacer nada; otra, `\a`
+   * se convirtió en el carácter 7 y dejó `datos\ajustes.json` escrito como
+   * `datos␇justes.json`.
+   *
+   * Son invisibles al leer el archivo. Esta prueba los ve.
+   */
+  // Se arma desde un texto con escapes y no se escribe tal cual: escrita,
+  // la clase sería invisible en el fuente y cualquier herramienta que toque
+  // el archivo se la podría comer. Es exactamente lo que se está probando.
+  const CONTROL = new RegExp("[\u0000-\u0008\u000b\u000c\u000e-\u001f]");
+
+  const revisables = [
+    ...SIN_PRUEBAS,
+    ...archivosBajo(path.join(FUENTE, "app"), /\.css$/),
+    path.join(RAIZ, "COMO-USAR.md"),
+    path.join(RAIZ, "DECISIONES.md"),
+    path.join(RAIZ, "PREPARAR-DRIVE.md"),
+  ];
+
+  it("ningún archivo tiene uno", () => {
+    const culpables = revisables
+      .filter((f) => CONTROL.test(readFileSync(f, "utf8")))
+      .map(relativo);
+
+    expect(
+      culpables,
+      "Estos archivos tienen caracteres de control invisibles. Suele ser una " +
+        "secuencia de escape que se interpretó al escribir el archivo."
+    ).toEqual([]);
+  });
+});

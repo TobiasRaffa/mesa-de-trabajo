@@ -1589,3 +1589,42 @@ el equipo comparte una sola bandeja.
 De paso: «Descargar archivos» dejó de tener número. No era algo pendiente que
 alguien tuviera que atender, y competía por la misma atención que el que sí lo
 es.
+
+## 105. Los dos «issues» eran extensiones del navegador.
+
+`bis_skin_checked="1"` lo escribe **Bitdefender** en el HTML antes de que React
+lo tome; el otro es **MetaMask** inyectando su script. El propio mensaje de
+Next lo dice al final: «puede pasar si el cliente tiene una extensión instalada
+que toca el HTML antes de que React cargue».
+
+Comprobado: no usamos `hidden` en ninguna parte ni producimos ese atributo, y
+la aplicación abierta en un navegador sin extensiones —el del panel— no tira
+un solo error en ninguna de las siete pantallas.
+
+**No se arregla desde acá, y taparlo sería peor.** Existe
+`suppressHydrationWarning`, pero apagaría también los avisos de verdad, que son
+los que queremos ver. Lo que corresponde es probar en una ventana sin
+extensiones cuando se quiera mirar la consola.
+
+## 106. Los cimientos, escritos como pruebas.
+
+Repaso de todo lo que se rompió hasta acá. Las que ya tenían guardián —el
+dominio, la hoja de estilos, la pila de ventanas, los permisos, las puertas
+entre los dos mundos, la pregunta a Drive, el calendario— siguen igual. Las que
+**no** lo tenían ahora están en `src/cimientos.test.ts`:
+
+| Qué se rompió | Qué lo vigila ahora |
+|---|---|
+| `node:fs` llegó al navegador y cayó la compilación entera | Recorre lo que importa cada pantalla y falla si la cadena termina en `node:` |
+| Una regla de `.gitignore` sin anclar se comió un archivo fuente | Le pregunta a git si ignora algo de `src` |
+| Una acción del portal recibía de qué cliente era y le creía | Ninguna acción del portal puede tomar un `clienteId` |
+| Las cabeceras de seguridad no las miraba nadie | Las busca en la configuración |
+| Un `\a` quedó como carácter 7 y escribió `datos␇justes.json` | Busca caracteres de control en el fuente y en los documentos |
+
+Las cinco están **comprobadas rompiendo el código a propósito**: se volvió a
+meter cada error y se verificó que la prueba falla.
+
+Una que costó encontrar: `git check-ignore` **saltea los archivos ya
+rastreados**, así que la primera versión de esa prueba pasaba con la regla
+mala puesta. Con `--no-index` mira la regla misma. Un guardián que no atrapa es
+peor que ninguno, porque da tranquilidad falsa.
