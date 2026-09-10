@@ -40,8 +40,11 @@ import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import type { VersionDePieza } from "@/portal/datos/cliente";
+import type { Cambio } from "@/lib/piezas";
 
-export type Cambio = { id: string; texto: string };
+// El tipo vive en `lib/piezas` porque también lo usa el servidor: es lo que se
+// guarda, no solo lo que se dibuja.
+export type { Cambio };
 
 export type PiezaAbierta = Pieza & {
   id: string;

@@ -16,7 +16,13 @@ const AJENA = "carpeta-que-no-administramos";
 const mock = vi.mocked(metadatosArchivo);
 const clientes = vi.mocked(clientesHabilitados);
 
-const cliente = (id: string) => ({ id, nombre: id, habilitado: true, token: "t-" + id });
+const cliente = (id: string) => ({
+  id,
+  nombre: id,
+  habilitado: true,
+  token: "t-" + id,
+  tag: "tag-" + id,
+});
 
 const archivo = (parents: string[] | undefined) => ({
   id: "archivo-1",

@@ -1099,3 +1099,95 @@ las carpetas donde no se habló nunca.
 «El último que habló fue el cliente» es lo más parecido a «sin responder» que
 se puede saber sin registrar quién leyó qué. Cuando existan los usuarios pasa
 a ser «no leído» de verdad, por persona.
+
+## 73. El estado de las piezas se mudó al servidor.
+
+Vivía en el navegador del cliente, y eso tenía un techo: **si la aprobación no
+llega al servidor, nada puede reaccionar a ella**. No se puede mover el archivo
+a «Entregas finales», no se le puede avisar a nadie, y gestión no puede decir
+qué pasó. Todo lo que se pidió después dependía de esto.
+
+De paso arregla algo que ya molestaba: el cliente que revisaba desde el
+teléfono y seguía desde la computadora encontraba dos borradores distintos.
+
+Las reglas **no se mudaron**: `aplicar()` sigue siendo la misma función, ahora
+llamada desde el servidor. Lo que se agregó alrededor es comprobar que el
+pedido sea legítimo, guardar, y anotar en la historia.
+
+La pantalla **no es optimista**: espera la respuesta y muestra lo que de verdad
+quedó guardado. Adivinar el resultado y corregirlo después es cómo se termina
+mostrando una aprobación que no ocurrió.
+
+## 74. Aprobar mueve el archivo, y la pieza sigue a la vista.
+
+Cuando el cliente aprueba, el archivo se muda a «Entregas finales» del cliente.
+Ahí es donde lo va a buscar dentro de tres meses.
+
+Dos cosas que hacen esto seguro:
+
+- **El robot no puede borrar** (comprobado: `canDelete: false`). Mover es lo
+  único que puede hacerle a un archivo, así que el peor error posible es
+  dejarlo en la carpeta equivocada.
+- **Si Drive no contesta, la aprobación vale igual.** Mover es una consecuencia
+  de aprobar, no una condición: se anota «no se pudo mover» y sigue. Que Google
+  esté caído no puede deshacer la decisión que tomó una persona.
+
+**La consecuencia que había que resolver:** una vez mudado, Drive ya no lista
+el archivo en la carpeta de trabajo, así que la pieza desaparecía del portal
+—el cliente perdía de vista justo lo que acababa de aprobar, y con eso el botón
+de descargarlo—. Por eso el estado recuerda de qué carpeta salió, y las piezas
+mudadas se vuelven a traer por su identificador. Aprobar no puede costarle al
+cliente perder la pieza de vista.
+
+## 75. Dos links: uno del cliente y uno por carpeta.
+
+- **Link del cliente**: todas sus carpetas visibles.
+- **Link de una carpeta**: esa sola. Sirve para mandar «Calendario septiembre»
+  sin que de paso se vea «Rediseño de identidad».
+
+Uno de cada y estables. El del cliente se genera al descubrirlo; el de una
+carpeta, recién cuando alguien lo pide —una carpeta que nadie va a compartir
+por separado no necesita link, y generarlos todos de entrada llenaría el
+archivo de tokens que no se usan nunca—.
+
+## 76. El tag es la segunda mitad del acceso, y no viaja en la dirección.
+
+El link solo no alcanza: se reenvía sin querer, queda en un chat de grupo, lo
+ve quien mira el teléfono de al lado. El tag es una palabra que elige la
+agencia y le pasa al cliente **por otro lado** —mandar los dos juntos es mandar
+la llave pegada a la puerta—.
+
+Cuatro decisiones alrededor:
+
+| | |
+|---|---|
+| El tag **no viaja en la URL**, ni después de acertarlo | En la URL se copia al compartir, queda en el historial y viaja en `Referer` |
+| Lo que queda es una galleta **firmada**, sin el tag adentro | Dice «este navegador acertó el de este link». Leerla no sirve para otro lado; fabricarla necesita la llave del servidor |
+| Se compara **en tiempo constante** | `===` tarda distinto según cuánto coincide, y eso se mide |
+| Se frena al octavo intento por link | El link ya es lo caro de adivinar; el freno cubre a quien consiguió el link y prueba tags a mano |
+
+Un link que no vale, un cliente apagado y un tag equivocado dan **el mismo
+mensaje**. Distinguirlos le diría a quien prueba si acertó a medias.
+
+**Sin tag, el portal no deja entrar a nadie**, ni con el link correcto. Es el
+estado seguro mientras alguien no decidió cuál va, y la pantalla de gestión lo
+marca en amarillo.
+
+## 77. Ver el portal desde gestión abre una pestaña nueva.
+
+Entrar al portal desde gestión no tenía vuelta atrás. La solución **no** fue
+poner un link de vuelta: un link a administración adentro del portal sería una
+puerta de un mundo al otro, y la vería también el cliente.
+
+Se abre en una pestaña nueva. La de gestión queda donde estaba, y el portal
+sigue sin saber que administración existe.
+
+## 78. La historia se anota sola.
+
+Cada decisión queda con quién y cuándo: aprobó, pidió cambios, envió la
+revisión, se movió a finales. Es lo que contesta «esto ya lo habíamos
+aprobado» sin que nadie tenga que acordarse.
+
+Se muestra en la pantalla de la carpeta, con lo último arriba, y con los
+cambios pedidos al lado. Los avisos de la aplicación —«se movió a Entregas
+finales»— figuran a nombre de la aplicación y no de una persona.

@@ -16,11 +16,17 @@
 // estado. En qué anda cada pieza —aprobada, con cambios, en qué ronda— lo
 // lleva el navegador hasta que exista dónde guardarlo de verdad.
 
-import type { Estado } from "@/dominio/pieza";
 import { ajustesDe, soloLasVisibles, type Vista } from "@/lib/ajustesDeCarpeta";
+import { estadosDe, mudadasDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones } from "@/lib/versiones";
-import { archivosDe, datosDeCarpeta, subcarpetasDe } from "@/lib/google";
+import {
+  archivosDe,
+  datosDeCarpeta,
+  metadatosArchivo,
+  subcarpetasDe,
+  type ArchivoDrive,
+} from "@/lib/google";
 
 /** Una vuelta anterior de la misma pieza. */
 export type VersionDePieza = {
@@ -32,15 +38,13 @@ export type VersionDePieza = {
   enlaceDrive?: string;
 };
 
-export type PiezaDeCarpeta = {
+export type PiezaDeCarpeta = EstadoDePieza & {
   id: string;
   nombre: string;
   driveFileId: string;
   modificado?: string;
   /** El archivo en Drive: el de la vuelta que se está mirando. */
   enlaceDrive?: string;
-  estado: Estado;
-  ronda: number;
   versiones: VersionDePieza[];
   /** Cuándo sale publicada. Solo en carpetas que se miran como calendario. */
   publicaEl?: Date;
@@ -74,13 +78,19 @@ const MOSTRABLES = /^(image\/|application\/pdf$)/;
  * Recibe **de qué cliente se trata** y no lo saca de la configuración: hay
  * varios, y quién es sale del link con el que entró.
  */
-export async function portalDelCliente(raiz: string): Promise<PortalDeCliente> {
+export async function portalDelCliente(
+  raiz: string,
+  /** Si viene, se muestra esa carpeta sola: es el link de una carpeta. */
+  soloEsta?: string
+): Promise<PortalDeCliente> {
   const [cliente, subcarpetas] = await Promise.all([
     datosDeCarpeta(raiz),
     subcarpetasDe(raiz),
   ]);
 
-  const visibles = await soloLasVisibles(subcarpetas);
+  const visibles = (await soloLasVisibles(subcarpetas)).filter(
+    (c) => !soloEsta || c.id === soloEsta
+  );
 
   // Las carpetas se leen en paralelo: son pocas y esperar una por una haría
   // que la pantalla tarde la suma de todas.
@@ -93,11 +103,43 @@ export async function portalDelCliente(raiz: string): Promise<PortalDeCliente> {
 
       // «9304.jpeg» y «9304 V2.jpeg» son una sola pieza en dos vueltas, no
       // dos piezas. La regla vive en `versiones.ts` y está probada aparte.
-      const agrupadas = agruparVersiones(archivos);
+      // Una pieza aprobada se mudó a «Entregas finales» y Drive ya no la lista
+      // acá. Se la vuelve a traer por su identificador: sacarla de la vista
+      // sería castigar al cliente por haber aprobado.
+      const mudadas = await mudadasDe(carpeta.id);
+      const faltantes = mudadas.filter((id) => !archivos.some((a) => a.id === id));
+      const recuperadas = (
+        await Promise.all(
+          faltantes.map(async (id) => {
+            try {
+              const datos = await metadatosArchivo(id);
+              const recuperado: ArchivoDrive = {
+                id: datos.id,
+                name: datos.name,
+                mimeType: datos.mimeType,
+                thumbnailLink: datos.thumbnailLink,
+                modifiedTime: datos.modifiedTime,
+                webViewLink: datos.webViewLink,
+              };
+              return recuperado;
+            } catch {
+              return null;
+            }
+          })
+        )
+      ).filter((a) => a !== null);
+
+      const agrupadas = agruparVersiones([...archivos, ...recuperadas]);
 
       // Las fechas las puso la agencia arrastrando en el calendario. Se piden
       // todas juntas: una consulta por pieza serían doce lecturas del archivo.
-      const dias = await publicacionesDe(archivos.map((a) => a.id));
+      const ultimas = agrupadas.map(
+        (p) => p.versiones[p.versiones.length - 1].archivo.id
+      );
+      const [dias, estados] = await Promise.all([
+        publicacionesDe(ultimas),
+        estadosDe(carpeta.id, ultimas),
+      ]);
 
       return {
         id: carpeta.id,
@@ -118,7 +160,10 @@ export async function portalDelCliente(raiz: string): Promise<PortalDeCliente> {
           }));
           const ultima = versiones[versiones.length - 1];
 
+          const guardado = estados[ultima.driveFileId];
+
           return {
+            ...guardado,
             id: ultima.driveFileId,
             nombre: pieza.titulo,
             driveFileId: ultima.driveFileId,
@@ -129,13 +174,10 @@ export async function portalDelCliente(raiz: string): Promise<PortalDeCliente> {
             publicaEl: dias[ultima.driveFileId]
               ? fechaDeDia(dias[ultima.driveFileId])
               : undefined,
-            // Sin base de datos, todo empieza donde empieza de verdad:
-            // entregado y sin revisar. Lo que el cliente vaya decidiendo lo
-            // guarda su navegador hasta que exista dónde anotarlo.
-            estado: "entregada" as Estado,
-            // La ronda sale de cuántas vueltas hay: la segunda versión de un
-            // archivo es, por definición, la ronda uno.
-            ronda: versiones.length - 1,
+            // La ronda es la mayor entre lo que dice el estado guardado y las
+            // vueltas que hay en Drive: subir una V2 es entrar en la ronda uno
+            // aunque nadie haya tocado el portal todavía.
+            ronda: Math.max(guardado.ronda, versiones.length - 1),
             versiones,
           };
         }),

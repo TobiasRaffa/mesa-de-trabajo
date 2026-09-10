@@ -17,9 +17,14 @@
 // está en internet. Antes de subirla, esto necesita login.
 
 import { revalidatePath } from "next/cache";
-import { esCarpetaReservada, guardarAjustesDe, type Vista } from "@/lib/ajustesDeCarpeta";
+import {
+  esCarpetaReservada,
+  guardarAjustesDe,
+  linkDeCarpeta,
+  type Vista,
+} from "@/lib/ajustesDeCarpeta";
 import { esCarpetaDelCliente, idsDeCarpetasReales, olvidarCarpetas } from "@/lib/carpetas";
-import { habilitarCliente, renovarLink, todosLosClientes } from "@/lib/clientes";
+import { habilitarCliente, ponerTag, renovarLink, todosLosClientes } from "@/lib/clientes";
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
 import { archivosDe } from "@/lib/google";
 import {
@@ -110,6 +115,51 @@ export async function renovarLinkDeCliente(_previo: unknown, formulario: FormDat
   await renovarLink(clienteId);
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
+}
+
+/**
+ * Le pone el tag a un cliente.
+ *
+ * Es la palabra que el cliente escribe para entrar. Sin tag, su portal no deja
+ * pasar a nadie —ni con el link correcto—, que es el estado seguro mientras
+ * alguien no decidió cuál va.
+ */
+export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) {
+  const clienteId = String(formulario.get("clienteId") ?? "");
+  const tag = String(formulario.get("tag") ?? "").trim();
+
+  if (!(await esClienteReal(clienteId))) {
+    return { ok: false as const, motivo: "Ese cliente no existe." };
+  }
+  if (tag.length < 3) {
+    return { ok: false as const, motivo: "Poné al menos tres letras." };
+  }
+
+  await ponerTag(clienteId, tag);
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+/**
+ * El link propio de una carpeta, generándolo si hace falta.
+ *
+ * Muestra esa carpeta sola. Sirve para mandarle a un cliente «Calendario
+ * septiembre» sin que de paso vea el resto de sus trabajos. Se entra con el
+ * mismo tag del cliente.
+ */
+export async function pedirLinkDeCarpeta(carpetaId: string): Promise<
+  { ok: true; token: string } | { ok: false; motivo: string }
+> {
+  if (!(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no está adentro de la de un cliente." };
+  }
+  try {
+    const token = await linkDeCarpeta(carpetaId);
+    revalidatePath("/gestion", "layout");
+    return { ok: true, token };
+  } catch {
+    return { ok: false, motivo: "No pude generar el link." };
+  }
 }
 
 // ---------------------------------------------------------------------------

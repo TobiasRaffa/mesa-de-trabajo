@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { carpetaParaFechar } from "@/admin/datos/carpetas";
 import { ArmarCalendario } from "@/admin/ArmarCalendario";
+import { HistoriaDePiezas } from "@/admin/HistoriaDePiezas";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 
 export const dynamic = "force-dynamic";
@@ -57,9 +58,11 @@ export default async function Calendario({
         </p>
       ) : null}
 
-      {datos.piezas.length > 0 && (
+      {enCalendario && datos.piezas.length > 0 && (
         <ArmarCalendario carpetaId={carpetaId} piezas={datos.piezas} />
       )}
+
+      <HistoriaDePiezas piezas={datos.historia} />
     </main>
   );
 }

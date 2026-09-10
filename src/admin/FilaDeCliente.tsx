@@ -5,29 +5,23 @@
 // Muestra lo único que Drive no sabe —si está habilitado y cuál es su link— y
 // deja entrar a sus carpetas.
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import Link from "next/link";
-import { cambiarCliente, renovarLinkDeCliente } from "@/app/(admin)/gestion/acciones";
+import {
+  cambiarCliente,
+  ponerTagDeCliente,
+  renovarLinkDeCliente,
+} from "@/app/(admin)/gestion/acciones";
+import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import type { ClienteEnGestion } from "@/admin/datos/carpetas";
 
 export function FilaDeCliente({ cliente }: { cliente: ClienteEnGestion }) {
   const [estado, guardar, esperando] = useActionState(cambiarCliente, null);
   const [estadoLink, renovar, renovando] = useActionState(renovarLinkDeCliente, null);
-  const [copiado, setCopiado] = useState(false);
+  const [estadoTag, guardarTag, guardandoTag] = useActionState(ponerTagDeCliente, null);
 
   const apagado = !cliente.habilitado;
-  const link = `/t/${cliente.token}`;
-
-  async function copiar() {
-    try {
-      // La dirección completa, que es lo que el cliente necesita recibir.
-      await navigator.clipboard.writeText(new URL(link, location.origin).toString());
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 2000);
-    } catch {
-      // Un navegador que no deja copiar no rompe nada: el link está a la vista.
-    }
-  }
+  const sinTag = cliente.tag.trim() === "";
 
   return (
     <li className={`border-b border-linea px-4 py-5 ${apagado ? "bg-hueco/40" : ""}`}>
@@ -42,6 +36,11 @@ export function FilaDeCliente({ cliente }: { cliente: ClienteEnGestion }) {
             {apagado && (
               <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
                 Sin acceso
+              </span>
+            )}
+            {!apagado && sinTag && (
+              <span className="bg-espera-borde px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-tinta">
+                Falta la clave
               </span>
             )}
             {cliente.mensajes > 0 && (
@@ -102,41 +101,79 @@ export function FilaDeCliente({ cliente }: { cliente: ClienteEnGestion }) {
         </div>
       </div>
 
-      {/* El link del cliente. Es lo que se le manda por WhatsApp. */}
       {!apagado && (
-        <div className="mt-4 flex flex-wrap items-center gap-2 bg-hueco/60 px-3 py-2">
-          <code className="min-w-0 flex-1 truncate font-mono text-menudo text-tinta-suave">
-            {link}
-          </code>
-          <button
-            type="button"
-            onClick={copiar}
-            className="shrink-0 border border-linea bg-lienzo px-3 py-1.5 text-micro font-extrabold
-                       uppercase tracking-wider text-tinta transition-colors hover:bg-hueco"
-          >
-            {copiado ? "Copiado" : "Copiar"}
-          </button>
-          <form action={renovar} className="shrink-0">
+        <div className="mt-4 flex flex-col gap-3">
+          {/*
+            La clave del cliente. Se le pasa **por otro lado**, no por el mismo
+            mensaje que lleva el link: mandar los dos juntos es mandar la llave
+            pegada a la puerta.
+          */}
+          <form action={guardarTag} className="flex flex-wrap items-center gap-2">
             <input type="hidden" name="clienteId" value={cliente.id} />
+            <label
+              htmlFor={`tag-${cliente.id}`}
+              className="shrink-0 text-micro font-extrabold uppercase tracking-wider text-apagado"
+            >
+              Clave
+            </label>
+            <input
+              id={`tag-${cliente.id}`}
+              name="tag"
+              type="text"
+              defaultValue={cliente.tag}
+              placeholder="una palabra que le pases vos"
+              autoComplete="off"
+              className="min-w-0 flex-1 border border-linea bg-lienzo px-3 py-1.5 text-menudo
+                         font-bold transition-colors placeholder:font-normal placeholder:text-apagado
+                         focus:border-acento focus:outline-none"
+            />
             <button
               type="submit"
-              disabled={renovando}
-              title="El link viejo deja de funcionar en el acto"
-              className="px-2 py-1.5 text-micro font-extrabold uppercase tracking-wider
-                         text-apagado underline underline-offset-2 transition-colors
-                         hover:text-alerta disabled:opacity-40"
+              disabled={guardandoTag}
+              className="shrink-0 border-2 border-tinta px-3 py-1.5 text-micro font-extrabold
+                         uppercase tracking-wider text-tinta transition-colors hover:bg-hueco
+                         disabled:opacity-40"
             >
-              Cambiar link
+              Guardar
             </button>
           </form>
+
+          <LinkParaCompartir
+            token={cliente.token}
+            etiqueta="Todo el cliente"
+            alRenovar={
+              <form action={renovar} className="shrink-0">
+                <input type="hidden" name="clienteId" value={cliente.id} />
+                <button
+                  type="submit"
+                  disabled={renovando}
+                  title="El link viejo deja de funcionar en el acto"
+                  className="px-2 py-1.5 text-micro font-extrabold uppercase tracking-wider
+                             text-apagado underline underline-offset-2 transition-colors
+                             hover:text-alerta disabled:opacity-40"
+                >
+                  Cambiar
+                </button>
+              </form>
+            }
+          />
+
+          {sinTag && (
+            <p className="border-l-4 border-espera-borde bg-espera-tenue px-3 py-2 text-menudo text-espera">
+              Sin clave, el link no deja entrar a nadie. Poné una y pasásela al cliente
+              por otro lado.
+            </p>
+          )}
         </div>
       )}
 
-      {((estado && !estado.ok) || (estadoLink && !estadoLink.ok)) && (
-        <p aria-live="polite" className="mt-2 text-menudo font-semibold text-alerta">
-          {estado && !estado.ok ? estado.motivo : estadoLink && !estadoLink.ok ? estadoLink.motivo : ""}
-        </p>
-      )}
+      {[estado, estadoLink, estadoTag]
+        .filter((r) => r && !r.ok)
+        .map((r, i) => (
+          <p key={i} aria-live="polite" className="mt-2 text-menudo font-semibold text-alerta">
+            {r && !r.ok ? r.motivo : ""}
+          </p>
+        ))}
     </li>
   );
 }

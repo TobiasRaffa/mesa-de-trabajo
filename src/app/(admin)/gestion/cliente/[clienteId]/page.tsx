@@ -43,13 +43,22 @@ export default async function CarpetasDeCliente({
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <Link
+          {/*
+            Se abre en una pestaña nueva a propósito. Así la de gestión queda
+            atrás —que era lo que faltaba: entrar al portal no tenía vuelta— y
+            **el portal no lleva ningún link de vuelta a administración**. Un
+            link adentro del portal sería una puerta de un mundo al otro, y la
+            vería también el cliente.
+          */}
+          <a
             href={`/t/${datos.cliente.token}`}
+            target="_blank"
+            rel="noreferrer noopener"
             className="inline-flex min-h-toque items-center bg-acento px-5 text-normal font-bold
                        tracking-tight text-white transition-colors hover:bg-acento-hover"
           >
-            Ver el portal como el cliente
-          </Link>
+            Ver el portal como el cliente ↗
+          </a>
           {datos.cliente.enlaceDrive && (
             <a
               href={datos.cliente.enlaceDrive}

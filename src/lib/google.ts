@@ -171,13 +171,17 @@ export type MetadatosArchivo = {
   mimeType: string;
   parents?: string[];
   thumbnailLink?: string;
+  modifiedTime?: string;
+  webViewLink?: string;
 };
 
 // Datos de un archivo puntual, incluidas las carpetas que lo contienen.
 // Los `parents` son lo que permite verificar que el pedido sea legítimo.
 export async function metadatosArchivo(fileId: string): Promise<MetadatosArchivo> {
   const token = await tokenDeGoogle();
-  const fields = encodeURIComponent("id,name,mimeType,parents,thumbnailLink");
+  const fields = encodeURIComponent(
+    "id,name,mimeType,parents,thumbnailLink,modifiedTime,webViewLink"
+  );
   const url = `${DRIVE}/files/${encodeURIComponent(fileId)}?fields=${fields}&supportsAllDrives=true`;
 
   const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });

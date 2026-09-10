@@ -26,6 +26,14 @@ export type AjustesDeCliente = {
   habilitado: boolean;
   /** Lo que va en `/t/<esto>`. Se genera al descubrir el cliente. */
   token: string;
+  /**
+   * La palabra que el cliente escribe para entrar.
+   *
+   * La elige la agencia y se la pasa por otro lado —no por el mismo mensaje
+   * que lleva el link, que sería como mandar la llave pegada a la puerta—.
+   * Vacío significa que todavía no se le puso: el portal no deja entrar.
+   */
+  tag: string;
 };
 
 export type Cliente = AjustesDeCliente & {
@@ -58,11 +66,12 @@ async function leerGuardado(): Promise<Guardado> {
     const salida: Guardado = {};
     for (const [id, valor] of Object.entries(datos as Record<string, unknown>)) {
       if (!valor || typeof valor !== "object") continue;
-      const v = valor as { habilitado?: unknown; token?: unknown };
+      const v = valor as { habilitado?: unknown; token?: unknown; tag?: unknown };
       if (typeof v.token !== "string" || !v.token) continue;
       salida[id] = {
         habilitado: typeof v.habilitado === "boolean" ? v.habilitado : true,
         token: v.token,
+        tag: typeof v.tag === "string" ? v.tag : "",
       };
     }
     return salida;
@@ -94,7 +103,8 @@ export async function todosLosClientes(): Promise<Cliente[]> {
   const clientes: Cliente[] = carpetas.map((carpeta: CarpetaDrive) => {
     let ajustes = guardado[carpeta.id];
     if (!ajustes) {
-      ajustes = { habilitado: true, token: nuevoToken() };
+      // Sin tag, el portal no deja entrar: es lo que hay que completar.
+      ajustes = { habilitado: true, token: nuevoToken(), tag: "" };
       guardado[carpeta.id] = ajustes;
       hayQueGuardar = true;
     }
@@ -131,7 +141,23 @@ export async function clientePorId(id: string): Promise<Cliente | null> {
 export async function habilitarCliente(id: string, habilitado: boolean): Promise<void> {
   const guardado = await leerGuardado();
   const actual = guardado[id];
-  guardado[id] = { habilitado, token: actual?.token ?? nuevoToken() };
+  guardado[id] = {
+    habilitado,
+    token: actual?.token ?? nuevoToken(),
+    tag: actual?.tag ?? "",
+  };
+  await escribirGuardado(guardado);
+}
+
+/** Le pone o le cambia el tag a un cliente. */
+export async function ponerTag(id: string, tag: string): Promise<void> {
+  const guardado = await leerGuardado();
+  const actual = guardado[id];
+  guardado[id] = {
+    habilitado: actual?.habilitado ?? true,
+    token: actual?.token ?? nuevoToken(),
+    tag: tag.trim().slice(0, 60),
+  };
   await escribirGuardado(guardado);
 }
 
@@ -144,7 +170,11 @@ export async function habilitarCliente(id: string, habilitado: boolean): Promise
 export async function renovarLink(id: string): Promise<string> {
   const guardado = await leerGuardado();
   const token = nuevoToken();
-  guardado[id] = { habilitado: guardado[id]?.habilitado ?? true, token };
+  guardado[id] = {
+    habilitado: guardado[id]?.habilitado ?? true,
+    token,
+    tag: guardado[id]?.tag ?? "",
+  };
   await escribirGuardado(guardado);
   return token;
 }

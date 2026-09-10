@@ -7,9 +7,10 @@
 // pantalla vuelve dibujada con lo que de verdad quedó guardado. Nada de estado
 // optimista que después no coincida con el archivo.
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
-import { guardarCarpeta } from "@/app/(admin)/gestion/acciones";
+import { guardarCarpeta, pedirLinkDeCarpeta } from "@/app/(admin)/gestion/acciones";
+import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import type { CarpetaEnGestion } from "@/admin/datos/carpetas";
 import { ChatDeCarpeta } from "@/admin/ChatDeCarpeta";
 
@@ -21,8 +22,26 @@ export function FilaDeCarpeta({
   clienteId: string;
 }) {
   const [estado, enviar, esperando] = useActionState(guardarCarpeta, null);
+  const [token, setToken] = useState(carpeta.token ?? null);
+  const [pidiendo, setPidiendo] = useState(false);
 
   const oculta = !carpeta.visible;
+
+  /**
+   * El link se genera cuando alguien lo pide y no antes.
+   *
+   * Una carpeta que nadie va a compartir por separado no necesita link, y
+   * generarlos todos de entrada llenaría el archivo de tokens que no se usan.
+   */
+  async function pedirLink() {
+    setPidiendo(true);
+    try {
+      const r = await pedirLinkDeCarpeta(carpeta.id);
+      if (r.ok) setToken(r.token);
+    } finally {
+      setPidiendo(false);
+    }
+  }
 
   return (
     <li
@@ -79,6 +98,25 @@ export function FilaDeCarpeta({
             {estado.motivo}
           </p>
         )}
+
+        {/* El link de esta carpeta sola. Se entra con la misma clave del
+            cliente: es el mismo cliente, mirando menos cosas. */}
+        {!oculta &&
+          (token ? (
+            <div className="mt-3">
+              <LinkParaCompartir token={token} etiqueta="Solo esta carpeta" />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={pedirLink}
+              disabled={pidiendo}
+              className="mt-3 text-menudo font-semibold text-apagado underline underline-offset-2
+                         transition-colors hover:text-tinta disabled:opacity-40"
+            >
+              {pidiendo ? "Generando…" : "Generar un link solo para esta carpeta"}
+            </button>
+          ))}
       </div>
 
       <div className="flex flex-wrap gap-2">

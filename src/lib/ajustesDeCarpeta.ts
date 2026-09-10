@@ -18,12 +18,21 @@
 
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { randomBytes } from "node:crypto";
 
 export type Vista = "lista" | "calendario";
 
 export type AjustesDeCarpeta = {
   visible: boolean;
   vista: Vista;
+  /**
+   * El link propio de esta carpeta: `/t/<esto>` muestra esta sola.
+   *
+   * Uno por carpeta y estable. Sirve para mandarle a un cliente el link de
+   * «Calendario septiembre» sin que de paso vea «Rediseño de identidad».
+   * Se genera la primera vez que alguien lo pide.
+   */
+  token?: string;
 };
 
 export type Ajustes = {
@@ -78,10 +87,11 @@ function normalizar(datos: unknown): Record<string, AjustesDeCarpeta> {
 
   for (const [id, valor] of Object.entries(carpetas as Record<string, unknown>)) {
     if (!valor || typeof valor !== "object") continue;
-    const v = valor as { visible?: unknown; vista?: unknown };
+    const v = valor as { visible?: unknown; vista?: unknown; token?: unknown };
     salida[id] = {
       visible: typeof v.visible === "boolean" ? v.visible : POR_OMISION.visible,
       vista: v.vista === "calendario" ? "calendario" : "lista",
+      token: typeof v.token === "string" && v.token ? v.token : undefined,
     };
   }
   return salida;
@@ -123,4 +133,20 @@ export async function soloLasVisibles<T extends { id: string; name: string }>(
   return carpetas.filter(
     (c) => !esCarpetaReservada(c.name) && (guardadas[c.id] ?? POR_OMISION).visible
   );
+}
+
+/**
+ * El link propio de una carpeta, generándolo si todavía no tiene.
+ *
+ * Se genera cuando alguien lo pide y no antes: una carpeta que nadie va a
+ * compartir por separado no necesita link, y generarlos todos de entrada
+ * llenaría el archivo de tokens que no se usan nunca.
+ */
+export async function linkDeCarpeta(carpetaId: string): Promise<string> {
+  const ajustes = await ajustesDe(carpetaId);
+  if (ajustes.token) return ajustes.token;
+
+  const token = randomBytes(12).toString("base64url");
+  await guardarAjustesDe(carpetaId, { ...ajustes, token });
+  return token;
 }

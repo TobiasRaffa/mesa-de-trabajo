@@ -19,7 +19,7 @@
 // segura de que un día no coincidan.
 
 import { useEffect, useState } from "react";
-import { aplicar, type Evento, type Pieza } from "@/dominio/pieza";
+import type { Evento, Pieza } from "@/dominio/pieza";
 import { Ampliada, type Lamina } from "@/ui/Ampliada";
 import { Boton, BotonEnlace } from "@/ui/Boton";
 import { Calendario, type PiezaEnCalendario } from "@/ui/Calendario";
@@ -32,24 +32,21 @@ import {
 } from "@/ui/Icono";
 import { Conversacion } from "@/ui/Conversacion";
 import type { Mensaje } from "@/lib/conversaciones";
-import { escribirComoCliente } from "@/portal/acciones";
+import type { Cambio, EstadoDePieza } from "@/lib/piezas";
+import {
+  enviarRevision,
+  escribirComoCliente,
+  guardarCambiosDePieza,
+  moverPieza,
+} from "@/portal/acciones";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import type { CarpetaDeTrabajo, PortalDeCliente } from "@/portal/datos/cliente";
-import { RevisarPieza, type Cambio, type PiezaAbierta } from "@/portal/RevisarPieza";
+import { RevisarPieza, type PiezaAbierta } from "@/portal/RevisarPieza";
 
 type EnPantalla = PiezaAbierta;
-
-/**
- * Dónde queda el borrador de una carpeta en el navegador.
- *
- * Lleva el identificador de la carpeta adentro. Con una sola clave para todo,
- * dos carpetas del mismo cliente se pisarían el borrador entre ellas.
- */
-const claveDelBorrador = (carpetaId: string) => `mesa-de-trabajo:borrador:${carpetaId}`;
-
 
 /** Un identificador para un cambio recién escrito. */
 function nuevoId(): string {
@@ -101,21 +98,14 @@ function Revision({
   carpeta: CarpetaDeTrabajo;
   onElegirCarpeta: (id: string) => void;
 }) {
+  // El estado viene del servidor y vuelve al servidor. El navegador ya no es
+  // la memoria de nada: revisar desde el teléfono y seguir en la computadora
+  // tiene que encontrar lo mismo, y la agencia tiene que poder enterarse.
   const [piezas, setPiezas] = useState<EnPantalla[]>(() =>
     carpeta.piezas.map((p) => ({
-      id: p.id,
-      nombre: p.nombre,
-      driveFileId: p.driveFileId,
-      modificado: p.modificado,
-      enlaceDrive: p.enlaceDrive,
-      estado: p.estado,
-      ronda: p.ronda,
+      ...p,
       rondasIncluidas: datos.rondasIncluidas,
-      rondasExtra: datos.rondasExtra,
-      versiones: p.versiones,
-      publicaEl: p.publicaEl,
-      cambios: [],
-      enviada: false,
+      rondasExtra: p.rondasExtra,
     }))
   );
   const [abierta, setAbierta] = useState<string | null>(null);
@@ -128,43 +118,8 @@ function Revision({
   const [enviandoMensaje, setEnviandoMensaje] = useState(false);
   const [rechazo, setRechazo] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-
-  const BORRADOR = claveDelBorrador(carpeta.id);
-
-  // Mientras no exista la base de datos, el trabajo a medio hacer queda en el
-  // navegador. Cuando exista, esto se reemplaza por una llamada al servidor y
-  // la pantalla no cambia.
-  useEffect(() => {
-    try {
-      const crudo = localStorage.getItem(BORRADOR);
-      if (!crudo) return;
-      const guardado = JSON.parse(crudo) as Record<
-        string,
-        { estado: string; cambios?: Cambio[]; enviada?: boolean }
-      >;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPiezas((antes) =>
-        antes.map((p) =>
-          guardado[p.id]
-            ? {
-                ...p,
-                estado: guardado[p.id].estado as Pieza["estado"],
-                // Lo que viene del navegador no es de fiar: puede haberlo
-                // dejado una versión anterior de la aplicación, o alguien
-                // editándolo a mano. Se acepta solo lo que tiene la forma.
-                cambios: (guardado[p.id].cambios ?? []).filter(
-                  (c): c is Cambio =>
-                    typeof c?.id === "string" && typeof c?.texto === "string"
-                ),
-                enviada: guardado[p.id].enviada ?? false,
-              }
-            : p
-        )
-      );
-    } catch {
-      // Un navegador que no deja guardar no es motivo para romper la pantalla.
-    }
-  }, [BORRADOR]);
+  /** Qué pieza está esperando al servidor. Bloquea el doble clic. */
+  const [ocupada, setOcupada] = useState<string | null>(null);
 
   /**
    * La conversación vive en el servidor, no en este navegador.
@@ -204,8 +159,7 @@ function Revision({
    * Manda un mensaje al equipo.
    *
    * **No hay respuesta automática, ni la va a haber.** La aplicación anota lo
-   * que se dijo; contestar es de una persona. Si algún día esto genera una
-   * respuesta solo, se rompió la regla más vieja del proyecto.
+   * que se dijo; contestar es de una persona.
    */
   async function enviarMensaje(texto: string) {
     setEnviandoMensaje(true);
@@ -220,96 +174,74 @@ function Revision({
     }
   }
 
-  function guardarEnElNavegador(siguientes: EnPantalla[]) {
-    try {
-      localStorage.setItem(
-        BORRADOR,
-        JSON.stringify(
-          Object.fromEntries(
-            siguientes.map((p) => [
-              p.id,
-              { estado: p.estado, cambios: p.cambios, enviada: p.enviada },
-            ])
-          )
-        )
-      );
-    } catch {}
+  /** Reemplaza una pieza con lo que devolvió el servidor. */
+  function refrescar(id: string, estado: EstadoDePieza) {
+    setPiezas((antes) => antes.map((p) => (p.id === id ? { ...p, ...estado } : p)));
   }
 
   /**
-   * Todo lo que cambia el estado se calcula **antes** de llamar a `setPiezas`,
-   * nunca adentro del actualizador: React puede ejecutarlo más de una vez.
-   */
-  function aplicarYGuardar(siguientes: EnPantalla[]) {
-    setPiezas(siguientes);
-    guardarEnElNavegador(siguientes);
-  }
-
-  function mover(id: string, evento: Evento) {
-    const pieza = piezas.find((p) => p.id === id);
-    if (!pieza) return;
-
-    const resultado = aplicar(pieza, evento);
-    if (!resultado.ok) {
-      setRechazo(resultado.motivo);
-      return;
-    }
-
-    setRechazo(null);
-    const limpiar = evento.tipo === "descartar_cambios";
-    aplicarYGuardar(
-      piezas.map((p) =>
-        p.id === id ? { ...p, ...resultado.pieza, ...(limpiar ? { cambios: [] } : {}) } : p
-      )
-    );
-  }
-
-  /**
-   * Reescribe la lista de cambios de una pieza y acomoda el estado.
+   * Aplica un evento del dominio, pero del lado del servidor.
    *
-   * Anotar el primer cambio es pedir cambios, y borrar el último es
-   * arrepentirse: son las dos únicas veces que tocar la lista mueve la pieza.
+   * Las reglas siguen siendo las mismas —`aplicar()` corre allá—, y lo que
+   * vuelve es la pieza ya guardada. Sin optimismo a propósito: la pantalla
+   * muestra lo que de verdad quedó, no lo que esperábamos que quedara.
    */
-  function cambiosDe(id: string, siguientes: Cambio[]) {
-    const pieza = piezas.find((p) => p.id === id);
-    if (!pieza || pieza.enviada) return;
-
-    let estado = pieza.estado;
-    let ronda = pieza.ronda;
-
-    const quiereMarcar = siguientes.length > 0 && pieza.estado !== "cambios_marcados";
-    const quiereSoltar = siguientes.length === 0 && pieza.estado === "cambios_marcados";
-
-    if (quiereMarcar || quiereSoltar) {
-      const r = aplicar(pieza, {
-        tipo: quiereMarcar ? "pedir_cambios" : "descartar_cambios",
-      });
-      if (!r.ok) {
+  async function mover(id: string, evento: Evento) {
+    setOcupada(id);
+    try {
+      const r = await moverPieza(datos.cliente.id, carpeta.id, id, evento);
+      if (r.ok) {
+        setRechazo(null);
+        refrescar(id, r.pieza);
+      } else {
         setRechazo(r.motivo);
-        return;
       }
-      estado = r.pieza.estado;
-      ronda = r.pieza.ronda;
+    } catch {
+      setRechazo("No pudimos guardar eso. Probá de nuevo.");
+    } finally {
+      setOcupada(null);
     }
-
-    setRechazo(null);
-    aplicarYGuardar(
-      piezas.map((p) => (p.id === id ? { ...p, estado, ronda, cambios: siguientes } : p))
-    );
   }
 
-  function enviar(soloEsta?: string) {
-    aplicarYGuardar(
-      piezas.map((pieza) => {
-        if (soloEsta && pieza.id !== soloEsta) return pieza;
-        if (pieza.enviada) return pieza;
-        const r = aplicar(pieza, { tipo: "cerrar_revision" });
-        return r.ok ? { ...pieza, ...r.pieza, enviada: true } : pieza;
-      })
-    );
+  async function cambiosDe(id: string, siguientes: Cambio[]) {
+    setOcupada(id);
+    try {
+      const r = await guardarCambiosDePieza(carpeta.id, id, siguientes);
+      if (r.ok) {
+        setRechazo(null);
+        refrescar(id, r.pieza);
+      } else {
+        setRechazo(r.motivo);
+      }
+    } catch {
+      setRechazo("No pudimos guardar los cambios. Probá de nuevo.");
+    } finally {
+      setOcupada(null);
+    }
+  }
+
+  async function enviar(soloEsta?: string) {
     setConfirmando(null);
-    setAbierta(null);
-    setAviso(soloEsta ? "Enviamos esa pieza al equipo." : "Enviamos la revisión al equipo.");
+    setOcupada(soloEsta ?? "todas");
+    try {
+      const r = await enviarRevision(carpeta.id, soloEsta);
+      if (r.ok) {
+        setPiezas((antes) =>
+          antes.map((p) => (r.piezas[p.id] ? { ...p, ...r.piezas[p.id] } : p))
+        );
+        setAbierta(null);
+        setRechazo(null);
+        setAviso(
+          soloEsta ? "Enviamos esa pieza al equipo." : "Enviamos la revisión al equipo."
+        );
+      } else {
+        setRechazo(r.motivo);
+      }
+    } catch {
+      setRechazo("No pudimos enviar la revisión. Probá de nuevo.");
+    } finally {
+      setOcupada(null);
+    }
   }
 
   const sinDecidir = piezas.filter(
@@ -424,7 +356,7 @@ function Revision({
             variante="principal"
             ancho
             onClick={() => setConfirmando({})}
-            disabled={paraEnviar.length === 0}
+            disabled={paraEnviar.length === 0 || ocupada !== null}
           >
             <IconoEnviar />
             Enviar revisión
@@ -642,24 +574,6 @@ function Revision({
           )}
         </div>
 
-        {/* =================== Solo mientras es prueba ================== */}
-        <div className="mt-12 flex flex-wrap items-center justify-between gap-3 bg-hueco/60 px-4 py-3">
-          <p className="text-menudo text-apagado">
-            Estás viendo una prueba. Lo que hacés queda guardado en este navegador.
-          </p>
-          <Boton
-            variante="contorno"
-            tamano="chico"
-            onClick={() => {
-              try {
-                localStorage.removeItem(BORRADOR);
-              } catch {}
-              location.reload();
-            }}
-          >
-            Volver a empezar
-          </Boton>
-        </div>
       </main>
 
       {/* ============================ Ventanas =========================== */}
