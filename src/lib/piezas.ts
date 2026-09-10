@@ -17,6 +17,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Estado } from "@/dominio/pieza";
+import { archivosDe, metadatosArchivo, type ArchivoDrive } from "@/lib/google";
 
 export type Cambio = { id: string; texto: string };
 
@@ -212,3 +213,44 @@ export const EN_PALABRAS: Record<Hito, string> = {
   movida_a_finales: "Se movió a «Entregas finales»",
   no_se_pudo_mover: "No se pudo mover a «Entregas finales»",
 };
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Los archivos de una carpeta, **incluidas las piezas que ya se mudaron**.
+ *
+ * Aprobar muda el archivo a «Entregas finales», así que Drive deja de listarlo
+ * en la carpeta de trabajo. Cualquier pantalla que cuente desde el listado
+ * crudo termina diciendo que la pieza aprobada no existe —el portal la perdía
+ * de vista, y el tablero contaba «0 aprobadas» justo después de aprobar—.
+ *
+ * Vive acá y no repetido en cada pantalla porque ya se escribió tres veces, y
+ * la tercera fue la que faltaba.
+ */
+export async function archivosConLasMudadas(carpetaId: string): Promise<ArchivoDrive[]> {
+  const presentes = await archivosDe(carpetaId);
+  const mudadas = await mudadasDe(carpetaId);
+  const faltantes = mudadas.filter((id) => !presentes.some((a) => a.id === id));
+  if (faltantes.length === 0) return presentes;
+
+  const traidas = await Promise.all(
+    faltantes.map(async (id): Promise<ArchivoDrive | null> => {
+      try {
+        const datos = await metadatosArchivo(id);
+        return {
+          id: datos.id,
+          name: datos.name,
+          mimeType: datos.mimeType,
+          thumbnailLink: datos.thumbnailLink,
+          modifiedTime: datos.modifiedTime,
+          webViewLink: datos.webViewLink,
+        };
+      } catch {
+        // Un archivo que ya no está en Drive no puede tumbar la pantalla.
+        return null;
+      }
+    })
+  );
+
+  return [...presentes, ...traidas.filter((a) => a !== null)];
+}

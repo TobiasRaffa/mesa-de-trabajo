@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { carpetasDelCliente } from "@/admin/datos/carpetas";
+import { elEquipo } from "@/lib/equipo";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { FilaDeCarpeta } from "@/admin/FilaDeCarpeta";
+import { MensajesListos } from "@/admin/MensajesListos";
+import { ChatDeCarpeta } from "@/admin/ChatDeCarpeta";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +16,7 @@ export default async function CarpetasDeCliente({
   const { clienteId } = await params;
 
   let datos;
+  const equipo = await elEquipo();
   try {
     datos = await carpetasDelCliente(clienteId);
   } catch (error) {
@@ -91,6 +95,7 @@ export default async function CarpetasDeCliente({
                 key={carpeta.id}
                 carpeta={carpeta}
                 clienteId={datos.cliente.id}
+                equipo={equipo}
               />
             ))}
           </ul>
@@ -133,6 +138,22 @@ export default async function CarpetasDeCliente({
           </ul>
         </section>
       )}
+      <MensajesListos
+        datos={{
+          cliente: datos.cliente.nombre,
+          carpeta: deTrabajo[0]?.nombre ?? "lo nuevo",
+          link: `/t/${datos.cliente.token}`,
+        }}
+        alLado={
+          deTrabajo[0] && (
+            <ChatDeCarpeta
+              carpetaId={deTrabajo[0].id}
+              nombre={`${datos.cliente.nombre} · ${deTrabajo[0].nombre}`}
+              cuantos={deTrabajo[0].mensajes}
+            />
+          )
+        }
+      />
     </main>
   );
 }

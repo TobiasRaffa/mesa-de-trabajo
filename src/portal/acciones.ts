@@ -10,10 +10,16 @@
 // Una acción de servidor es un endpoint público: que el botón solo se dibuje
 // adentro del portal no protege nada. Todo lo que llega se valida contra lo que
 // de verdad existe en Drive.
+//
+// **Acá no se nombra ninguna pantalla de administración**, ni siquiera para
+// refrescarla. Las de gestión se dibujan de nuevo en cada visita, así que no
+// hacía falta; y el portal no tiene por qué saber que existen.
 
-import { revalidatePath } from "next/cache";
 import { aplicar, type Evento } from "@/dominio/pieza";
+import { avisar } from "@/lib/avisar";
 import { esCarpetaDelCliente } from "@/lib/carpetas";
+import { clientePorId } from "@/lib/clientes";
+import { datosDeCarpeta } from "@/lib/google";
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
 import { mudarAFinales } from "@/lib/entregasFinales";
 import { archivosDe } from "@/lib/google";
@@ -29,6 +35,24 @@ import {
 
 /** Quién figura en la historia. Cuando existan los usuarios, sale de la sesión. */
 const CLIENTE = "Cliente";
+
+/**
+ * Los nombres que hacen falta para redactar un aviso.
+ *
+ * Se piden aparte y sin romper nada si fallan: un aviso es una consecuencia de
+ * lo que hizo el cliente, no una condición.
+ */
+async function comoSeLlaman(clienteId: string, carpetaId: string) {
+  try {
+    const [cliente, carpeta] = await Promise.all([
+      clientePorId(clienteId),
+      datosDeCarpeta(carpetaId),
+    ]);
+    return { cliente: cliente?.nombre ?? "Un cliente", carpeta: carpeta.name };
+  } catch {
+    return { cliente: "Un cliente", carpeta: "una carpeta" };
+  }
+}
 
 export type RespuestaDePieza =
   | { ok: true; pieza: EstadoDePieza }
@@ -140,7 +164,20 @@ export async function moverPieza(
   }
 
   await guardarPieza(piezaId, pieza);
-  revalidatePath("/gestion", "layout");
+
+  // Se le avisa al equipo. Es el bucle que este proyecto vino a cerrar: hasta
+  // hoy, nadie se enteraba salvo que entrara a mirar.
+  if (evento.tipo === "aprobar" || evento.tipo === "pedir_cambios") {
+    const nombres = await comoSeLlaman(clienteId, carpetaId);
+    await avisar({
+      clase: evento.tipo === "aprobar" ? "aprobo" : "pidio_cambios",
+      clienteId,
+      cliente: nombres.cliente,
+      carpetaId,
+      carpeta: nombres.carpeta,
+    });
+  }
+
   return { ok: true, pieza };
 }
 
@@ -202,7 +239,6 @@ export async function guardarCambiosDePieza(
   if (quiereSoltar) pieza = anotar(pieza, "cambios_descartados", CLIENTE);
 
   await guardarPieza(piezaId, pieza);
-  revalidatePath("/gestion", "layout");
   return { ok: true, pieza };
 }
 
@@ -212,6 +248,7 @@ export async function guardarCambiosDePieza(
  * Es el único acto de esta pantalla que la agencia ve, y no se deshace.
  */
 export async function enviarRevision(
+  clienteId: string,
   carpetaId: string,
   soloEsta?: string
 ): Promise<RespuestaDeCarpeta> {
@@ -259,13 +296,27 @@ export async function enviarRevision(
   }
 
   await guardarPiezas(aGuardar);
-  revalidatePath("/gestion", "layout");
+
+  const cuantas = Object.keys(aGuardar).length;
+  if (cuantas > 0) {
+    const nombres = await comoSeLlaman(clienteId, carpetaId);
+    await avisar({
+      clase: "envio_revision",
+      clienteId,
+      cliente: nombres.cliente,
+      carpetaId,
+      carpeta: nombres.carpeta,
+      detalle: `${cuantas} ${cuantas === 1 ? "pieza" : "piezas"}`,
+    });
+  }
+
   return { ok: true, piezas: { ...estados, ...aGuardar } };
 }
 
 // ---------------------------------------------------------------------------
 
 export async function escribirComoCliente(
+  clienteId: string,
   carpetaId: string,
   texto: string
 ): Promise<RespuestaDeChat> {
@@ -281,7 +332,16 @@ export async function escribirComoCliente(
 
   try {
     const mensajes = await agregarMensaje(carpetaId, "cliente", CLIENTE, limpio);
-    revalidatePath("/gestion/chats");
+
+    const nombres = await comoSeLlaman(clienteId, carpetaId);
+    await avisar({
+      clase: "escribio",
+      clienteId,
+      cliente: nombres.cliente,
+      carpetaId,
+      carpeta: nombres.carpeta,
+    });
+
     return { ok: true, mensajes };
   } catch {
     return { ok: false, motivo: "No pudimos guardar el mensaje. Probá de nuevo." };

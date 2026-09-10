@@ -1191,3 +1191,83 @@ aprobado» sin que nadie tenga que acordarse.
 Se muestra en la pantalla de la carpeta, con lo último arriba, y con los
 cambios pedidos al lado. Los avisos de la aplicación —«se movió a Entregas
 finales»— figuran a nombre de la aplicación y no de una persona.
+
+## 79. Del portal no sale ningún camino hacia administración.
+
+Había uno, y era el más obvio: **la raíz del sitio redirigía a `/diagnostico`**.
+Un cliente que borra el final de la dirección —o que toca el nombre del sitio
+en el historial— caía en una pantalla interna, con las miniaturas de los
+archivos y el estado de la conexión con Drive.
+
+Ahora la raíz no contesta nada. Cada mundo tiene su puerta y hay que saberla.
+
+Tres cosas más, en la misma dirección:
+
+- **El portal no nombra ninguna ruta de administración**, ni siquiera para
+  refrescarla. Los `revalidatePath("/gestion")` que tenían las acciones del
+  portal no hacían nada —esas pantallas se dibujan de nuevo en cada visita— y
+  eran una referencia de un mundo al otro.
+- **Nada se indexa.** El link de un cliente es medio acceso: si Google lo
+  indexara, dejaría de serlo.
+- **Hay una prueba que lo vigila** (`sinPuertas.test.ts`). El linter ya impedía
+  *importar* algo de administración; lo que no veía nadie era **un link**, que
+  no rompe ninguna regla de módulos y abre exactamente la puerta que no tiene
+  que haber. La prueba lee los archivos del portal como texto y busca esas
+  direcciones. Se comprobó que falla de verdad agregando un link a propósito.
+
+Lo que sigue abierto y no lo tapa esto: **`/gestion` no pide usuario ni
+contraseña**, así que alguien que adivine la dirección entra. Eso se arregla
+con login, antes de subir la aplicación a internet.
+
+## 80. Se avisa siempre, se manda si se puede.
+
+Anotar el aviso y mandarlo por correo son dos cosas separadas a propósito. Que
+el correo no esté configurado —o que el proveedor se caiga— **no puede hacer
+que el aviso se pierda**: queda en la bandeja del tablero igual, y ahí se ve,
+con una etiqueta que dice que no salió.
+
+El correo va por HTTP contra la API de un proveedor y no por SMTP: mandar mails
+desde una casa suele estar bloqueado por el proveedor de internet, y lo que
+llega termina en spam. Sin librería, con `fetch`, igual que con Drive.
+
+Avisar **nunca lanza**. Un aviso es una consecuencia de lo que hizo el cliente,
+no una condición: si falla, la aprobación vale igual.
+
+Y los avisos van **hacia adentro**, al equipo. Lo que sale hacia el cliente lo
+sigue escribiendo una persona.
+
+## 81. Los mensajes listos son un papelito, no un robot.
+
+La aplicación no le escribe al cliente. Lo que hay es el texto ya escrito para
+que una persona lo lea, lo cambie si quiere, lo copie y lo mande por donde ya
+le escribe siempre.
+
+La diferencia importa y es la misma regla de siempre: un mensaje automático es
+la aplicación hablando; esto es no tener que escribirlo de cero a las siete de
+la tarde. Quien manda decide qué dice y cuándo.
+
+## 82. El plazo es de la carpeta, y una pieza puede tener el suyo.
+
+Se pone en la carpeta porque así se trabaja: una tanda de doce posteos vence
+junta. Y se puede correr una pieza sola sin mover el resto —«esta la
+necesitamos el jueves, el resto la semana que viene»—. El de la pieza gana.
+
+Sigue valiendo la regla del principio: **el plazo avisa, no decide**. No hay un
+evento de vencimiento en el dominio y no lo va a haber. Y una fecha vencida en
+una carpeta ya terminada no es un problema: solo cuenta como vencida si todavía
+falta que el cliente decida algo.
+
+## 83. Aprobar escondía las piezas aprobadas, en tres lugares.
+
+Mudar el archivo a «Entregas finales» tiene una consecuencia que apareció de a
+poco: Drive deja de listarlo en la carpeta de trabajo, así que **cualquier
+pantalla que cuente desde el listado crudo dice que la pieza no existe**.
+
+Se vio tres veces: el portal perdía de vista lo recién aprobado, la historia de
+gestión no mostraba justo la pieza más consultada, y el tablero decía «0
+aprobadas» un segundo después de aprobar.
+
+Las dos primeras se arreglaron con una copia cada una. La tercera obligó a lo
+que correspondía desde el principio: **una sola función**,
+`archivosConLasMudadas`, que todas usan. Tres copias de la misma idea es la
+señal de que la idea tenía que vivir en un solo lado.

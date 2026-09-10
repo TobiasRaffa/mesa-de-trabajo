@@ -1,0 +1,132 @@
+// Lo que pasó desde la última vez que miraste.
+//
+// Es la pantalla que reemplaza el «¿alguien sabe cómo viene lo de Café Otoño?»
+// de los lunes. Contesta tres preguntas, en este orden, porque es el orden en
+// que importan:
+//
+//   1. **¿Qué hizo el cliente?** Aprobó, devolvió, escribió.
+//   2. **¿Dónde se me pasó la fecha?**
+//   3. **¿Qué está esperando en mi cancha?**
+//
+// Todo sale de datos que ya existen: no hay un estado nuevo que mantener.
+
+import { ajustesDe, esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
+import { losAvisos, type Aviso } from "@/lib/avisos";
+import { clientesHabilitados } from "@/lib/clientes";
+import { leerConversacion } from "@/lib/conversaciones";
+import { correoConfigurado } from "@/lib/correo";
+import { personaPorId } from "@/lib/equipo";
+import { subcarpetasDe } from "@/lib/google";
+import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
+import { fechaDeDia } from "@/lib/publicaciones";
+import { plazosDe, plazoQueCorre } from "@/lib/plazos";
+import { agruparVersiones } from "@/lib/versiones";
+
+export type CarpetaEnElTablero = {
+  clienteId: string;
+  cliente: string;
+  carpetaId: string;
+  carpeta: string;
+  asignadaA: string | null;
+  /** Cuándo vence la revisión de esta carpeta. */
+  vence: Date | null;
+  /** Está vencida y todavía falta que el cliente decida. */
+  vencida: boolean;
+  piezas: number;
+  sinRevisar: number;
+  aprobadas: number;
+  conCambios: number;
+  /** El cliente escribió y nadie contestó. */
+  esperandoRespuesta: boolean;
+};
+
+export type Tablero = {
+  avisos: Aviso[];
+  sinVer: number;
+  carpetas: CarpetaEnElTablero[];
+  correoConfigurado: boolean;
+};
+
+export async function elTablero(): Promise<Tablero> {
+  const [avisos, clientes] = await Promise.all([losAvisos(), clientesHabilitados()]);
+
+  const porCliente = await Promise.all(
+    clientes.map(async (cliente) => {
+      const carpetas = await subcarpetasDe(cliente.id);
+
+      return Promise.all(
+        carpetas
+          .filter((c) => !esCarpetaReservada(c.name))
+          .map(async (carpeta): Promise<CarpetaEnElTablero> => {
+            const [ajustes, archivos, mensajes] = await Promise.all([
+              ajustesDe(carpeta.id),
+              archivosConLasMudadas(carpeta.id),
+              leerConversacion(carpeta.id),
+            ]);
+
+            const agrupadas = agruparVersiones(archivos);
+            const ultimas = agrupadas.map(
+              (p) => p.versiones[p.versiones.length - 1].archivo.id
+            );
+            const [estados, plazos] = await Promise.all([
+              estadosDe(carpeta.id, ultimas),
+              plazosDe(ultimas),
+            ]);
+
+            const piezas = Object.values(estados);
+            const sinRevisar = piezas.filter(
+              (p) => p.estado === "entregada" || p.estado === "en_revision"
+            ).length;
+
+            // El plazo de la carpeta, salvo que alguna pieza tenga el suyo más
+            // temprano: lo que importa es la primera fecha que se cumple.
+            const fechas = ultimas
+              .map((id) => plazoQueCorre(plazos[id], ajustes.vence))
+              .filter((f): f is Date => f !== null);
+            const propio = ajustes.vence ? fechaDeDia(ajustes.vence) : null;
+            const vence = fechas.length > 0
+              ? new Date(Math.min(...fechas.map((f) => f.getTime())))
+              : propio;
+
+            const persona = await personaPorId(ajustes.asignada);
+            const ultimo = mensajes[mensajes.length - 1] ?? null;
+
+            return {
+              clienteId: cliente.id,
+              cliente: cliente.nombre,
+              carpetaId: carpeta.id,
+              carpeta: carpeta.name,
+              asignadaA: persona?.nombre ?? null,
+              vence,
+              // Vencida solo cuenta si todavía falta que el cliente decida:
+              // una carpeta terminada con fecha vieja no es un problema.
+              vencida: Boolean(vence && vence < hoyALaMedianoche() && sinRevisar > 0),
+              piezas: piezas.length,
+              sinRevisar,
+              aprobadas: piezas.filter((p) => p.estado === "final").length,
+              conCambios: piezas.filter((p) => p.estado === "cambios_marcados").length,
+              esperandoRespuesta: ultimo?.de === "cliente",
+            };
+          })
+      );
+    })
+  );
+
+  return {
+    avisos: avisos.slice(0, 30),
+    sinVer: avisos.filter((a) => !a.visto).length,
+    carpetas: porCliente.flat(),
+    correoConfigurado: correoConfigurado(),
+  };
+}
+
+/**
+ * Hoy a las 00:00.
+ *
+ * Se compara contra la medianoche y no contra el instante: una entrega que
+ * vence «hoy» no está vencida a las nueve de la mañana.
+ */
+function hoyALaMedianoche(): Date {
+  const ahora = new Date();
+  return new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+}

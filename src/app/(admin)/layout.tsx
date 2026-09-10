@@ -11,8 +11,10 @@
 import Link from "next/link";
 
 const SECCIONES = [
+  { href: "/gestion/tablero", texto: "Qué pasó" },
   { href: "/gestion", texto: "Clientes" },
   { href: "/gestion/chats", texto: "Conversaciones" },
+  { href: "/gestion/equipo", texto: "Equipo" },
   { href: "/diagnostico", texto: "Diagnóstico" },
 ] as const;
 

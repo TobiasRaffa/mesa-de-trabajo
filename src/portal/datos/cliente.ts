@@ -17,16 +17,10 @@
 // lleva el navegador hasta que exista dónde guardarlo de verdad.
 
 import { ajustesDe, soloLasVisibles, type Vista } from "@/lib/ajustesDeCarpeta";
-import { estadosDe, mudadasDe, type EstadoDePieza } from "@/lib/piezas";
+import { archivosConLasMudadas, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones } from "@/lib/versiones";
-import {
-  archivosDe,
-  datosDeCarpeta,
-  metadatosArchivo,
-  subcarpetasDe,
-  type ArchivoDrive,
-} from "@/lib/google";
+import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 
 /** Una vuelta anterior de la misma pieza. */
 export type VersionDePieza = {
@@ -97,39 +91,15 @@ export async function portalDelCliente(
   const carpetas = await Promise.all(
     visibles.map(async (carpeta): Promise<CarpetaDeTrabajo> => {
       const { vista } = await ajustesDe(carpeta.id);
-      const archivos = (await archivosDe(carpeta.id)).filter((a) =>
+      // Incluye las que ya se mudaron a «Entregas finales»: aprobar no puede
+      // costarle al cliente perder de vista lo que acaba de aprobar.
+      const archivos = (await archivosConLasMudadas(carpeta.id)).filter((a) =>
         MOSTRABLES.test(a.mimeType)
       );
 
       // «9304.jpeg» y «9304 V2.jpeg» son una sola pieza en dos vueltas, no
       // dos piezas. La regla vive en `versiones.ts` y está probada aparte.
-      // Una pieza aprobada se mudó a «Entregas finales» y Drive ya no la lista
-      // acá. Se la vuelve a traer por su identificador: sacarla de la vista
-      // sería castigar al cliente por haber aprobado.
-      const mudadas = await mudadasDe(carpeta.id);
-      const faltantes = mudadas.filter((id) => !archivos.some((a) => a.id === id));
-      const recuperadas = (
-        await Promise.all(
-          faltantes.map(async (id) => {
-            try {
-              const datos = await metadatosArchivo(id);
-              const recuperado: ArchivoDrive = {
-                id: datos.id,
-                name: datos.name,
-                mimeType: datos.mimeType,
-                thumbnailLink: datos.thumbnailLink,
-                modifiedTime: datos.modifiedTime,
-                webViewLink: datos.webViewLink,
-              };
-              return recuperado;
-            } catch {
-              return null;
-            }
-          })
-        )
-      ).filter((a) => a !== null);
-
-      const agrupadas = agruparVersiones([...archivos, ...recuperadas]);
+      const agrupadas = agruparVersiones(archivos);
 
       // Las fechas las puso la agencia arrastrando en el calendario. Se piden
       // todas juntas: una consulta por pieza serían doce lecturas del archivo.

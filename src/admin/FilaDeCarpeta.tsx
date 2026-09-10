@@ -9,7 +9,12 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
-import { guardarCarpeta, pedirLinkDeCarpeta } from "@/app/(admin)/gestion/acciones";
+import {
+  guardarCarpeta,
+  guardarQuienYCuando,
+  pedirLinkDeCarpeta,
+} from "@/app/(admin)/gestion/acciones";
+import type { Persona } from "@/lib/equipo";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import type { CarpetaEnGestion } from "@/admin/datos/carpetas";
 import { ChatDeCarpeta } from "@/admin/ChatDeCarpeta";
@@ -17,11 +22,17 @@ import { ChatDeCarpeta } from "@/admin/ChatDeCarpeta";
 export function FilaDeCarpeta({
   carpeta,
   clienteId,
+  equipo,
 }: {
   carpeta: CarpetaEnGestion;
   clienteId: string;
+  equipo: Persona[];
 }) {
   const [estado, enviar, esperando] = useActionState(guardarCarpeta, null);
+  const [estadoQuien, guardarQuien, guardandoQuien] = useActionState(
+    guardarQuienYCuando,
+    null
+  );
   const [token, setToken] = useState(carpeta.token ?? null);
   const [pidiendo, setPidiendo] = useState(false);
 
@@ -96,6 +107,75 @@ export function FilaDeCarpeta({
         {estado && !estado.ok && (
           <p aria-live="polite" className="mt-2 text-menudo font-semibold text-alerta">
             {estado.motivo}
+          </p>
+        )}
+
+        {/* Quién lo lleva y hasta cuándo. Van juntos porque se deciden
+            juntos: al armar una tanda se dice quién la lleva y para cuándo
+            tiene que estar revisada. */}
+        {!oculta && (
+          <form
+            action={guardarQuien}
+            className="mt-3 flex flex-wrap items-center gap-2 bg-hueco/50 px-3 py-2"
+          >
+            <input type="hidden" name="carpetaId" value={carpeta.id} />
+
+            <label
+              htmlFor={`quien-${carpeta.id}`}
+              className="text-micro font-extrabold uppercase tracking-wider text-apagado"
+            >
+              Lo lleva
+            </label>
+            <select
+              id={`quien-${carpeta.id}`}
+              name="asignada"
+              defaultValue={carpeta.asignada ?? ""}
+              className="min-h-toque border border-linea bg-lienzo px-2 text-menudo font-bold
+                         focus:border-acento focus:outline-none"
+            >
+              <option value="">sin asignar</option>
+              {equipo.map((persona) => (
+                <option key={persona.id} value={persona.id}>
+                  {persona.nombre}
+                </option>
+              ))}
+            </select>
+
+            <label
+              htmlFor={`vence-${carpeta.id}`}
+              className="text-micro font-extrabold uppercase tracking-wider text-apagado"
+            >
+              Vence
+            </label>
+            <input
+              id={`vence-${carpeta.id}`}
+              name="vence"
+              type="date"
+              defaultValue={carpeta.vence ?? ""}
+              className="min-h-toque border border-linea bg-lienzo px-2 text-menudo font-bold
+                         focus:border-acento focus:outline-none"
+            />
+
+            <button
+              type="submit"
+              disabled={guardandoQuien}
+              className="min-h-toque border-2 border-tinta px-3 text-menudo font-bold
+                         text-tinta transition-colors hover:bg-hueco disabled:opacity-40"
+            >
+              Guardar
+            </button>
+
+            {equipo.length === 0 && (
+              <span className="text-menudo text-espera">
+                Cargá gente en «Equipo» para poder asignar.
+              </span>
+            )}
+          </form>
+        )}
+
+        {estadoQuien && !estadoQuien.ok && (
+          <p aria-live="polite" className="mt-2 text-menudo font-semibold text-alerta">
+            {estadoQuien.motivo}
           </p>
         )}
 

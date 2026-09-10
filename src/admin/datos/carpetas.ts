@@ -12,14 +12,8 @@ import {
 } from "@/lib/ajustesDeCarpeta";
 import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
 import { cuentaPorCarpeta } from "@/lib/conversaciones";
-import {
-  archivosDe,
-  datosDeCarpeta,
-  metadatosArchivo,
-  subcarpetasDe,
-  type ArchivoDrive,
-} from "@/lib/google";
-import { estadosDe, mudadasDe } from "@/lib/piezas";
+import { datosDeCarpeta, subcarpetasDe, type ArchivoDrive } from "@/lib/google";
+import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
 import { publicacionesDe, type DiaSuelto } from "@/lib/publicaciones";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { agruparVersiones } from "@/lib/versiones";
@@ -74,7 +68,7 @@ export async function carpetasDelCliente(clienteId: string): Promise<VistaDeGest
       // De una carpeta reservada no hace falta contar nada: no se revisa.
       if (reservada) return { ...comun, piezas: 0, conVueltas: 0, conFecha: 0 };
 
-      const archivos = await archivosDe(carpeta.id);
+      const archivos = await archivosConLasMudadas(carpeta.id);
       const piezas = agruparVersiones(archivos);
       const dias = await publicacionesDe(piezas.map((p) => ultimoId(p.versiones)));
 
@@ -120,16 +114,13 @@ export async function carpetaParaFechar(
   const [datos, ajustes, archivos] = await Promise.all([
     datosDeCarpeta(carpetaId),
     ajustesDe(carpetaId),
-    archivosDe(carpetaId),
+    archivosConLasMudadas(carpetaId),
   ]);
 
   // Una pieza aprobada se mudó a «Entregas finales» y Drive ya no la lista acá.
   // Se la trae por su identificador: la historia de una pieza aprobada es
   // justamente la que más se consulta.
-  const agrupadas = agruparVersiones([
-    ...archivos,
-    ...(await recuperarMudadas(carpetaId, archivos)),
-  ]);
+  const agrupadas = agruparVersiones(archivos);
   const ultimas = agrupadas.map((p) => ultimoId(p.versiones));
   const [dias, estados] = await Promise.all([
     publicacionesDe(ultimas),
@@ -196,33 +187,4 @@ export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
       };
     })
   );
-}
-
-/** Trae por identificador las piezas que ya no están en la carpeta. */
-async function recuperarMudadas(
-  carpetaId: string,
-  presentes: ArchivoDrive[]
-): Promise<ArchivoDrive[]> {
-  const mudadas = await mudadasDe(carpetaId);
-  const faltantes = mudadas.filter((id) => !presentes.some((a) => a.id === id));
-
-  const traidas = await Promise.all(
-    faltantes.map(async (id) => {
-      try {
-        const datos = await metadatosArchivo(id);
-        const recuperado: ArchivoDrive = {
-          id: datos.id,
-          name: datos.name,
-          mimeType: datos.mimeType,
-          thumbnailLink: datos.thumbnailLink,
-          modifiedTime: datos.modifiedTime,
-          webViewLink: datos.webViewLink,
-        };
-        return recuperado;
-      } catch {
-        return null;
-      }
-    })
-  );
-  return traidas.filter((a) => a !== null);
 }

@@ -18,6 +18,7 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  ajustesDe,
   esCarpetaReservada,
   guardarAjustesDe,
   linkDeCarpeta,
@@ -27,6 +28,15 @@ import { esCarpetaDelCliente, idsDeCarpetasReales, olvidarCarpetas } from "@/lib
 import { habilitarCliente, ponerTag, renovarLink, todosLosClientes } from "@/lib/clientes";
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
 import { archivosDe } from "@/lib/google";
+import { correoValido } from "@/lib/equipo";
+import { marcarTodosVistos } from "@/lib/avisos";
+import {
+  cambiarPersona,
+  elEquipo,
+  sacarDelEquipo,
+  sumarAlEquipo,
+} from "@/lib/equipo";
+import { guardarPlazos } from "@/lib/plazos";
 import {
   esDiaValido,
   guardarPublicaciones,
@@ -63,7 +73,11 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
 
   const vista: Vista = vistaCruda === "calendario" ? "calendario" : "lista";
 
-  await guardarAjustesDe(carpetaId, { visible, vista });
+  // Lo que no viene en el formulario se conserva: el link de la carpeta, quién
+  // la lleva y hasta cuándo. Pisarlos con vacío sería perderlos cada vez que
+  // alguien toca «ocultar».
+  const previos = await ajustesDe(carpetaId);
+  await guardarAjustesDe(carpetaId, { ...previos, visible, vista });
 
   // La pantalla se vuelve a dibujar con lo guardado, en el mismo viaje.
   revalidatePath("/gestion", "layout");
@@ -251,4 +265,113 @@ export async function escribirComoAgencia(
   } catch {
     return { ok: false, motivo: "No pudimos guardar el mensaje. Probá de nuevo." };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Quién lleva cada trabajo, y hasta cuándo
+
+/**
+ * Asigna una carpeta a alguien del equipo, y le pone plazo.
+ *
+ * Van juntos porque se deciden juntos: al armar una tanda se dice quién la
+ * lleva y para cuándo tiene que estar revisada.
+ */
+export async function guardarQuienYCuando(_previo: unknown, formulario: FormData) {
+  const carpetaId = String(formulario.get("carpetaId") ?? "");
+  const asignada = String(formulario.get("asignada") ?? "");
+  const vence = String(formulario.get("vence") ?? "");
+
+  if (!(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false as const, motivo: "Esa carpeta no existe." };
+  }
+
+  // Vacío es una respuesta válida: «sin asignar», «sin plazo».
+  if (asignada && !(await elEquipo()).some((p) => p.id === asignada)) {
+    return { ok: false as const, motivo: "Esa persona no está en el equipo." };
+  }
+  if (vence && !esDiaValido(vence)) {
+    return { ok: false as const, motivo: "Esa fecha no existe." };
+  }
+
+  const previos = await ajustesDe(carpetaId);
+  await guardarAjustesDe(carpetaId, {
+    ...previos,
+    asignada: asignada || undefined,
+    vence: vence || undefined,
+  });
+
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+/** Le corre el plazo a una pieza sola, sin mover el resto. */
+export async function guardarPlazoDePieza(
+  carpetaId: string,
+  piezaId: string,
+  dia: string | null
+): Promise<Resultado> {
+  if (!(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no existe." };
+  }
+  const adentro = new Set((await archivosDe(carpetaId)).map((a) => a.id));
+  if (!adentro.has(piezaId)) {
+    return { ok: false, motivo: "Esa pieza no está en la carpeta." };
+  }
+  if (dia !== null && !esDiaValido(dia)) {
+    return { ok: false, motivo: "Esa fecha no existe." };
+  }
+
+  await guardarPlazos({ [piezaId]: dia });
+  revalidatePath("/gestion", "layout");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// El equipo
+
+export async function agregarAlEquipo(_previo: unknown, formulario: FormData) {
+  const nombre = String(formulario.get("nombre") ?? "").trim();
+  const correo = String(formulario.get("correo") ?? "").trim();
+
+  if (nombre.length < 2) return { ok: false as const, motivo: "Falta el nombre." };
+  if (correo && !correoValido(correo)) {
+    return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
+  }
+
+  await sumarAlEquipo(nombre, correo);
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+export async function editarDelEquipo(_previo: unknown, formulario: FormData) {
+  const id = String(formulario.get("id") ?? "");
+  const nombre = String(formulario.get("nombre") ?? "").trim();
+  const correo = String(formulario.get("correo") ?? "").trim();
+
+  if (!(await elEquipo()).some((p) => p.id === id)) {
+    return { ok: false as const, motivo: "Esa persona no está." };
+  }
+  if (nombre.length < 2) return { ok: false as const, motivo: "Falta el nombre." };
+  if (correo && !correoValido(correo)) {
+    return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
+  }
+
+  await cambiarPersona(id, nombre, correo);
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+export async function quitarDelEquipo(_previo: unknown, formulario: FormData) {
+  const id = String(formulario.get("id") ?? "");
+  await sacarDelEquipo(id);
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+// ---------------------------------------------------------------------------
+// La bandeja
+
+export async function marcarAvisosVistos(): Promise<void> {
+  await marcarTodosVistos();
+  revalidatePath("/gestion", "layout");
 }

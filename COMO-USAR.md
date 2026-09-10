@@ -63,7 +63,17 @@ verdad y va a pedir el tag del cliente.
 
 ## Qué se puede configurar hoy
 
-Administración tiene tres secciones, arriba:
+Administración tiene cinco secciones, arriba:
+
+### Qué pasó (`/gestion/tablero`)
+
+La primera pantalla del día. Arriba, lo que hay que mirar hoy: las fechas
+vencidas y los clientes que escribieron y nadie contestó. Abajo, cómo viene
+cada trabajo.
+
+En el medio está **la bandeja de novedades**: cada vez que un cliente aprueba,
+pide cambios, manda la revisión o escribe, queda anotado ahí. Si el correo está
+configurado, además le llega un mail a quien lleva ese trabajo.
 
 ### Clientes (`/gestion`)
 
@@ -86,11 +96,23 @@ De cada uno podés:
 - **Pasarla a calendario o a lista.**
 - **Armar el calendario**, si está en modo calendario.
 - **Hablar con el cliente**, con la conversación de esa carpeta.
+- **Quién la lleva y hasta cuándo.** El plazo es de la carpeta entera; una
+  pieza suelta puede tener el suyo si hay que correrle la fecha a una sola.
+- **Su propio link**, si querés mandarle esa carpeta sola.
+
+Y abajo de todo, los **mensajes listos**: los textos que se mandan siempre, ya
+escritos. Los abrís, los cambiás si querés, los copiás y los mandás por donde
+le escribís siempre. **Los escribe el equipo, no la aplicación.**
 
 ### Conversaciones (`/gestion/chats`)
 
 Todas juntas, sin entrar cliente por cliente. Arriba de todo, **las que están
 esperando tu respuesta** —o sea, donde el último que habló fue el cliente—.
+
+### Equipo (`/gestion/equipo`)
+
+Quiénes son y a dónde les llegan los avisos. Hace falta para dos cosas:
+asignarle un trabajo a alguien, y avisarle cuando el cliente hace algo.
 
 Todo lo que elegís queda guardado al lado de la aplicación, en la carpeta
 `datos`:
@@ -101,6 +123,11 @@ Todo lo que elegís queda guardado al lado de la aplicación, en la carpeta
 | `ajustes.json` | Qué carpeta se muestra, y si es lista o calendario |
 | `publicaciones.json` | Qué día sale publicada cada pieza |
 | `conversaciones.json` | Los chats |
+| `piezas.json` | En qué anda cada pieza, y su historia |
+| `plazos.json` | Los plazos de piezas sueltas |
+| `equipo.json` | Quiénes son y sus correos |
+| `avisos.json` | La bandeja de novedades |
+| `secreto.txt` | La llave con la que se firman las sesiones del portal |
 
 Se pueden abrir con el Bloc de notas y se pueden copiar. Cuando tengamos base
 de datos, se mudan solos y las pantallas no cambian.
@@ -175,3 +202,41 @@ mes se arma igual.
 
 Lo que guardás acá es exactamente lo que ve el cliente en su portal. No hay dos
 copias: es el mismo dato leído por las dos pantallas.
+
+
+---
+
+## Cómo entra un cliente
+
+Son **dos cosas**, y ninguna sirve sola:
+
+1. **El link.** Se lo mandás vos. Hay uno por cliente —ve todas sus carpetas— y
+   uno por carpeta, si querés mandarle una sola.
+2. **La clave.** Una palabra que elegís vos en la pantalla de Clientes.
+
+> **Mandalas por separado.** El link por un lado y la clave por otro. Mandar las
+> dos en el mismo mensaje es mandar la llave pegada a la puerta.
+
+Si el link se le va a quien no correspondía, **Cambiar link** lo mata en el
+acto y le pasás uno nuevo.
+
+Un cliente sin clave puesta no deja entrar a nadie, ni con el link bueno. La
+pantalla te lo marca en amarillo.
+
+---
+
+## Prender los avisos por correo
+
+Mientras no estén prendidos, todo queda igual en la bandeja del tablero: no se
+pierde nada. Para que además salgan por mail hacen falta dos datos en
+`.env.local`:
+
+    RESEND_API_KEY=...
+    CORREO_DESDE=Mesa de trabajo <avisos@tudominio.com>
+
+La cuenta se hace en **resend.com** y tiene un plan gratis que alcanza de
+sobra. Se configura una sola vez.
+
+> No se usa el correo de Gmail directamente a propósito: mandar mails desde una
+> casa suele estar bloqueado por el proveedor de internet, y lo que llega
+> termina en spam.

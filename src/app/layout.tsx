@@ -22,6 +22,9 @@ const archivo = Archivo({
 export const metadata: Metadata = {
   title: "Mesa de trabajo",
   description: "Revisión y aprobación de piezas entre la agencia y sus clientes.",
+  // Nada de esto va a un buscador. El link de un cliente es medio acceso: si
+  // Google lo indexara, dejaría de serlo. Y las pantallas internas, menos.
+  robots: { index: false, follow: false, nocache: true },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
