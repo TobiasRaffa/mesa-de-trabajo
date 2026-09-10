@@ -15,7 +15,7 @@
 //     aprobar, no una condición. Que Drive no conteste no puede deshacer la
 //     decisión que tomó el cliente; se anota que no se pudo y sigue.
 
-import { esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
+import { esCarpetaReservada } from "@/lib/ajustes";
 import { metadatosArchivo, moverArchivo, subcarpetasDe } from "@/lib/google";
 
 /** El nombre exacto que se busca. Se compara sin distinguir mayúsculas. */

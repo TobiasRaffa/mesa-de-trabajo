@@ -22,7 +22,7 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { documento } from "@/lib/almacen";
-import { ajustesDe } from "@/lib/ajustesDeCarpeta";
+import { ajustesDe } from "@/lib/ajustes";
 import { clientesHabilitados, type Cliente } from "@/lib/clientes";
 import { subcarpetasDe } from "@/lib/google";
 

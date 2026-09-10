@@ -6,6 +6,15 @@ vi.mock("@/lib/google", () => ({ metadatosArchivo: vi.fn() }));
 // Los clientes también se reemplazan: acá se prueba la decisión de permisos,
 // no cómo se descubren las carpetas compartidas.
 vi.mock("@/lib/clientes", () => ({ clientesHabilitados: vi.fn() }));
+// Y lo escondido: qué se guardó es asunto del almacén, no de esta decisión.
+// `esCarpetaDeFacturas` se deja de verdad porque es una función pura.
+vi.mock("@/lib/ajustes", async (original) => ({
+  ...(await original<typeof import("@/lib/ajustes")>()),
+  escondidosEntre: vi.fn(async (ids: string[]) => new Set(ids.filter((i) => ESCONDIDOS.has(i)))),
+}));
+
+/** Lo que la agencia apagó, para esta prueba. */
+const ESCONDIDOS = new Set<string>();
 
 import { clientesHabilitados } from "@/lib/clientes";
 import { metadatosArchivo } from "@/lib/google";
@@ -47,6 +56,7 @@ function driveConArbol(arbol: Record<string, string[]>) {
 }
 
 beforeEach(() => {
+  ESCONDIDOS.clear();
   mock.mockReset();
   clientes.mockReset();
   olvidarElArbol();
@@ -192,5 +202,82 @@ describe("archivoAutorizado", () => {
 
     // El segundo archivo cuesta una sola consulta: la del archivo en sí.
     expect(mock.mock.calls.length).toBe(despuesDelPrimero + 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Esconder algo tiene que **negar** algo.
+ *
+ * Antes, apagar una carpeta en gestión solo dejaba de dibujarla en el portal.
+ * El archivo se pide por su dirección: quien la tuviera de antes —de un link
+ * viejo, del historial, de una captura— la escribía a mano y se lo bajaba
+ * igual. La pantalla no es el permiso.
+ */
+describe("lo escondido no se sirve", () => {
+  it("rechaza un archivo escondido, aunque su carpeta se muestre", async () => {
+    ESCONDIDOS.add("archivo-1");
+    mock.mockResolvedValue(archivo([CLIENTE]));
+    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+  });
+
+  it("rechaza un archivo visible dentro de una carpeta escondida", async () => {
+    ESCONDIDOS.add("logos");
+    driveConArbol({ "archivo-1": ["logos"], logos: [CLIENTE] });
+    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+  });
+
+  it("rechaza si la escondida está más arriba, en el medio del camino", async () => {
+    // Esconder una carpeta esconde todo lo que tiene adentro, por hondo que
+    // esté. Si no, apagar una carpeta obligaría a apagar cada cosa de adentro.
+    ESCONDIDOS.add("septiembre");
+    driveConArbol({
+      "archivo-1": ["semana-2"],
+      "semana-2": ["septiembre"],
+      septiembre: [CLIENTE],
+    });
+    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+  });
+
+  it("autoriza una subcarpeta hondas si nada del camino está escondido", async () => {
+    driveConArbol({
+      "archivo-1": ["semana-2"],
+      "semana-2": ["septiembre"],
+      septiembre: [CLIENTE],
+    });
+    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+  });
+
+  it("autoriza si hay otro camino limpio hasta el cliente", async () => {
+    // En Drive una cosa puede estar en varias carpetas. Negar por el camino
+    // sucio cuando hay uno bueno sería esconder algo que se dejó a la vista.
+    ESCONDIDOS.add("borradores");
+    driveConArbol({
+      "archivo-1": ["borradores", "logos"],
+      borradores: [CLIENTE],
+      logos: [CLIENTE],
+    });
+    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+  });
+
+  it("RECHAZA lo que está en «Facturas», sin que nadie lo esconda", async () => {
+    mock.mockImplementation(async (id: string) => ({
+      id,
+      name: id === "f" ? "Facturas" : id,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: { "archivo-1": ["f"], f: [CLIENTE] }[id],
+    }));
+    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+  });
+
+  it("SÍ deja pasar «Entregas finales»: ahí va lo que el cliente aprobó", async () => {
+    mock.mockImplementation(async (id: string) => ({
+      id,
+      name: id === "ef" ? "Entregas finales" : id,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: { "archivo-1": ["ef"], ef: [CLIENTE] }[id],
+    }));
+    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
   });
 });

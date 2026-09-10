@@ -5,7 +5,7 @@
 // de Drive todos los archivos de todos los clientes para dibujar una lista que
 // arranca cerrada sería pagar por adelantado algo que casi nunca se mira.
 
-import { ajustesDe, esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
+import { ajustesDe, esCarpetaReservada } from "@/lib/ajustes";
 import { personaPorId } from "@/lib/equipo";
 import { subcarpetasDe } from "@/lib/google";
 import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";

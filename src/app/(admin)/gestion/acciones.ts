@@ -23,7 +23,7 @@ import {
   guardarAjustesDe,
   linkDeCarpeta,
   type Vista,
-} from "@/lib/ajustesDeCarpeta";
+} from "@/lib/ajustes";
 import { esCarpetaDelCliente, idsDeCarpetasReales, olvidarCarpetas } from "@/lib/carpetas";
 import {
   clientePorId,

@@ -3,18 +3,29 @@
 // Toda decisión de permisos vive acá y no desparramada en las pantallas: un
 // olvido en un archivo suelto no puede abrir una puerta.
 //
-// Hoy la regla es simple porque todavía no hay usuarios ni base de datos: solo
-// se sirven archivos que estén **dentro del árbol** de una carpeta que la
-// aplicación administra. Cuando existan los accesos, esta misma función pasa a
-// preguntar además si *esta persona* puede ver *ese* proyecto.
+// Un archivo se sirve cuando se cumplen **las tres** cosas:
+//
+//   1. Quien pregunta abrió la puerta de un cliente —lo decide `clienteQueEntro`
+//      y llega acá como parámetro—.
+//   2. El archivo cuelga del árbol de **ese** cliente, no de cualquiera.
+//   3. **El camino hasta él no pasa por nada escondido.**
+//
+// La tercera es la que convierte «ocultar» en una regla. Sin ella, apagar una
+// carpeta en gestión solo dejaba de dibujarla: el archivo se pide por su
+// dirección, y quien la tuviera de antes la podía escribir a mano y bajárselo
+// igual. Esconder algo tiene que negar algo.
 //
 // **Por qué se sube por el árbol y no se mira solo la carpeta madre.** Lo que
 // la agencia comparte con la aplicación es la carpeta del cliente; los
 // archivos están más abajo, adentro de «Logos», «Calendario septiembre» y las
-// que vayan creando. Mirando solo el padre directo, cada archivo real quedaba
-// afuera y el portal se veía vacío. Mirar el árbol entero es lo que hace que
-// la agencia pueda seguir armando carpetas en Drive sin avisarle a nadie.
+// subcarpetas que vayan creando. Mirando solo el padre directo, cada archivo
+// real quedaba afuera y el portal se veía vacío.
+//
+// En Drive una cosa puede tener **varias carpetas madre**. Alcanza con que
+// exista un camino limpio hasta el cliente: negar por un camino sucio cuando
+// hay otro bueno sería esconder algo que la agencia dejó a la vista.
 
+import { esCarpetaDeFacturas, escondidosEntre } from "@/lib/ajustes";
 import { clientesHabilitados } from "@/lib/clientes";
 import { metadatosArchivo, type MetadatosArchivo } from "@/lib/google";
 
@@ -39,7 +50,7 @@ const RECUERDO_MS = 5 * 60 * 1000;
  * el acceso a la aplicación se hace dejando de compartir la carpeta en Drive,
  * y entonces el pedido a Google falla directamente, sin llegar a esta caché.
  */
-const madresDe = new Map<string, { padres: string[]; vence: number }>();
+const madresDe = new Map<string, { padres: string[]; nombre: string; vence: number }>();
 
 /**
  * Carpetas que la aplicación administra: la de cada cliente habilitado.
@@ -65,32 +76,37 @@ export function olvidarElArbol(): void {
   madresDe.clear();
 }
 
-async function padresDe(carpetaId: string): Promise<string[]> {
+async function nodo(carpetaId: string): Promise<{ padres: string[]; nombre: string }> {
   const ahora = Date.now();
   const guardado = madresDe.get(carpetaId);
-  if (guardado && guardado.vence > ahora) return guardado.padres;
+  if (guardado && guardado.vence > ahora) return guardado;
 
   const datos = await metadatosArchivo(carpetaId);
-  const padres = datos.parents ?? [];
-  madresDe.set(carpetaId, { padres, vence: ahora + RECUERDO_MS });
-  return padres;
+  const fresco = { padres: datos.parents ?? [], nombre: datos.name ?? "" };
+  madresDe.set(carpetaId, { ...fresco, vence: ahora + RECUERDO_MS });
+  return fresco;
 }
 
 /**
- * Sube por el árbol de carpetas buscando alguna administrada.
+ * ¿Hay un camino limpio desde acá hasta la carpeta del cliente?
  *
- * Va por niveles y no en profundidad porque lo normal es encontrarla en el
- * primero o el segundo: así se corta antes y se gastan menos pedidos.
+ * Limpio quiere decir que ningún escalón del camino está escondido ni es
+ * «Facturas». «Entregas finales» sí se atraviesa: ahí es donde termina lo que
+ * el cliente aprobó, y el cliente tiene que poder seguir viéndolo.
+ *
+ * Va por niveles y no en profundidad porque lo normal es encontrar la raíz en
+ * el primero o el segundo: así se corta antes y se gastan menos pedidos.
  */
-async function desciendeDeAlgunaAdministrada(
-  desde: string[],
-  permitidas: string[]
-): Promise<boolean> {
+async function hayCaminoLimpio(desde: string[], raiz: string): Promise<boolean> {
   const vistas = new Set<string>();
   let frontera = desde;
 
   for (let nivel = 0; nivel < NIVELES && frontera.length > 0; nivel++) {
-    if (frontera.some((id) => permitidas.includes(id))) return true;
+    if (frontera.includes(raiz)) return true;
+
+    // Se pregunta por toda la frontera de una vez: de a uno serían tantas
+    // lecturas del almacén como carpetas tenga el camino.
+    const escondidas = await escondidosEntre(frontera);
 
     const siguiente: string[] = [];
     for (const id of frontera) {
@@ -98,7 +114,14 @@ async function desciendeDeAlgunaAdministrada(
       // puede tener varias madres, y sin esto un rombo se recorre dos veces.
       if (vistas.has(id)) continue;
       vistas.add(id);
-      siguiente.push(...(await padresDe(id)));
+
+      // Rama muerta: por acá no se llega, aunque más arriba esté la raíz.
+      if (escondidas.has(id)) continue;
+
+      const { padres, nombre } = await nodo(id);
+      if (esCarpetaDeFacturas(nombre)) continue;
+
+      siguiente.push(...padres);
     }
     frontera = siguiente;
   }
@@ -131,9 +154,11 @@ export async function archivoAutorizado(
 
   try {
     const archivo = await metadatosArchivo(fileId);
-    const adentro = await desciendeDeAlgunaAdministrada(archivo.parents ?? [], [
-      carpetaDelCliente,
-    ]);
+
+    // El archivo en sí puede estar escondido aunque su carpeta se muestre.
+    if ((await escondidosEntre([fileId])).has(fileId)) return null;
+
+    const adentro = await hayCaminoLimpio(archivo.parents ?? [], carpetaDelCliente);
     return adentro ? archivo : null;
   } catch {
     return null;

@@ -16,7 +16,7 @@
 // estado. En qué anda cada pieza —aprobada, con cambios, en qué ronda— lo
 // lleva el navegador hasta que exista dónde guardarlo de verdad.
 
-import { ajustesDe, soloLasVisibles, type Vista } from "@/lib/ajustesDeCarpeta";
+import { ajustesDe, soloLasVisibles, type Vista } from "@/lib/ajustes";
 import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones } from "@/lib/versiones";

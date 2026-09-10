@@ -10,7 +10,7 @@
 //
 // Todo sale de datos que ya existen: no hay un estado nuevo que mantener.
 
-import { esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
+import { esCarpetaReservada } from "@/lib/ajustes";
 import { losAvisos, type Aviso } from "@/lib/avisos";
 import { clientesHabilitados } from "@/lib/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";

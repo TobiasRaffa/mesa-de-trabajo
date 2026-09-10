@@ -5,7 +5,7 @@
 // visible —no puede filtrar lo que nunca le llegó—. Acá llega todo, porque de
 // eso se trata la pantalla: decidir qué se muestra.
 
-import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustesDeCarpeta";
+import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustes";
 import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { datosDeCarpeta, subcarpetasDe, type ArchivoDrive } from "@/lib/google";
