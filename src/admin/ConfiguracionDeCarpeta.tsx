@@ -4,21 +4,14 @@
 
 import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  guardarCarpeta,
-  guardarQuienYCuando,
-  pedirLinkDeCarpeta,
-} from "@/app/(admin)/gestion/acciones";
+import { guardarCarpeta, pedirLinkDeCarpeta } from "@/app/(admin)/gestion/acciones";
 import { DiasDeRevision } from "@/admin/DiasDeRevision";
+import { Responsable } from "@/admin/Responsable";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import type { NodoCarpeta } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
 const TITULO = "text-micro font-extrabold uppercase tracking-widest text-apagado";
-
-const CAMPO =
-  "min-h-toque border border-linea bg-lienzo px-2 text-menudo font-bold " +
-  "focus:border-acento focus:outline-none";
 
 const BOTON =
   "min-h-toque border-2 border-tinta px-4 text-normal font-bold tracking-tight " +
@@ -91,10 +84,6 @@ export function ConfiguracionDeCarpeta({
   alGuardar: () => void;
 }) {
   const [estado, guardar, esperando] = useActionState(guardarCarpeta, null);
-  const [estadoQuien, guardarQuien, guardandoQuien] = useActionState(
-    guardarQuienYCuando,
-    null
-  );
   const [token, setToken] = useState(carpeta.token ?? null);
   const [pidiendo, setPidiendo] = useState(false);
 
@@ -104,8 +93,8 @@ export function ConfiguracionDeCarpeta({
   // la lleva—. Sin esto, el cartel seguía mostrando lo viejo hasta cerrar y
   // volver a abrir, y parecía que el cambio no se había guardado.
   useEffect(() => {
-    if (estado?.ok || estadoQuien?.ok) alGuardar();
-  }, [estado, estadoQuien, alGuardar]);
+    if (estado?.ok) alGuardar();
+  }, [estado, alGuardar]);
 
   async function pedirLink() {
     setPidiendo(true);
@@ -180,28 +169,16 @@ export function ConfiguracionDeCarpeta({
       {/* ---------------------------- Quién lo lleva --------------------- */}
       <section>
         <h4 className={TITULO}>Quién lo lleva</h4>
-        <form action={guardarQuien} className="mt-2 flex flex-wrap items-center gap-2">
-          <input type="hidden" name="carpetaId" value={carpeta.id} />
-          <select
-            name="asignada"
-            defaultValue={carpeta.asignada ?? ""}
-            aria-label="Quién lo lleva"
-            className={CAMPO}
-          >
-            <option value="">sin asignar</option>
-            {equipo.map((persona) => (
-              <option key={persona.id} value={persona.id}>
-                {persona.nombre}
-              </option>
-            ))}
-          </select>
-          <button type="submit" disabled={guardandoQuien} className={BOTON}>
-            Guardar
-          </button>
-          {equipo.length === 0 && (
-            <span className="text-menudo text-espera">Cargá gente en «Equipo».</span>
-          )}
-        </form>
+        <div className="mt-2">
+          <Responsable
+            nivel="carpeta"
+            id={carpeta.id}
+            quien={carpeta.responsableQueCorre}
+            propio={carpeta.responsable !== undefined}
+            equipo={equipo}
+            alGuardar={alGuardar}
+          />
+        </div>
       </section>
 
       {/* -------------------------- Tiempo de revisión ------------------- */}
@@ -239,7 +216,7 @@ export function ConfiguracionDeCarpeta({
         </section>
       )}
 
-      {[estado, estadoQuien]
+      {[estado]
         .filter((r) => r && !r.ok)
         .map((r, i) => (
           <p key={i} aria-live="polite" className="text-menudo font-semibold text-alerta">

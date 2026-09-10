@@ -10,6 +10,11 @@ import { personaPorId } from "@/lib/equipo";
 import { subcarpetasDe } from "@/lib/google";
 import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
+import {
+  responsableDe,
+  responsablesDe,
+  responsableQueCorre,
+} from "@/lib/responsables";
 import { diaDe, publicacionesDe } from "@/lib/publicaciones";
 import { calcularVencimiento } from "@/lib/fechas";
 import { agruparVersiones } from "@/lib/versiones";
@@ -22,8 +27,12 @@ export type NodoCarpeta = {
   visible: boolean;
   vista: "lista" | "calendario";
   token?: string;
-  asignada?: string;
-  asignadaA: string | null;
+  /** Quién está puesto a mano acá. `null` es «nadie»; ausente es «hereda». */
+  responsable?: string | null;
+  /** Quién lo lleva de verdad, ya heredado. */
+  responsableQueCorre: string | null;
+  /** Su nombre, para mostrar. */
+  responsableA: string | null;
   /** Los días de revisión puestos a mano en esta carpeta, si los tiene. */
   dias?: number;
   /** Los que de verdad corren acá, ya heredados. */
@@ -51,21 +60,32 @@ export type NodoArchivo = {
   diasQueCorren: number;
   /** Cuándo vence, calculado: el día que se subió más los días. */
   vence?: string;
+  /** Quién está puesto a mano acá. `null` es «nadie»; ausente es «hereda». */
+  responsable?: string | null;
+  responsableQueCorre: string | null;
+  responsableA: string | null;
 };
 
 export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[]> {
-  const [carpetas, diasDelCliente] = await Promise.all([
+  const [carpetas, diasDelCliente, deQuienEsElCliente] = await Promise.all([
     subcarpetasDe(clienteId),
     plazoDe(clienteId),
+    responsableDe(clienteId),
   ]);
 
-  const propios = await plazosDe(carpetas.map((c) => c.id));
+  const ids = carpetas.map((c) => c.id);
+  const [propios, responsables] = await Promise.all([plazosDe(ids), responsablesDe(ids)]);
 
   return Promise.all(
     carpetas.map(async (carpeta): Promise<NodoCarpeta> => {
       const reservada = esCarpetaReservada(carpeta.name);
       const ajustes = await ajustesDe(carpeta.id);
-      const persona = await personaPorId(ajustes.asignada);
+      const quien = responsableQueCorre(
+        undefined,
+        carpeta.id in responsables ? responsables[carpeta.id] : undefined,
+        deQuienEsElCliente
+      );
+      const persona = await personaPorId(quien ?? undefined);
 
       const base = {
         id: carpeta.id,
@@ -74,8 +94,9 @@ export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[
         visible: ajustes.visible,
         vista: ajustes.vista,
         token: ajustes.token,
-        asignada: ajustes.asignada,
-        asignadaA: persona?.nombre ?? null,
+        responsable: carpeta.id in responsables ? responsables[carpeta.id] : undefined,
+        responsableQueCorre: quien,
+        responsableA: persona?.nombre ?? null,
         dias: propios[carpeta.id],
         diasQueCorren: plazoQueCorre(undefined, propios[carpeta.id], diasDelCliente),
         reservada,
@@ -101,22 +122,33 @@ export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[
 
 export async function archivosDeCarpeta(
   carpetaId: string,
-  /** Los días que hereda esta carpeta. Los archivos parten de acá. */
-  diasDeLaCarpeta: number
+  /** Lo que hereda esta carpeta. Los archivos parten de acá. */
+  heredado: { dias: number; responsable: string | null }
 ): Promise<NodoArchivo[]> {
   const agrupadas = agruparVersiones(await archivosConLasMudadas(carpetaId));
   const ultimas = agrupadas.map((p) => p.versiones[p.versiones.length - 1].archivo.id);
 
-  const [estados, dias, propios] = await Promise.all([
+  const [estados, dias, propios, responsables] = await Promise.all([
     estadosDe(carpetaId, ultimas),
     publicacionesDe(ultimas),
     plazosDe(ultimas),
+    responsablesDe(ultimas),
   ]);
+
+  const nombres = new Map<string, string | null>();
+  for (const id of new Set(Object.values(responsables))) {
+    if (id) nombres.set(id, (await personaPorId(id))?.nombre ?? null);
+  }
+  const nombreDelHeredado = heredado.responsable
+    ? ((await personaPorId(heredado.responsable))?.nombre ?? null)
+    : null;
 
   return agrupadas.map((pieza): NodoArchivo => {
     const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
     const estado = estados[ultima.id];
-    const corren = plazoQueCorre(propios[ultima.id], diasDeLaCarpeta, undefined);
+    const corren = plazoQueCorre(propios[ultima.id], heredado.dias, undefined);
+    const propio = ultima.id in responsables ? responsables[ultima.id] : undefined;
+    const quien = responsableQueCorre(propio, heredado.responsable, undefined);
 
     return {
       id: ultima.id,
@@ -132,6 +164,11 @@ export async function archivosDeCarpeta(
       vence: ultima.modifiedTime
         ? diaDe(calcularVencimiento(new Date(ultima.modifiedTime), corren))
         : undefined,
+      responsable: propio,
+      responsableQueCorre: quien,
+      responsableA: quien
+        ? (nombres.get(quien) ?? nombreDelHeredado)
+        : null,
     };
   });
 }

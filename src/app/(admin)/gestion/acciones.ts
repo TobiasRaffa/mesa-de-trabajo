@@ -55,6 +55,7 @@ import {
   sumarAlEquipo,
 } from "@/lib/equipo";
 import { diasValidos, ponerPlazo } from "@/lib/plazos";
+import { ponerResponsable } from "@/lib/responsables";
 import { marcarLeido } from "@/lib/conversaciones";
 import { subcarpetasDe } from "@/lib/google";
 import {
@@ -329,62 +330,91 @@ export async function escribirComoAgencia(
 // ---------------------------------------------------------------------------
 // Quién lleva cada trabajo, y hasta cuándo
 
-/** Asigna una carpeta a alguien del equipo. */
-export async function guardarQuienYCuando(_previo: unknown, formulario: FormData) {
-  const carpetaId = String(formulario.get("carpetaId") ?? "");
-  const asignada = String(formulario.get("asignada") ?? "");
-
-  if (!(await esCarpetaDelCliente(carpetaId))) {
-    return { ok: false as const, motivo: "Esa carpeta no existe." };
-  }
-  // Vacío es una respuesta válida: «sin asignar».
-  if (asignada && !(await elEquipo()).some((p) => p.id === asignada)) {
-    return { ok: false as const, motivo: "Esa persona no está en el equipo." };
-  }
-
-  const previos = await ajustesDe(carpetaId);
-  await guardarAjustesDe(carpetaId, { ...previos, asignada: asignada || undefined });
-
-  revalidatePath("/gestion", "layout");
-  return { ok: true as const };
-}
-
 /**
  * Pone los días de revisión en un nivel, y borra lo que haya debajo.
  *
  * Borrar lo de abajo es la parte importante: sin eso, cambiar el plazo del
  * cliente dejaría carpetas con el valor viejo y nadie sabría de dónde salió.
  */
-export async function guardarDiasDeRevision(
-  nivel: "cliente" | "carpeta" | "archivo",
+type Nivel = "cliente" | "carpeta" | "archivo";
+
+/**
+ * Comprueba que el identificador sea real y devuelve qué queda debajo.
+ *
+ * Lo de abajo es lo que se va a dejar heredando otra vez. Un archivo se
+ * comprueba contra su carpeta, que viene aparte: el identificador llega de
+ * afuera y no se puede creer.
+ */
+async function nivelReal(
+  nivel: Nivel,
   id: string,
-  dias: number
+  carpetaId?: string
+): Promise<{ ok: true; debajo: string[] } | { ok: false; motivo: string }> {
+  if (nivel === "cliente") {
+    if (!(await esClienteReal(id))) return { ok: false, motivo: "Ese cliente no existe." };
+    const carpetas = await subcarpetasDe(id);
+    const archivos = await Promise.all(carpetas.map((c) => archivosDe(c.id)));
+    return {
+      ok: true,
+      debajo: [...carpetas.map((c) => c.id), ...archivos.flat().map((a) => a.id)],
+    };
+  }
+
+  if (nivel === "carpeta") {
+    if (!(await esCarpetaDelCliente(id))) {
+      return { ok: false, motivo: "Esa carpeta no existe." };
+    }
+    return { ok: true, debajo: (await archivosDe(id)).map((a) => a.id) };
+  }
+
+  if (!carpetaId || !(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no existe." };
+  }
+  if (!(await archivosDe(carpetaId)).some((a) => a.id === id)) {
+    return { ok: false, motivo: "Ese archivo no está en la carpeta." };
+  }
+  // Un archivo no tiene nada debajo.
+  return { ok: true, debajo: [] };
+}
+
+export async function guardarDiasDeRevision(
+  nivel: Nivel,
+  id: string,
+  dias: number,
+  carpetaId?: string
 ): Promise<Resultado> {
   if (!diasValidos(dias)) {
     return { ok: false, motivo: "Los días tienen que ir de 1 a 30." };
   }
 
-  let debajo: string[] = [];
+  const donde = await nivelReal(nivel, id, carpetaId);
+  if (!donde.ok) return donde;
 
-  if (nivel === "cliente") {
-    if (!(await esClienteReal(id))) return { ok: false, motivo: "Ese cliente no existe." };
-    // Debajo de un cliente están sus carpetas y todos sus archivos.
-    const carpetas = await subcarpetasDe(id);
-    const archivos = await Promise.all(carpetas.map((c) => archivosDe(c.id)));
-    debajo = [...carpetas.map((c) => c.id), ...archivos.flat().map((a) => a.id)];
-  } else if (nivel === "carpeta") {
-    if (!(await esCarpetaDelCliente(id))) {
-      return { ok: false, motivo: "Esa carpeta no existe." };
-    }
-    debajo = (await archivosDe(id)).map((a) => a.id);
-  } else {
-    // Un archivo no tiene nada debajo. Se comprueba que exista de verdad
-    // recorriendo las carpetas: el identificador llega de afuera.
-    const carpetaId = String(id);
-    if (!carpetaId) return { ok: false, motivo: "Falta el archivo." };
+  await ponerPlazo(id, dias, donde.debajo);
+  revalidatePath("/gestion", "layout");
+  return { ok: true };
+}
+
+/**
+ * Pone quién lleva algo, y deja heredando a todo lo que esté debajo.
+ *
+ * «Sin asignar» se guarda como una decisión y no como la falta de una: una
+ * carpeta puesta en nadie no vuelve sola al responsable del cliente.
+ */
+export async function guardarResponsable(
+  nivel: Nivel,
+  id: string,
+  personaId: string,
+  carpetaId?: string
+): Promise<Resultado> {
+  if (personaId && !(await elEquipo()).some((p) => p.id === personaId)) {
+    return { ok: false, motivo: "Esa persona no está en el equipo." };
   }
 
-  await ponerPlazo(id, dias, debajo);
+  const donde = await nivelReal(nivel, id, carpetaId);
+  if (!donde.ok) return donde;
+
+  await ponerResponsable(id, personaId || null, donde.debajo);
   revalidatePath("/gestion", "layout");
   return { ok: true };
 }
@@ -471,13 +501,13 @@ export async function abrirCliente(
 
 export async function abrirCarpeta(
   carpetaId: string,
-  diasDeLaCarpeta: number
+  heredado: { dias: number; responsable: string | null }
 ): Promise<{ ok: true; archivos: NodoArchivo[] } | { ok: false; motivo: string }> {
   if (!(await esCarpetaDelCliente(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
   try {
-    return { ok: true, archivos: await archivosDeCarpeta(carpetaId, diasDeLaCarpeta) };
+    return { ok: true, archivos: await archivosDeCarpeta(carpetaId, heredado) };
   } catch {
     return { ok: false, motivo: "No pude leer los archivos en Drive." };
   }

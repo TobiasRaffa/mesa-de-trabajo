@@ -11,6 +11,7 @@ import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { datosDeCarpeta, subcarpetasDe, type ArchivoDrive } from "@/lib/google";
 import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
 import { plazosDe } from "@/lib/plazos";
+import { responsablesDe } from "@/lib/responsables";
 import { DIAS_POR_OMISION } from "@/lib/dias";
 import { publicacionesDe, type DiaSuelto } from "@/lib/publicaciones";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
@@ -107,6 +108,10 @@ export type ClienteEnGestion = Omit<Cliente, "tag"> & {
   dias: number;
   /** Los días están puestos acá y no son el de omisión. */
   diasPropios: boolean;
+  /** Quién lleva este cliente. `null` es «nadie». */
+  responsable: string | null;
+  /** Está puesto acá y no es la falta de una decisión. */
+  responsablePropio: boolean;
 };
 
 /** Todos los clientes que el robot ve, para la pantalla que los administra. */
@@ -115,7 +120,8 @@ export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
     todosLosClientes(),
     sinLeerPorCliente("agencia"),
   ]);
-  const propios = await plazosDe(clientes.map((c) => c.id));
+  const ids = clientes.map((c) => c.id);
+  const [propios, quienes] = await Promise.all([plazosDe(ids), responsablesDe(ids)]);
 
   return Promise.all(
     clientes.map(async (cliente): Promise<ClienteEnGestion> => {
@@ -127,6 +133,8 @@ export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
         tieneClave: tag.trim() !== "",
         dias: propios[cliente.id] ?? DIAS_POR_OMISION,
         diasPropios: propios[cliente.id] !== undefined,
+        responsable: quienes[cliente.id] ?? null,
+        responsablePropio: cliente.id in quienes,
       };
 
       if (!cliente.habilitado) {

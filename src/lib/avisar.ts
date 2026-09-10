@@ -8,7 +8,7 @@
 // una condición: si el correo falla, la aprobación vale igual. Todo lo que
 // pueda salir mal termina en «se anotó, no se pudo mandar».
 
-import { ajustesDe } from "@/lib/ajustesDeCarpeta";
+import { responsableDe, responsableQueCorre } from "@/lib/responsables";
 import { anotarAviso, type ClaseDeAviso } from "@/lib/avisos";
 import { correoConfigurado, mandarCorreo } from "@/lib/correo";
 import { personaPorId } from "@/lib/equipo";
@@ -45,8 +45,14 @@ export async function avisar(opciones: {
   try {
     const texto = `${cliente}: ${comoSeCuenta(clase, carpeta, detalle)}`;
 
-    const { asignada } = await ajustesDe(carpetaId);
-    const persona = await personaPorId(asignada);
+    // Quién lo lleva sale de la herencia: si la carpeta no tiene a nadie
+    // puesto, se le avisa a quien lleva el cliente entero.
+    const [deLaCarpeta, delCliente] = await Promise.all([
+      responsableDe(carpetaId),
+      responsableDe(clienteId),
+    ]);
+    const quien = responsableQueCorre(undefined, deLaCarpeta, delCliente);
+    const persona = await personaPorId(quien ?? undefined);
 
     let estado: Awaited<ReturnType<typeof mandarCorreo>> = { estado: "sin_configurar" };
     if (!correoConfigurado()) {

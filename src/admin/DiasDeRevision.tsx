@@ -17,12 +17,15 @@ import { DIAS_POSIBLES } from "@/lib/dias";
 export function DiasDeRevision({
   nivel,
   id,
+  carpetaId,
   dias,
   propio,
   alGuardar,
 }: {
   nivel: "cliente" | "carpeta" | "archivo";
   id: string;
+  /** Solo para un archivo: su carpeta, para poder comprobarlo. */
+  carpetaId?: string;
   dias: number;
   /** El número está puesto acá, no heredado de arriba. */
   propio: boolean;
@@ -33,7 +36,7 @@ export function DiasDeRevision({
 
   function cambiar(nuevos: number) {
     guardar(async () => {
-      const r = await guardarDiasDeRevision(nivel, id, nuevos);
+      const r = await guardarDiasDeRevision(nivel, id, nuevos, carpetaId);
       if (r.ok) {
         setError(null);
         alGuardar?.();

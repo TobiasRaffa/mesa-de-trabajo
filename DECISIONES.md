@@ -1451,3 +1451,34 @@ En el mismo pasada: el engranaje es la ruedita dentada de siempre, «Ocultar»
 pasó a ser Sí/No, la gente del equipo no se edita hasta apretar **Editar**, y
 el diagnóstico salió de la barra —cuando Drive falla, cada pantalla lo dice
 donde pasa—.
+
+## 97. La herencia se escribió una sola vez.
+
+El tiempo de revisión y quién lleva cada cosa tienen **exactamente la misma
+regla**: se hereda cliente → carpeta → archivo, y poner un valor arriba deja
+heredando a todo lo de abajo.
+
+Escrita dos veces, ya se sabe cómo termina: una de las dos se arregla y la otra
+no. Vive en `src/lib/almacenHeredable.ts` y los dos ajustes son envoltorios
+finos con su regla de negocio.
+
+**«No está» y «está puesto en nada» son cosas distintas.** Una carpeta puesta
+en «sin asignar» **no** vuelve a heredar el responsable del cliente: alguien
+decidió que esa carpeta no la lleva nadie. Por eso se guarda `null` y no se
+borra la entrada, y por eso la herencia usa `!== undefined` y no `??` —con
+`??`, un «nadie» caería al de arriba en silencio, que es justo lo contrario de
+lo que se pidió—. Está probado en los dos sentidos.
+
+## 98. Cada archivo tiene su ruedita.
+
+Antes solo se configuraban el cliente y la carpeta, y los casos sueltos no
+entraban: «esta la necesitamos el jueves y el resto la semana que viene»,
+«esta la lleva Delfi aunque el resto sea de Nari».
+
+El archivo es el último escalón: lo que se pone ahí gana sobre todo lo de
+arriba, y no tiene nada debajo que borrar.
+
+Comprobar que un archivo existe es distinto que comprobar una carpeta: no
+alcanza con el identificador, hay que saber en qué carpeta está. Por eso la
+acción recibe también la carpeta y verifica que el archivo esté adentro —el
+identificador llega de afuera y no se puede creer—.

@@ -16,7 +16,9 @@ import {
 } from "@/app/(admin)/gestion/acciones";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import { DiasDeRevision } from "@/admin/DiasDeRevision";
+import { Responsable } from "@/admin/Responsable";
 import type { ClienteEnGestion } from "@/admin/datos/carpetas";
+import type { Persona } from "@/lib/equipo";
 
 const TITULO = "text-micro font-extrabold uppercase tracking-widest text-apagado";
 
@@ -31,9 +33,11 @@ const BOTON =
 
 export function ConfiguracionDeCliente({
   cliente,
+  equipo,
   alGuardar,
 }: {
   cliente: ClienteEnGestion;
+  equipo: Persona[];
   /** Se llama cuando algo se guardó, para que la fila de arriba se actualice. */
   alGuardar: () => void;
 }) {
@@ -130,6 +134,21 @@ export function ConfiguracionDeCliente({
           </div>
         </section>
       )}
+
+      {/* ---------------------------- Quién lo lleva --------------------- */}
+      <section>
+        <h4 className={TITULO}>Quién lo lleva</h4>
+        <div className="mt-2">
+          <Responsable
+            nivel="cliente"
+            id={cliente.id}
+            quien={cliente.responsable}
+            propio={cliente.responsablePropio}
+            equipo={equipo}
+            alGuardar={alGuardar}
+          />
+        </div>
+      </section>
 
       {/* -------------------------- Tiempo de revisión ------------------- */}
       <section>

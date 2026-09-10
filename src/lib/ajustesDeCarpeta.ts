@@ -33,14 +33,6 @@ export type AjustesDeCarpeta = {
    * Se genera la primera vez que alguien lo pide.
    */
   token?: string;
-  /**
-   * Quién del equipo lleva este trabajo.
-   *
-   * Es a quién se le avisa cuando el cliente decide algo. Vacío significa que
-   * no se le avisa a nadie en particular —el aviso queda igual en la bandeja,
-   * pero nadie lo recibe en su correo—.
-   */
-  asignada?: string;
 };
 
 export type Ajustes = {
@@ -99,13 +91,11 @@ function normalizar(datos: unknown): Record<string, AjustesDeCarpeta> {
       visible?: unknown;
       vista?: unknown;
       token?: unknown;
-      asignada?: unknown;
     };
     salida[id] = {
       visible: typeof v.visible === "boolean" ? v.visible : POR_OMISION.visible,
       vista: v.vista === "calendario" ? "calendario" : "lista",
       token: typeof v.token === "string" && v.token ? v.token : undefined,
-      asignada: typeof v.asignada === "string" && v.asignada ? v.asignada : undefined,
     };
   }
   return salida;

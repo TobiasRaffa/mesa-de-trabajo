@@ -35,6 +35,7 @@ import type { ClienteEnGestion } from "@/admin/datos/carpetas";
 import type { Persona } from "@/lib/equipo";
 import { ConfiguracionDeCliente } from "@/admin/ConfiguracionDeCliente";
 import { ConfiguracionDeCarpeta } from "@/admin/ConfiguracionDeCarpeta";
+import { ConfiguracionDeArchivo } from "@/admin/ConfiguracionDeArchivo";
 import { Estado } from "@/ui/Estado";
 import { IconoConfig, IconoDrive, IconoFlecha } from "@/ui/Icono";
 
@@ -291,7 +292,11 @@ function FilaCliente({
 
       {config && (
         <Panel nivel={0}>
-          <ConfiguracionDeCliente cliente={cliente} alGuardar={refrescar} />
+          <ConfiguracionDeCliente
+            cliente={cliente}
+            equipo={equipo}
+            alGuardar={refrescar}
+          />
         </Panel>
       )}
 
@@ -353,7 +358,10 @@ function FilaCarpeta({
 
     setCargando(true);
     try {
-      const r = await abrirCarpeta(carpeta.id, carpeta.diasQueCorren);
+      const r = await abrirCarpeta(carpeta.id, {
+        dias: carpeta.diasQueCorren,
+        responsable: carpeta.responsableQueCorre,
+      });
       if (r.ok) setArchivos(r.archivos);
       else setError(r.motivo);
     } catch {
@@ -415,7 +423,7 @@ function FilaCarpeta({
               {carpeta.piezas} {carpeta.piezas === 1 ? "pieza" : "piezas"} ·{" "}
               {carpeta.sinRevisar} sin revisar · {carpeta.diasQueCorren}{" "}
               {carpeta.diasQueCorren === 1 ? "día" : "días"} para revisar
-              {carpeta.asignadaA ? ` · ${carpeta.asignadaA}` : " · sin asignar"}
+              {carpeta.responsableA ? ` · ${carpeta.responsableA}` : " · sin asignar"}
             </>
           )}
         </p>
@@ -449,35 +457,17 @@ function FilaCarpeta({
           {archivos && archivos.length > 0 && (
             <ul>
               {archivos.map((archivo) => (
-                <li key={archivo.id} className="border-t border-linea-tenue">
-                  <Fila
-                    nivel={2}
-                    abridor={<Hueco />}
-                    drive={<EnDrive href={archivo.enlaceDrive} que="el archivo" />}
-                    config={<Hueco />}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-normal">{archivo.nombre}</span>
-                      <Estado estado={archivo.estado} />
-                      {archivo.vueltas > 1 && (
-                        <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
-                          v{archivo.vueltas}
-                        </span>
-                      )}
-                      {archivo.mudada && (
-                        <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
-                          en finales
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 text-micro text-apagado">
-                      {archivo.diasQueCorren}{" "}
-                      {archivo.diasQueCorren === 1 ? "día" : "días"}
-                      {archivo.vence && ` · vence el ${comoFecha(archivo.vence)}`}
-                      {archivo.publicaEl && ` · sale el ${comoFecha(archivo.publicaEl)}`}
-                    </p>
-                  </Fila>
-                </li>
+                <FilaArchivo
+                  key={archivo.id}
+                  archivo={archivo}
+                  carpetaId={carpeta.id}
+                  equipo={equipo}
+                  alGuardar={() => {
+                    alGuardar();
+                    setArchivos(null);
+                    setAbierta(false);
+                  }}
+                />
               ))}
             </ul>
           )}
@@ -527,5 +517,68 @@ function ConfiguracionDeReservada({ carpeta }: { carpeta: NodoCarpeta }) {
         </a>
       )}
     </div>
+  );
+}
+
+function FilaArchivo({
+  archivo,
+  carpetaId,
+  equipo,
+  alGuardar,
+}: {
+  archivo: NodoArchivo;
+  carpetaId: string;
+  equipo: Persona[];
+  alGuardar: () => void;
+}) {
+  const [config, setConfig] = useState(false);
+
+  return (
+    <li className="border-t border-linea-tenue">
+      <Fila
+        nivel={2}
+        abridor={<Hueco />}
+        drive={<EnDrive href={archivo.enlaceDrive} que="el archivo" />}
+        config={
+          <BotonDeConfig
+            abierta={config}
+            onTocar={() => setConfig(!config)}
+            que={archivo.nombre}
+          />
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate text-normal">{archivo.nombre}</span>
+          <Estado estado={archivo.estado} />
+          {archivo.vueltas > 1 && (
+            <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
+              v{archivo.vueltas}
+            </span>
+          )}
+          {archivo.mudada && (
+            <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
+              en finales
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-micro text-apagado">
+          {archivo.diasQueCorren} {archivo.diasQueCorren === 1 ? "día" : "días"}
+          {archivo.vence && ` · vence el ${comoFecha(archivo.vence)}`}
+          {archivo.publicaEl && ` · sale el ${comoFecha(archivo.publicaEl)}`}
+          {archivo.responsableA ? ` · ${archivo.responsableA}` : " · sin asignar"}
+        </p>
+      </Fila>
+
+      {config && (
+        <Panel nivel={2}>
+          <ConfiguracionDeArchivo
+            archivo={archivo}
+            carpetaId={carpetaId}
+            equipo={equipo}
+            alGuardar={alGuardar}
+          />
+        </Panel>
+      )}
+    </li>
   );
 }

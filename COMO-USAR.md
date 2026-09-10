@@ -104,6 +104,10 @@ De cada uno podés:
 - **Tiempo de revisión**, en días.
 - **Su propio link**, si querés mandarle esa carpeta sola.
 
+Y cada **archivo** tiene su propia ruedita, con quién lo lleva y su tiempo de
+revisión. Es para los casos sueltos: «esta la necesitamos el jueves», «esta la
+lleva Delfi aunque el resto sea de Nari».
+
 Y abajo de todo, los **mensajes listos**: los textos que se mandan siempre, ya
 escritos. Los abrís, los cambiás si querés, los copiás y los mandás por donde
 le escribís siempre. **Los escribe el equipo, no la aplicación.**
@@ -258,13 +262,15 @@ sobra. Se configura una sola vez.
 
 ---
 
-## El tiempo de revisión
+## Lo que se hereda: el tiempo de revisión y quién lo lleva
 
-Se cuenta en **días**, no en fechas: una fecha hay que volver a poner en cada
-tanda, «tres días» se pone una vez. La fecha en que vence cada pieza sale sola:
-el día que se subió el archivo, más los días.
+Los dos funcionan igual.
 
-Se hereda de arriba hacia abajo:
+El tiempo se cuenta en **días**, no en fechas: una fecha hay que volver a poner
+en cada tanda, «tres días» se pone una vez. La fecha en que vence cada pieza
+sale sola: el día que se subió el archivo, más los días.
+
+Se heredan de arriba hacia abajo:
 
     Cliente ─────────► 3 días
       └ Carpeta ─────► hereda 3, salvo que le pongas otro
@@ -276,4 +282,8 @@ a sus archivos y no a las otras carpetas. Si cambiás el de un archivo, alcanza
 solo a ese.
 
 Es a propósito: si no, poner cinco días en el cliente dejaría carpetas con tres
-y nadie sabría por qué. Donde dice **heredado**, el número viene de arriba.
+y nadie sabría por qué. Donde dice **heredado**, el valor viene de arriba.
+
+> **«Sin asignar» es una decisión, no la falta de una.** Una carpeta que ponés
+> en «sin asignar» no vuelve sola al responsable del cliente: alguien decidió
+> que esa carpeta no la lleva nadie.

@@ -10,12 +10,13 @@
 //
 // Todo sale de datos que ya existen: no hay un estado nuevo que mantener.
 
-import { ajustesDe, esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
+import { esCarpetaReservada } from "@/lib/ajustesDeCarpeta";
 import { losAvisos, type Aviso } from "@/lib/avisos";
 import { clientesHabilitados } from "@/lib/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { correoConfigurado } from "@/lib/correo";
 import { personaPorId } from "@/lib/equipo";
+import { responsableDe, responsableQueCorre } from "@/lib/responsables";
 import { subcarpetasDe } from "@/lib/google";
 import { archivosConLasMudadas, estadosDe } from "@/lib/piezas";
 import { calcularVencimiento } from "@/lib/fechas";
@@ -54,19 +55,20 @@ export async function elTablero(): Promise<Tablero> {
 
   const porCliente = await Promise.all(
     clientes.map(async (cliente) => {
-      const [carpetas, diasDelCliente] = await Promise.all([
+      const [carpetas, diasDelCliente, deQuienEsElCliente] = await Promise.all([
         subcarpetasDe(cliente.id),
         plazoDe(cliente.id),
+        responsableDe(cliente.id),
       ]);
 
       return Promise.all(
         carpetas
           .filter((c) => !esCarpetaReservada(c.name))
           .map(async (carpeta): Promise<CarpetaEnElTablero> => {
-            const [ajustes, archivos, diasDeLaCarpeta] = await Promise.all([
-              ajustesDe(carpeta.id),
+            const [archivos, diasDeLaCarpeta, deQuienEsLaCarpeta] = await Promise.all([
               archivosConLasMudadas(carpeta.id),
               plazoDe(carpeta.id),
+              responsableDe(carpeta.id),
             ]);
 
             const agrupadas = agruparVersiones(archivos);
@@ -103,7 +105,12 @@ export async function elTablero(): Promise<Tablero> {
                 ? new Date(Math.min(...fechas.map((f) => f.getTime())))
                 : null;
 
-            const persona = await personaPorId(ajustes.asignada);
+            const quien = responsableQueCorre(
+              undefined,
+              deQuienEsLaCarpeta,
+              deQuienEsElCliente
+            );
+            const persona = await personaPorId(quien ?? undefined);
 
             return {
               clienteId: cliente.id,
