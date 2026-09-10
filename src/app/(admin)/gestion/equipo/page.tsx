@@ -19,20 +19,12 @@ export default async function EquipoPagina() {
     <main className="mx-auto max-w-3xl px-6 py-10">
       <header className="border-b-2 border-tinta pb-6">
         <h1 className="text-grande font-extrabold tracking-tight">El equipo</h1>
-        <p className="mt-2 text-normal text-tinta-suave">
-          A quién se le puede asignar un trabajo, y a dónde le llegan los avisos.
-        </p>
       </header>
 
       {!hayCorreo && (
         <div className="mt-6 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4">
           <p className="text-normal font-semibold text-espera">
             Los avisos por correo todavía no están prendidos.
-          </p>
-          <p className="mt-2 text-menudo text-espera">
-            Mientras tanto todo queda anotado en la bandeja del tablero, que es donde se
-            ve igual. Para prenderlos hacen falta dos datos de una cuenta de correo, y se
-            configuran una sola vez.
           </p>
         </div>
       )}

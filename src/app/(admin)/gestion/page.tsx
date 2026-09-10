@@ -21,7 +21,7 @@ export default async function Clientes() {
 
   const equipo = await elEquipo();
   const conAcceso = clientes.filter((c) => c.habilitado).length;
-  const sinClave = clientes.filter((c) => c.habilitado && !c.tag.trim()).length;
+  const sinClave = clientes.filter((c) => c.habilitado && !c.tieneClave).length;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -35,9 +35,9 @@ export default async function Clientes() {
       </header>
 
       {sinClave > 0 && (
-        <p className="mt-6 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal text-espera">
-          {sinClave === 1 ? "Hay un cliente" : `Hay ${sinClave} clientes`} sin clave.
-          Su link no deja entrar a nadie hasta que se la pongas, en Configuración.
+        <p className="mt-6 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal font-semibold text-espera">
+          {sinClave === 1 ? "Un cliente" : `${sinClave} clientes`} sin clave: su link no
+          deja entrar.
         </p>
       )}
 
@@ -53,21 +53,10 @@ export default async function Clientes() {
         </div>
       ) : (
         <div className="mt-6">
-          <p className="mb-2 text-menudo text-apagado">
-            Tocá la flecha para ver qué hay adentro. <strong>Configuración</strong> abre
-            lo que se puede cambiar.
-          </p>
           <ArbolDeClientes clientes={clientes} equipo={equipo} />
         </div>
       )}
 
-      <section className="mt-10 border-l-4 border-linea bg-hueco/50 px-5 py-4">
-        <h2 className="text-guia font-bold tracking-tight">Cómo se agrega un cliente</h2>
-        <p className="mt-2 max-w-2xl text-normal text-tinta-suave">
-          Se le comparte su carpeta al robot desde Drive y listo: aparece acá solo, con
-          acceso dado y su link generado. Después le ponés la clave y ya puede entrar.
-        </p>
-      </section>
     </main>
   );
 }

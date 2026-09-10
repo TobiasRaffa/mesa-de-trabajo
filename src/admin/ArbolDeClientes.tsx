@@ -22,8 +22,12 @@
 //      angostaba la fila y los botones de la derecha se corrían hacia adentro:
 //      la columna de Drive quedaba en escalera. Cuando una fila no tiene algo
 //      —un archivo no se configura—, va un hueco del mismo ancho.
+//
+// Las pantallas de administración no llevan textos que expliquen qué hace cada
+// cosa. Se probaron y tapaban lo importante: en una lista, lo que hay que leer
+// son los nombres y los estados, no un párrafo al lado de cada control.
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { abrirCarpeta, abrirCliente } from "@/app/(admin)/gestion/acciones";
 import type { NodoArchivo, NodoCarpeta } from "@/admin/datos/arbol";
@@ -195,7 +199,33 @@ function FilaCliente({
   const [error, setError] = useState<string | null>(null);
 
   const apagado = !cliente.habilitado;
-  const sinTag = cliente.tag.trim() === "";
+  const sinClave = !cliente.tieneClave;
+
+  const traer = useCallback(async () => {
+    setCargando(true);
+    try {
+      const r = await abrirCliente(cliente.id);
+      if (r.ok) {
+        setCarpetas(r.carpetas);
+        setError(null);
+      } else {
+        setError(r.motivo);
+      }
+    } catch {
+      setError("No pude leer las carpetas.");
+    } finally {
+      setCargando(false);
+    }
+  }, [cliente.id]);
+
+  /**
+   * Guardar cambia lo que dice la fila —«oculta», «calendario», quién la
+   * lleva—. Si no se vuelve a pedir, el cartel sigue mostrando lo viejo y
+   * parece que el cambio no se guardó.
+   */
+  const refrescar = useCallback(() => {
+    if (carpetas) traer();
+  }, [carpetas, traer]);
 
   async function alternar() {
     if (abierto) {
@@ -203,18 +233,7 @@ function FilaCliente({
       return;
     }
     setAbierto(true);
-    if (carpetas) return;
-
-    setCargando(true);
-    try {
-      const r = await abrirCliente(cliente.id);
-      if (r.ok) setCarpetas(r.carpetas);
-      else setError(r.motivo);
-    } catch {
-      setError("No pude leer las carpetas.");
-    } finally {
-      setCargando(false);
-    }
+    if (!carpetas) await traer();
   }
 
   return (
@@ -250,7 +269,7 @@ function FilaCliente({
               Sin acceso
             </span>
           )}
-          {!apagado && sinTag && (
+          {!apagado && sinClave && (
             <span className="bg-espera-borde px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-tinta">
               Falta la clave
             </span>
@@ -272,7 +291,7 @@ function FilaCliente({
 
       {config && (
         <Panel nivel={0}>
-          <ConfiguracionDeCliente cliente={cliente} />
+          <ConfiguracionDeCliente cliente={cliente} alGuardar={refrescar} />
         </Panel>
       )}
 
@@ -294,6 +313,7 @@ function FilaCliente({
                   carpeta={carpeta}
                   clienteId={cliente.id}
                   equipo={equipo}
+                  alGuardar={traer}
                 />
               ))}
             </ul>
@@ -308,10 +328,12 @@ function FilaCarpeta({
   carpeta,
   clienteId,
   equipo,
+  alGuardar,
 }: {
   carpeta: NodoCarpeta;
   clienteId: string;
   equipo: Persona[];
+  alGuardar: () => void;
 }) {
   const [abierta, setAbierta] = useState(false);
   const [config, setConfig] = useState(false);
@@ -412,6 +434,7 @@ function FilaCarpeta({
               carpeta={carpeta}
               clienteId={clienteId}
               equipo={equipo}
+              alGuardar={alGuardar}
             />
           )}
         </Panel>
@@ -496,10 +519,6 @@ function ConfiguracionDeReservada({ carpeta }: { carpeta: NodoCarpeta }) {
       <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
         Carpeta con nombre reservado
       </h4>
-      <p className="mt-1 max-w-xl text-menudo text-tinta-suave">
-        «{carpeta.nombre}» no es un trabajo: no se muestra como carpeta para revisar y no
-        tiene ajustes. Es a donde se mueve solo lo que el cliente aprueba.
-      </p>
       {carpeta.enlaceDrive && (
         <a
           href={carpeta.enlaceDrive}

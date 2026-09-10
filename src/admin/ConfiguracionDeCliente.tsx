@@ -1,81 +1,111 @@
 "use client";
 
-// Todo lo que se configura de un cliente, en un solo lugar.
+// Todo lo que se configura de un cliente.
 //
-// Está separado de la navegación a propósito: abrir la fila muestra qué hay
-// adentro, esto muestra qué se puede cambiar. Mezclarlos hacía que buscar un
-// archivo obligara a pasar por encima del botón que le corta el acceso.
+// La clave está tapada y pide contraseña para verse o cambiarse. Es el dato
+// con el que alguien entra al portal del cliente: no tiene por qué estar
+// escrito en pantalla para quien pase por atrás, ni viajar al navegador hasta
+// que alguien lo pida.
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import {
   cambiarCliente,
   ponerTagDeCliente,
   renovarLinkDeCliente,
+  verClaveDeCliente,
 } from "@/app/(admin)/gestion/acciones";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import type { ClienteEnGestion } from "@/admin/datos/carpetas";
 
-export function ConfiguracionDeCliente({ cliente }: { cliente: ClienteEnGestion }) {
+const TITULO = "text-micro font-extrabold uppercase tracking-widest text-apagado";
+
+const CAMPO =
+  "min-w-0 border border-linea bg-lienzo px-3 py-2 text-normal font-bold " +
+  "transition-colors placeholder:font-normal placeholder:text-apagado " +
+  "focus:border-acento focus:outline-none";
+
+const BOTON =
+  "min-h-toque shrink-0 border-2 border-tinta px-4 text-normal font-bold " +
+  "tracking-tight text-tinta transition-colors hover:bg-hueco disabled:opacity-40";
+
+export function ConfiguracionDeCliente({
+  cliente,
+  alGuardar,
+}: {
+  cliente: ClienteEnGestion;
+  /** Se llama cuando algo se guardó, para que la fila de arriba se actualice. */
+  alGuardar: () => void;
+}) {
   const [estado, guardar, esperando] = useActionState(cambiarCliente, null);
   const [estadoLink, renovar, renovando] = useActionState(renovarLinkDeCliente, null);
   const [estadoTag, guardarTag, guardandoTag] = useActionState(ponerTagDeCliente, null);
+  const [estadoVer, verClave, viendo] = useActionState(verClaveDeCliente, null);
 
   const apagado = !cliente.habilitado;
-  const sinTag = cliente.tag.trim() === "";
+  const revelada = estadoVer?.ok ? estadoVer.clave : null;
+
+  useEffect(() => {
+    if (estado?.ok || estadoTag?.ok || estadoLink?.ok) alGuardar();
+  }, [estado, estadoTag, estadoLink, alGuardar]);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6">
       {/* ------------------------------- La clave ------------------------ */}
       <section>
-        <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-          La clave del cliente
-        </h4>
-        <p className="mt-1 max-w-xl text-menudo text-tinta-suave">
-          Es lo que escribe para entrar. Pasásela <strong>por otro lado</strong>, no en
-          el mismo mensaje que el link: mandar los dos juntos es mandar la llave pegada a
-          la puerta.
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className={TITULO}>Clave del cliente</h4>
+          {!cliente.tieneClave && (
+            <span className="bg-espera-borde px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-tinta">
+              Falta
+            </span>
+          )}
+        </div>
 
-        <form action={guardarTag} className="mt-2 flex flex-wrap items-center gap-2">
-          <input type="hidden" name="clienteId" value={cliente.id} />
-          <input
-            name="tag"
-            type="text"
-            defaultValue={cliente.tag}
-            placeholder="una palabra que le pases vos"
-            autoComplete="off"
-            aria-label="Clave del cliente"
-            className="min-w-0 flex-1 border border-linea bg-lienzo px-3 py-2 text-normal
-                       font-bold transition-colors placeholder:font-normal
-                       placeholder:text-apagado focus:border-acento focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={guardandoTag}
-            className="min-h-toque shrink-0 border-2 border-tinta px-4 text-normal font-bold
-                       tracking-tight text-tinta transition-colors hover:bg-hueco disabled:opacity-40"
-          >
-            Guardar
-          </button>
-        </form>
-
-        {sinTag && (
-          <p className="mt-2 border-l-4 border-espera-borde bg-espera-tenue px-3 py-2 text-menudo text-espera">
-            Sin clave, el link no deja entrar a nadie.
-          </p>
+        {revelada === null ? (
+          <form action={verClave} className="mt-2 flex flex-wrap items-center gap-2">
+            <input type="hidden" name="clienteId" value={cliente.id} />
+            <input
+              name="contrasena"
+              type="password"
+              autoComplete="off"
+              placeholder="contraseña"
+              aria-label="Contraseña de administración"
+              className={`${CAMPO} w-44`}
+            />
+            <button type="submit" disabled={viendo} className={BOTON}>
+              Ver o cambiar
+            </button>
+          </form>
+        ) : (
+          <form action={guardarTag} className="mt-2 flex flex-wrap items-center gap-2">
+            <input type="hidden" name="clienteId" value={cliente.id} />
+            <input
+              name="tag"
+              type="text"
+              defaultValue={revelada}
+              autoComplete="off"
+              aria-label="Clave del cliente"
+              className={`${CAMPO} flex-1`}
+            />
+            <input
+              name="contrasena"
+              type="password"
+              autoComplete="off"
+              placeholder="contraseña"
+              aria-label="Contraseña de administración"
+              className={`${CAMPO} w-40`}
+            />
+            <button type="submit" disabled={guardandoTag} className={BOTON}>
+              Guardar
+            </button>
+          </form>
         )}
       </section>
 
       {/* -------------------------------- El link ------------------------ */}
       {!apagado && (
         <section>
-          <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-            El link del portal
-          </h4>
-          <p className="mt-1 max-w-xl text-menudo text-tinta-suave">
-            Muestra todas sus carpetas visibles. Cada carpeta tiene además el suyo, si
-            querés mandarle una sola.
-          </p>
+          <h4 className={TITULO}>Link del portal</h4>
           <div className="mt-2">
             <LinkParaCompartir
               token={cliente.token}
@@ -101,34 +131,40 @@ export function ConfiguracionDeCliente({ cliente }: { cliente: ClienteEnGestion 
       )}
 
       {/* ------------------------------- El acceso ----------------------- */}
-      <section className="border-t border-linea-tenue pt-4">
-        <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-          El acceso
-        </h4>
-        <p className="mt-1 max-w-xl text-menudo text-tinta-suave">
-          {apagado
-            ? "Su portal está apagado. El robot sigue viendo la carpeta en Drive."
-            : "Apagarlo deja su portal sin funcionar, sin tocar Drive. Para cortar de raíz, dejá de compartirle la carpeta en Drive."}
-        </p>
-        <form action={guardar} className="mt-2">
+      <section>
+        <h4 className={TITULO}>Acceso al portal</h4>
+        <form action={guardar} className="mt-2 flex">
           <input type="hidden" name="clienteId" value={cliente.id} />
-          <input type="hidden" name="habilitado" value={apagado ? "si" : "no"} />
           <button
             type="submit"
+            name="habilitado"
+            value="si"
             disabled={esperando}
-            className={`min-h-toque border-2 px-4 text-normal font-bold tracking-tight
+            aria-pressed={!apagado}
+            className={`min-h-toque border-2 border-tinta px-5 text-normal font-bold tracking-tight
                         transition-colors disabled:opacity-40 ${
-                          apagado
-                            ? "border-tinta bg-tinta text-lienzo hover:bg-tinta/90"
-                            : "border-alerta text-alerta hover:bg-alerta-tenue"
+                          apagado ? "text-tinta hover:bg-hueco" : "bg-tinta text-lienzo"
                         }`}
           >
-            {apagado ? "Dar acceso" : "Quitar acceso"}
+            Sí
+          </button>
+          <button
+            type="submit"
+            name="habilitado"
+            value="no"
+            disabled={esperando}
+            aria-pressed={apagado}
+            className={`min-h-toque border-2 border-l-0 border-tinta px-5 text-normal font-bold
+                        tracking-tight transition-colors disabled:opacity-40 ${
+                          apagado ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
+                        }`}
+          >
+            No
           </button>
         </form>
       </section>
 
-      {[estado, estadoLink, estadoTag]
+      {[estado, estadoLink, estadoTag, estadoVer]
         .filter((r) => r && !r.ok)
         .map((r, i) => (
           <p key={i} aria-live="polite" className="text-menudo font-semibold text-alerta">

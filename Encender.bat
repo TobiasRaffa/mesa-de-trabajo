@@ -4,7 +4,7 @@ title Mesa de trabajo
 cd /d "%~dp0"
 
 rem Que abre este acceso. El otro .bat le pasa otra pagina.
-if "%PAGINA%"=="" set PAGINA=/gestion
+if "%PAGINA%"=="" set PAGINA=/probar
 
 echo.
 echo   MESA DE TRABAJO
@@ -38,14 +38,17 @@ if defined YAESTA (
 echo   Encendiendo... la primera vez tarda unos segundos.
 echo.
 echo   Desde esta computadora:
+echo     Portal del cliente    http://localhost:3000/probar
 echo     Administracion        http://localhost:3000/gestion
 echo.
 if defined IP (
   echo   Desde el telefono, con el mismo wifi:
+  echo     Portal del cliente    http://%IP%:3000/probar
   echo     Administracion        http://%IP%:3000/gestion
   echo.
 )
-echo   El portal del cliente se abre con su link, que sale de Administracion.
+echo   /probar entra al portal del primer cliente, para no copiar un link
+echo   cada vez. Al subir la aplicacion esa direccion deja de existir.
 echo.
 echo   Para apagarlo: cerra esta ventana, o apreta Ctrl+C.
 echo.

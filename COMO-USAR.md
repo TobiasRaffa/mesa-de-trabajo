@@ -19,8 +19,8 @@ En el escritorio hay tres accesos directos:
 
 | | |
 |---|---|
-| **Mesa de trabajo — ENCENDER** | Prende el servidor y abre Administración |
-| **Mesa de trabajo — ENCENDER gestion** | Lo mismo (quedó de antes) |
+| **Mesa de trabajo — ENCENDER** | Prende el servidor y abre el portal del cliente |
+| **Mesa de trabajo — ENCENDER gestion** | Prende el servidor y abre Administración |
 | **Mesa de trabajo — Administración** | Solo abre, con el servidor ya prendido |
 
 **Los dos ENCENDER hacen lo mismo.** Si el servidor ya está prendido, no
@@ -28,9 +28,10 @@ prenden otro: abren la aplicación y te avisan. Antes no chequeaban, y el
 segundo fallaba con la ventana cerrándose sola —parecía que el acceso no hacía
 nada—.
 
-> El acceso directo **ya no abre el portal del cliente**, porque el portal
-> ahora se abre con el link de cada cliente y esos links son distintos para
-> cada uno. Los sacás de Administración, en Configuración.
+El acceso al portal entra por `/probar`, que lleva al primer cliente. Es un
+atajo **solo mientras corre en tu computadora**: cuando la subamos a internet
+esa dirección deja de existir y cada cliente entra con su link. Igual pide la
+clave, como cualquiera.
 
 Se toca uno de los **ENCENDER**, se espera unos segundos y el navegador se abre
 solo. Se
@@ -133,6 +134,9 @@ Todo lo que elegís queda guardado al lado de la aplicación, en la carpeta
 | `avisos.json` | La bandeja de novedades |
 | `secreto.txt` | La llave con la que se firman las sesiones del portal |
 
+Y en `.env.local` está `CLAVE_DE_ADMIN`, la contraseña para ver o cambiar la
+clave de un cliente. Hoy es `totorafa`.
+
 Se pueden abrir con el Bloc de notas y se pueden copiar. Cuando tengamos base
 de datos, se mudan solos y las pantallas no cambian.
 
@@ -220,6 +224,11 @@ Son **dos cosas**, y ninguna sirve sola:
 
 > **Mandalas por separado.** El link por un lado y la clave por otro. Mandar las
 > dos en el mismo mensaje es mandar la llave pegada a la puerta.
+
+Para **ver o cambiar** la clave de un cliente hay que escribir la contraseña de
+administración. No es un login —administración sigue sin pedir usuario— pero
+evita que la clave de cada cliente esté escrita en pantalla a la vista de
+cualquiera que pase.
 
 Si el link se le va a quien no correspondía, **Cambiar link** lo mata en el
 acto y le pasás uno nuevo.

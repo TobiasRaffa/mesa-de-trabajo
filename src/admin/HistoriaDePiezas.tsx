@@ -35,9 +35,6 @@ export function HistoriaDePiezas({ piezas }: { piezas: PiezaConHistoria[] }) {
   return (
     <section className="mt-12">
       <h2 className="text-titulo font-extrabold tracking-tight">Qué pasó con cada pieza</h2>
-      <p className="mt-1 text-menudo text-apagado">
-        Se anota sola. Es lo que contesta «esto ya lo habíamos aprobado».
-      </p>
 
       {conAlgo.length === 0 ? (
         <p className="mt-5 border-l-4 border-linea bg-hueco/50 px-4 py-3 text-normal text-tinta-suave">

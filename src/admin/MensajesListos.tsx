@@ -51,10 +51,6 @@ export function MensajesListos({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-titulo font-extrabold tracking-tight">Mensajes listos</h2>
-          <p className="mt-1 text-menudo text-apagado">
-            Los escribe el equipo, no la aplicación. Copiás, cambiás lo que quieras y
-            mandás.
-          </p>
         </div>
         {alLado}
       </div>
@@ -100,9 +96,6 @@ export function MensajesListos({
                     >
                       {copiada === plantilla.id ? "Copiado" : "Copiar"}
                     </button>
-                    <p className="text-menudo text-apagado">
-                      Podés editarlo antes de copiar; no se guarda.
-                    </p>
                   </div>
                 </div>
               )}

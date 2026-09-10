@@ -63,11 +63,6 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
         </form>
       </div>
 
-      {!persona.correo && (
-        <p className="mt-2 text-menudo text-espera">
-          Sin correo cargado, a esta persona no le llega ningún aviso.
-        </p>
-      )}
 
       {[estado, estadoQuitar]
         .filter((r) => r && !r.ok)

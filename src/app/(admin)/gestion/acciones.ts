@@ -25,7 +25,14 @@ import {
   type Vista,
 } from "@/lib/ajustesDeCarpeta";
 import { esCarpetaDelCliente, idsDeCarpetasReales, olvidarCarpetas } from "@/lib/carpetas";
-import { habilitarCliente, ponerTag, renovarLink, todosLosClientes } from "@/lib/clientes";
+import {
+  clientePorId,
+  habilitarCliente,
+  ponerTag,
+  renovarLink,
+  todosLosClientes,
+} from "@/lib/clientes";
+import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
 import { archivosDe } from "@/lib/google";
 import { correoValido } from "@/lib/equipo";
@@ -147,7 +154,17 @@ export async function renovarLinkDeCliente(_previo: unknown, formulario: FormDat
 export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) {
   const clienteId = String(formulario.get("clienteId") ?? "");
   const tag = String(formulario.get("tag") ?? "").trim();
+  const contrasena = String(formulario.get("contrasena") ?? "");
 
+  if (!hayContrasena()) {
+    return {
+      ok: false as const,
+      motivo: "Falta configurar CLAVE_DE_ADMIN en .env.local.",
+    };
+  }
+  if (!contrasenaCorrecta(contrasena)) {
+    return { ok: false as const, motivo: "Esa contraseña no es." };
+  }
   if (!(await esClienteReal(clienteId))) {
     return { ok: false as const, motivo: "Ese cliente no existe." };
   }
@@ -158,6 +175,33 @@ export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) 
   await ponerTag(clienteId, tag);
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
+}
+
+/**
+ * Muestra la clave de un cliente, con contraseña.
+ *
+ * La clave **no viaja al navegador** hasta acá: la pantalla solo sabe si el
+ * cliente tiene una o no. Es una cortina y no una puerta —administración
+ * sigue sin login— pero evita que esté escrita para el que pasa por atrás.
+ */
+export async function verClaveDeCliente(
+  _previo: unknown,
+  formulario: FormData
+): Promise<{ ok: true; clave: string } | { ok: false; motivo: string }> {
+  const clienteId = String(formulario.get("clienteId") ?? "");
+  const contrasena = String(formulario.get("contrasena") ?? "");
+
+  if (!hayContrasena()) {
+    return { ok: false, motivo: "Falta configurar CLAVE_DE_ADMIN en .env.local." };
+  }
+  if (!contrasenaCorrecta(contrasena)) {
+    return { ok: false, motivo: "Esa contraseña no es." };
+  }
+
+  const cliente = await clientePorId(clienteId);
+  if (!cliente) return { ok: false, motivo: "Ese cliente no existe." };
+
+  return { ok: true, clave: cliente.tag };
 }
 
 /**

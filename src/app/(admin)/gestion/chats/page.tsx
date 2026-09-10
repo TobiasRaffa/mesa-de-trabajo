@@ -51,16 +51,11 @@ export default async function Chats() {
       </header>
 
       {esperando.length > 0 && (
-        <Grupo
-          titulo="Te están esperando"
-          bajada="El último que habló fue el cliente."
-          chats={esperando}
-          destacado
-        />
+        <Grupo titulo="Te están esperando" chats={esperando} destacado />
       )}
 
       {conMensajes.length > 0 && (
-        <Grupo titulo="Con conversación" bajada="Lo último lo dijo el equipo." chats={conMensajes} />
+        <Grupo titulo="Con conversación" chats={conMensajes} />
       )}
 
       {calladas.length > 0 && (
@@ -97,19 +92,16 @@ export default async function Chats() {
 
   function Grupo({
     titulo,
-    bajada,
     chats,
     destacado = false,
   }: {
     titulo: string;
-    bajada: string;
     chats: Awaited<ReturnType<typeof todasLasConversaciones>>;
     destacado?: boolean;
   }) {
     return (
       <section className="mt-8">
         <h2 className="text-titulo font-extrabold tracking-tight">{titulo}</h2>
-        <p className="mt-1 text-menudo text-apagado">{bajada}</p>
 
         <ul className="mt-4 border-t border-linea">
           {chats.map((chat) => (

@@ -87,7 +87,15 @@ export async function carpetaParaFechar(
 
 // ---------------------------------------------------------------------------
 
-export type ClienteEnGestion = Cliente & {
+/**
+ * Un cliente, como lo ve la pantalla de administración.
+ *
+ * **Sin el tag.** Es el dato con el que alguien entra a su portal: no viaja al
+ * navegador hasta que alguien escribe la contraseña y lo pide. Lo que sí viaja
+ * es si lo tiene o no, que hace falta para avisar que falta.
+ */
+export type ClienteEnGestion = Omit<Cliente, "tag"> & {
+  tieneClave: boolean;
   /** Cuántas carpetas de trabajo tiene, sin contar las reservadas. */
   carpetas: number;
   carpetasVisibles: number;
@@ -102,8 +110,11 @@ export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
     clientes.map(async (cliente): Promise<ClienteEnGestion> => {
       // De un cliente apagado no se cuenta nada: no se le pide a Drive lo que
       // no se va a mostrar.
+      const { tag, ...sinTag } = cliente;
+      const comun = { ...sinTag, tieneClave: tag.trim() !== "" };
+
       if (!cliente.habilitado) {
-        return { ...cliente, carpetas: 0, carpetasVisibles: 0, mensajes: 0 };
+        return { ...comun, carpetas: 0, carpetasVisibles: 0, mensajes: 0 };
       }
 
       const subcarpetas = await subcarpetasDe(cliente.id);
@@ -113,7 +124,7 @@ export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
       );
 
       return {
-        ...cliente,
+        ...comun,
         carpetas: deTrabajo.length,
         carpetasVisibles: visibles.filter(Boolean).length,
         mensajes: subcarpetas.reduce((suma, c) => suma + (charlas[c.id] ?? 0), 0),

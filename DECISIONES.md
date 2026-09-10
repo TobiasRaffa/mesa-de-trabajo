@@ -1342,3 +1342,47 @@ Por lo mismo, las carpetas reservadas también tienen engranaje: adentro está l
 La configuración pasó a ser un icono. Un botón con la palabra «Configuración»
 en cada fila competía por atención con el nombre, que es lo que se viene a
 leer.
+
+## 88. La clave de un cliente pide contraseña, y no viaja al navegador.
+
+Estaba escrita en la pantalla de administración, a la vista de cualquiera que
+pasara por atrás. Ahora está tapada: para verla o cambiarla hay que escribir
+una contraseña (`CLAVE_DE_ADMIN`, en `.env.local`).
+
+Lo que la hace valer algo es que **el dato no se manda al navegador** hasta que
+alguien lo pide con la contraseña. Si solo se tapara en pantalla, estaría en el
+código de la página y se leería con dos clics.
+
+La contraseña sale de una variable de entorno y no del código: una contraseña
+escrita en el fuente termina en el repositorio, y de ahí no sale más. Se
+compara en tiempo constante, por lo mismo que el tag del cliente.
+
+**Es una cortina, no una puerta.** Administración sigue sin login: quien llega
+a la máquina, entra. Esto no lo arregla. La puerta es el login, y va antes de
+subir la aplicación.
+
+## 89. Sí o No, en vez de un botón que dice lo contrario.
+
+«Ocultar» obliga a deducir el estado actual a partir de la acción contraria:
+para saber si el cliente la ve hay que leer el botón y darlo vuelta en la
+cabeza. Con dos botones —Sí marcado, No apagado— el estado se lee sin pensar,
+y tocar el que ya está no rompe nada.
+
+## 90. Las pantallas de administración no explican qué hace cada cosa.
+
+Cada control tenía su párrafo en gris. Juntos tapaban lo que se viene a leer:
+en una lista, los nombres y los estados. La explicación está en `COMO-USAR.md`,
+que es donde se lee una vez, y no al lado de un botón que se usa todos los días.
+
+Se conservan los avisos que **cambian una decisión** —«sin clave el link no deja
+entrar», «sin correo configurado los avisos quedan solo acá»—, porque eso no es
+explicar cómo funciona algo: es decir qué está pasando.
+
+## 91. Una dirección de prueba para entrar al portal en la máquina.
+
+El acceso directo no puede saber el link de un cliente: son al azar y distintos
+para cada uno. `/probar` lleva al portal del primero.
+
+**En producción no existe**: ahí devuelve 404. Una dirección fija que lleva al
+portal de un cliente es justamente lo que el link al azar viene a evitar. Y aun
+en la máquina no saltea nada: del otro lado sigue pidiendo la clave.

@@ -64,18 +64,13 @@ export function Bandeja({
       </div>
 
       {!correoConfigurado && (
-        <p className="mt-3 border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-menudo text-espera">
-          El correo todavía no está configurado, así que los avisos quedan solo acá.
-          Cuando se configure, los mismos avisos salen también por mail, sin cambiar
-          nada más.
+        <p className="mt-3 border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-menudo font-semibold text-espera">
+          Sin correo configurado: los avisos quedan solo acá.
         </p>
       )}
 
       {avisos.length === 0 ? (
-        <p className="mt-4 border-l-4 border-linea bg-hueco/50 px-4 py-3 text-normal text-tinta-suave">
-          Todavía no pasó nada. Acá van a aparecer las aprobaciones, los cambios pedidos
-          y los mensajes del cliente.
-        </p>
+        <p className="mt-4 text-normal text-apagado">Todavía no pasó nada.</p>
       ) : (
         <ul className="mt-4 border-t border-linea">
           {avisos.map((aviso) => {
