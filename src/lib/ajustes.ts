@@ -125,16 +125,6 @@ export async function linkDeCarpeta(carpetaId: string): Promise<string> {
   return token;
 }
 
-/** Deja solo las carpetas que el cliente puede ver. */
-export async function soloLasVisibles<T extends { id: string; name: string }>(
-  carpetas: T[]
-): Promise<T[]> {
-  const guardadas = await almacen.todo();
-  return carpetas.filter(
-    (c) => !esCarpetaReservada(c.name) && normalizar(guardadas[c.id]).visible
-  );
-}
-
 // ---------------------------------------------------------------------------
 
 /**

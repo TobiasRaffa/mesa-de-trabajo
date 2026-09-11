@@ -30,7 +30,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import Link from "next/link";
 import { abrirCarpeta, abrirCliente } from "@/app/(admin)/gestion/acciones";
-import type { NodoArchivo, NodoCarpeta } from "@/admin/datos/arbol";
+import type { Contenido, NodoArchivo, NodoCarpeta } from "@/admin/datos/arbol";
 import type { ClienteEnGestion } from "@/admin/datos/carpetas";
 import type { Persona } from "@/lib/equipo";
 import { ConfiguracionDeCliente } from "@/admin/ConfiguracionDeCliente";
@@ -222,7 +222,7 @@ function FilaCliente({
   const [abierto, setAbierto] = useState(false);
   const { cual, alternarConfig } = useContext(Abierta);
   const config = cual === cliente.id;
-  const [carpetas, setCarpetas] = useState<NodoCarpeta[] | null>(null);
+  const [contenido, setContenido] = useState<Contenido | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -234,13 +234,13 @@ function FilaCliente({
     try {
       const r = await abrirCliente(cliente.id);
       if (r.ok) {
-        setCarpetas(r.carpetas);
+        setContenido(r.contenido);
         setError(null);
       } else {
         setError(r.motivo);
       }
     } catch {
-      setError("No pude leer las carpetas.");
+      setError("No pude leer la carpeta.");
     } finally {
       setCargando(false);
     }
@@ -252,8 +252,8 @@ function FilaCliente({
    * parece que el cambio no se guardó.
    */
   const refrescar = useCallback(() => {
-    if (carpetas) traer();
-  }, [carpetas, traer]);
+    if (contenido) traer();
+  }, [contenido, traer]);
 
   async function alternar() {
     if (abierto) {
@@ -261,7 +261,7 @@ function FilaCliente({
       return;
     }
     setAbierto(true);
-    if (!carpetas) await traer();
+    if (!contenido) await traer();
   }
 
   return (
@@ -332,23 +332,15 @@ function FilaCliente({
           {error && (
             <p className="px-4 py-3 text-menudo font-semibold text-alerta">{error}</p>
           )}
-          {carpetas && carpetas.length === 0 && (
-            <p className="px-4 py-3 text-menudo text-apagado">
-              Este cliente no tiene ninguna carpeta adentro todavía.
-            </p>
-          )}
-          {carpetas && carpetas.length > 0 && (
-            <ul>
-              {carpetas.map((carpeta) => (
-                <FilaCarpeta
-                  key={carpeta.id}
-                  carpeta={carpeta}
-                  clienteId={cliente.id}
-                  equipo={equipo}
-                  alGuardar={traer}
-                />
-              ))}
-            </ul>
+          {contenido && (
+            <Adentro
+              contenido={contenido}
+              nivel={1}
+              clienteId={cliente.id}
+              equipo={equipo}
+              alGuardar={traer}
+              vacio="Este cliente no tiene nada adentro todavía."
+            />
           )}
         </div>
       )}
@@ -356,13 +348,73 @@ function FilaCliente({
   );
 }
 
+/**
+ * Lo que hay dentro de algo: primero las carpetas, después los archivos.
+ *
+ * Es el mismo bloque para el cliente y para cualquier subcarpeta, a cualquier
+ * profundidad. Tener un componente para «las carpetas del cliente» y otro para
+ * «los archivos de una carpeta» es lo que dejó el árbol clavado en dos niveles
+ * mientras en Drive había más.
+ *
+ * Las carpetas van arriba porque son caminos y los archivos son destinos:
+ * mezclados, hay que leer cada renglón para saber en qué se puede entrar.
+ */
+function Adentro({
+  contenido,
+  nivel,
+  clienteId,
+  equipo,
+  alGuardar,
+  vacio,
+}: {
+  contenido: Contenido;
+  nivel: number;
+  clienteId: string;
+  equipo: Persona[];
+  alGuardar: () => void;
+  vacio: string;
+}) {
+  const { carpetas, archivos } = contenido;
+
+  if (carpetas.length === 0 && archivos.length === 0) {
+    return <p className="px-4 py-3 text-menudo text-apagado">{vacio}</p>;
+  }
+
+  return (
+    <ul>
+      {carpetas.map((carpeta) => (
+        <FilaCarpeta
+          key={carpeta.id}
+          carpeta={carpeta}
+          nivel={nivel}
+          clienteId={clienteId}
+          equipo={equipo}
+          alGuardar={alGuardar}
+        />
+      ))}
+      {archivos.map((archivo) => (
+        <FilaArchivo
+          key={archivo.id}
+          archivo={archivo}
+          nivel={nivel}
+          carpetaId={clienteId}
+          equipo={equipo}
+          alGuardar={alGuardar}
+        />
+      ))}
+    </ul>
+  );
+}
+
 function FilaCarpeta({
   carpeta,
+  nivel,
   clienteId,
   equipo,
   alGuardar,
 }: {
   carpeta: NodoCarpeta;
+  nivel: number;
   clienteId: string;
   equipo: Persona[];
   alGuardar: () => void;
@@ -370,11 +422,33 @@ function FilaCarpeta({
   const [abierta, setAbierta] = useState(false);
   const { cual, alternarConfig } = useContext(Abierta);
   const config = cual === carpeta.id;
-  const [archivos, setArchivos] = useState<NodoArchivo[] | null>(null);
+  const [contenido, setContenido] = useState<Contenido | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const oculta = !carpeta.visible && !carpeta.reservada;
+
+  const traer = useCallback(async () => {
+    setCargando(true);
+    try {
+      // Se le pasa lo que corre en esta carpeta: es lo que sus hijos heredan.
+      // Así la herencia baja escalón por escalón, sin importar cuántos haya.
+      const r = await abrirCarpeta(carpeta.id, {
+        dias: carpeta.diasQueCorren,
+        responsable: carpeta.responsableQueCorre,
+      });
+      if (r.ok) {
+        setContenido(r.contenido);
+        setError(null);
+      } else {
+        setError(r.motivo);
+      }
+    } catch {
+      setError("No pude leer la carpeta.");
+    } finally {
+      setCargando(false);
+    }
+  }, [carpeta.id, carpeta.diasQueCorren, carpeta.responsableQueCorre]);
 
   async function alternar() {
     if (abierta) {
@@ -382,34 +456,20 @@ function FilaCarpeta({
       return;
     }
     setAbierta(true);
-    if (archivos) return;
-
-    setCargando(true);
-    try {
-      const r = await abrirCarpeta(carpeta.id, {
-        dias: carpeta.diasQueCorren,
-        responsable: carpeta.responsableQueCorre,
-      });
-      if (r.ok) setArchivos(r.archivos);
-      else setError(r.motivo);
-    } catch {
-      setError("No pude leer los archivos.");
-    } finally {
-      setCargando(false);
-    }
+    if (!contenido) await traer();
   }
 
   return (
     <li className="border-t border-linea-tenue">
       <Fila
-        nivel={1}
+        nivel={nivel}
         atenuada={oculta}
         abridor={
           <Abridor
             abierto={abierta}
             onAbrir={alternar}
             cargando={cargando}
-            etiqueta={`Ver los archivos de ${carpeta.nombre}`}
+            etiqueta={`Ver lo que hay en ${carpeta.nombre}`}
           />
         }
         drive={<EnDrive href={carpeta.enlaceDrive} que="la carpeta" />}
@@ -448,6 +508,12 @@ function FilaCarpeta({
             "Acá se mueve lo aprobado."
           ) : (
             <>
+              {carpeta.subcarpetas > 0 && (
+                <>
+                  {carpeta.subcarpetas}{" "}
+                  {carpeta.subcarpetas === 1 ? "carpeta" : "carpetas"} ·{" "}
+                </>
+              )}
               {carpeta.piezas} {carpeta.piezas === 1 ? "pieza" : "piezas"} ·{" "}
               {carpeta.sinRevisar} sin revisar · {carpeta.diasQueCorren}{" "}
               {carpeta.diasQueCorren === 1 ? "día" : "días"} para revisar
@@ -458,7 +524,7 @@ function FilaCarpeta({
       </Fila>
 
       {config && (
-        <Panel nivel={1}>
+        <Panel nivel={nivel}>
           {carpeta.reservada ? (
             <ConfiguracionDeReservada carpeta={carpeta} />
           ) : (
@@ -477,33 +543,21 @@ function FilaCarpeta({
           {error && (
             <p className="px-4 py-2 text-menudo font-semibold text-alerta">{error}</p>
           )}
-          {archivos && archivos.length === 0 && (
-            <p className="px-4 py-2 text-menudo text-apagado">
-              No hay archivos en esta carpeta.
-            </p>
-          )}
-          {archivos && archivos.length > 0 && (
-            <ul>
-              {archivos.map((archivo) => (
-                <FilaArchivo
-                  key={archivo.id}
-                  archivo={archivo}
-                  carpetaId={carpeta.id}
-                  equipo={equipo}
-                  alGuardar={() => {
-                    alGuardar();
-                    setArchivos(null);
-                    setAbierta(false);
-                  }}
-                />
-              ))}
-            </ul>
+          {contenido && (
+            <Adentro
+              contenido={contenido}
+              nivel={nivel + 1}
+              clienteId={carpeta.id}
+              equipo={equipo}
+              alGuardar={traer}
+              vacio="Esta carpeta está vacía."
+            />
           )}
 
           {carpeta.vista === "calendario" && !carpeta.reservada && (
             <div
               className="border-t border-linea-tenue py-2"
-              style={{ paddingLeft: 2 * SANGRIA + 44 }}
+              style={{ paddingLeft: (nivel + 1) * SANGRIA + 44 }}
             >
               <Link
                 href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}`}
@@ -550,11 +604,13 @@ function ConfiguracionDeReservada({ carpeta }: { carpeta: NodoCarpeta }) {
 
 function FilaArchivo({
   archivo,
+  nivel,
   carpetaId,
   equipo,
   alGuardar,
 }: {
   archivo: NodoArchivo;
+  nivel: number;
   carpetaId: string;
   equipo: Persona[];
   alGuardar: () => void;
@@ -565,7 +621,8 @@ function FilaArchivo({
   return (
     <li className="border-t border-linea-tenue">
       <Fila
-        nivel={2}
+        nivel={nivel}
+        atenuada={!archivo.visible}
         abridor={<Hueco />}
         drive={<EnDrive href={archivo.enlaceDrive} que="el archivo" />}
         config={
@@ -577,8 +634,17 @@ function FilaArchivo({
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-normal">{archivo.nombre}</span>
+          <span
+            className={`truncate text-normal ${archivo.visible ? "" : "text-apagado"}`}
+          >
+            {archivo.nombre}
+          </span>
           <Estado estado={archivo.estado} />
+          {!archivo.visible && (
+            <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+              Oculto
+            </span>
+          )}
           {archivo.vueltas > 1 && (
             <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
               v{archivo.vueltas}
@@ -599,7 +665,7 @@ function FilaArchivo({
       </Fila>
 
       {config && (
-        <Panel nivel={2}>
+        <Panel nivel={nivel}>
           <ConfiguracionDeArchivo
             archivo={archivo}
             carpetaId={carpetaId}

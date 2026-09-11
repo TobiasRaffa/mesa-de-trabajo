@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import { panelDeClientes } from "@/admin/datos/carpetas";
-import { carpetasDeCliente } from "@/admin/datos/arbol";
+import { contenidoDe, heredadoDelCliente } from "@/admin/datos/arbol";
 import { ArbolDeClientes } from "@/admin/ArbolDeClientes";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { MensajesListos } from "@/admin/MensajesListos";
@@ -27,7 +27,10 @@ export default async function UnCliente({
     const todos = await panelDeClientes();
     cliente = todos.find((c) => c.id === clienteId);
     if (!cliente) throw new Error("No encontre ese cliente.");
-    [carpetas, equipo] = await Promise.all([carpetasDeCliente(clienteId), elEquipo()]);
+    [carpetas, equipo] = await Promise.all([
+      contenidoDe(clienteId, await heredadoDelCliente(clienteId)).then((c) => c.carpetas),
+      elEquipo(),
+    ]);
   } catch (error) {
     return <ErrorDeDrive error={error} />;
   }

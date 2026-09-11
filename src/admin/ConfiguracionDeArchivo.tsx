@@ -7,6 +7,7 @@
 // aunque el resto sea de Nari». Es el último escalón de la herencia, y lo que
 // se pone acá gana sobre todo lo de arriba.
 
+import { Visibilidad } from "@/admin/Visibilidad";
 import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import { Responsable } from "@/admin/Responsable";
 import type { NodoArchivo } from "@/admin/datos/arbol";
@@ -27,6 +28,13 @@ export function ConfiguracionDeArchivo({
 }) {
   return (
     <div className="flex flex-col gap-4">
+      <Visibilidad
+        ids={archivo.archivos}
+        visible={archivo.visible}
+        que="archivo"
+        alGuardar={alGuardar}
+      />
+
       <section>
         <h4 className={TITULO}>Quién lo lleva</h4>
         <div className="mt-2">

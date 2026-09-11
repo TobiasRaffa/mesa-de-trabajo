@@ -23,6 +23,7 @@ import {
   guardarAjustesDe,
   linkDeCarpeta,
   type Vista,
+  mostrarUOcultar,
 } from "@/lib/ajustes";
 import { esCarpetaDelCliente, idsDeCarpetasReales, olvidarCarpetas } from "@/lib/carpetas";
 import {
@@ -40,12 +41,12 @@ import {
   type Mensaje,
 } from "@/lib/conversaciones";
 import { piezasDeLaCarpeta } from "@/lib/piezas";
+import { esDeAlgunCliente } from "@/lib/permisos";
 import { correoValido } from "@/lib/equipo";
 import {
-  archivosDeCarpeta,
-  carpetasDeCliente,
-  type NodoArchivo,
-  type NodoCarpeta,
+  contenidoDe,
+  heredadoDelCliente,
+  type Contenido,
 } from "@/admin/datos/arbol";
 import { marcarTodosVistos } from "@/lib/avisos";
 import {
@@ -72,7 +73,7 @@ export type Resultado = { ok: true } | { ok: false; motivo: string };
 export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
   const carpetaId = String(formulario.get("carpetaId") ?? "");
   const nombre = String(formulario.get("nombre") ?? "");
-  const visible = formulario.get("visible") === "si";
+
   const vistaCruda = String(formulario.get("vista") ?? "lista");
 
   if (!carpetaId) return { ok: false as const, motivo: "Falta la carpeta." };
@@ -98,7 +99,10 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
   // la lleva y hasta cuándo. Pisarlos con vacío sería perderlos cada vez que
   // alguien toca «ocultar».
   const previos = await ajustesDe(carpetaId);
-  await guardarAjustesDe(carpetaId, { ...previos, visible, vista });
+  // La visibilidad no se toca acá: la maneja `cambiarVisibilidad`, y mandarla
+  // de nuevo desde una pantalla que quedó vieja podía pisar lo que alguien
+  // acababa de apagar.
+  await guardarAjustesDe(carpetaId, { ...previos, vista });
 
   // La pantalla se vuelve a dibujar con lo guardado, en el mismo viaje.
   revalidatePath("/gestion", "layout");
@@ -493,31 +497,68 @@ export async function marcarChatLeido(clienteId: string): Promise<void> {
  * clientes para dibujar una lista cerrada sería pagar por adelantado algo que
  * casi nunca se mira.
  */
-export async function abrirCliente(
-  clienteId: string
-): Promise<{ ok: true; carpetas: NodoCarpeta[] } | { ok: false; motivo: string }> {
+export type Abierta =
+  | { ok: true; contenido: Contenido }
+  | { ok: false; motivo: string };
+
+export async function abrirCliente(clienteId: string): Promise<Abierta> {
   if (!(await esClienteReal(clienteId))) {
     return { ok: false, motivo: "Ese cliente no existe." };
   }
   try {
-    return { ok: true, carpetas: await carpetasDeCliente(clienteId) };
+    return {
+      ok: true,
+      contenido: await contenidoDe(clienteId, await heredadoDelCliente(clienteId)),
+    };
   } catch {
-    return { ok: false, motivo: "No pude leer las carpetas en Drive." };
+    return { ok: false, motivo: "No pude leer la carpeta en Drive." };
   }
 }
 
+/**
+ * Lo que hay dentro de una carpeta, a cualquier profundidad.
+ *
+ * `esCarpetaDelCliente` comprueba que la carpeta cuelgue de un cliente: sin
+ * eso, cualquiera con una dirección de gestión podría pedir el contenido de
+ * una carpeta ajena del Drive del robot.
+ */
 export async function abrirCarpeta(
   carpetaId: string,
   heredado: { dias: number; responsable: string | null }
-): Promise<{ ok: true; archivos: NodoArchivo[] } | { ok: false; motivo: string }> {
+): Promise<Abierta> {
   if (!(await esCarpetaDelCliente(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
   try {
-    return { ok: true, archivos: await archivosDeCarpeta(carpetaId, heredado) };
+    return { ok: true, contenido: await contenidoDe(carpetaId, heredado) };
   } catch {
-    return { ok: false, motivo: "No pude leer los archivos en Drive." };
+    return { ok: false, motivo: "No pude leer la carpeta en Drive." };
   }
+}
+
+/**
+ * Prende o apaga: una carpeta, una subcarpeta o una pieza.
+ *
+ * Recibe **varios** identificadores porque una pieza son varios archivos —sus
+ * vueltas— y apagarla tiene que apagarlas todas. Una carpeta manda uno solo.
+ */
+export async function cambiarVisibilidad(
+  ids: string[],
+  visible: boolean
+): Promise<{ ok: boolean; motivo?: string }> {
+  if (ids.length === 0) return { ok: false, motivo: "No me dijiste qué." };
+
+  for (const id of ids) {
+    // Vale tanto para una carpeta como para un archivo, así que se acepta
+    // cualquiera de las dos comprobaciones. Lo que no se acepta es un
+    // identificador suelto de Drive que no cuelgue de ningún cliente.
+    const deUnCliente = (await esCarpetaDelCliente(id)) || (await esDeAlgunCliente(id));
+    if (!deUnCliente) return { ok: false, motivo: "Eso no es de ningún cliente." };
+  }
+
+  for (const id of ids) await mostrarUOcultar(id, visible);
+  revalidatePath("/gestion");
+  return { ok: true };
 }
 
 /**

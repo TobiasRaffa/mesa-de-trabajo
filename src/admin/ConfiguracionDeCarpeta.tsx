@@ -8,6 +8,7 @@ import { guardarCarpeta, pedirLinkDeCarpeta } from "@/app/(admin)/gestion/accion
 import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import { Responsable } from "@/admin/Responsable";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
+import { Visibilidad } from "@/admin/Visibilidad";
 import type { NodoCarpeta } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
@@ -104,26 +105,13 @@ export function ConfiguracionDeCarpeta({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* -------------------------- Mostrar en el portal ----------------- */}
-      <section>
-        <h4 className={TITULO}>Mostrar en el portal</h4>
-        <form action={guardar} className="mt-2">
-          <SiONo
-            activo={carpeta.visible}
-            esperando={esperando}
-            nombre="visible"
-            valorSi="si"
-            valorNo="no"
-            campos={
-              <>
-                <input type="hidden" name="carpetaId" value={carpeta.id} />
-                <input type="hidden" name="nombre" value={carpeta.nombre} />
-                <input type="hidden" name="vista" value={carpeta.vista} />
-              </>
-            }
-          />
-        </form>
-      </section>
+      {/* -------------------------- Lo ve el cliente --------------------- */}
+      <Visibilidad
+        ids={[carpeta.id]}
+        visible={carpeta.visible}
+        que="carpeta"
+        alGuardar={alGuardar}
+      />
 
       {/* ------------------------------ Calendario ----------------------- */}
       <section>
@@ -140,11 +128,6 @@ export function ConfiguracionDeCarpeta({
                 <>
                   <input type="hidden" name="carpetaId" value={carpeta.id} />
                   <input type="hidden" name="nombre" value={carpeta.nombre} />
-                  <input
-                    type="hidden"
-                    name="visible"
-                    value={carpeta.visible ? "si" : "no"}
-                  />
                 </>
               }
             />

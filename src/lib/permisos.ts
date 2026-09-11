@@ -97,16 +97,31 @@ async function nodo(carpetaId: string): Promise<{ padres: string[]; nombre: stri
  * Va por niveles y no en profundidad porque lo normal es encontrar la raíz en
  * el primero o el segundo: así se corta antes y se gastan menos pedidos.
  */
-async function hayCaminoLimpio(desde: string[], raiz: string): Promise<boolean> {
+async function hayCamino(
+  desde: string[],
+  raices: string[],
+  /**
+   * Si lo escondido corta el camino.
+   *
+   * El cliente ve lo que la agencia dejó visible. **La agencia ve todo**,
+   * incluso lo que apagó: si no, apagar una carpeta la haría desaparecer de
+   * gestión y ya no habría dónde volver a prenderla.
+   */
+  { respetarEscondidos }: { respetarEscondidos: boolean }
+): Promise<boolean> {
+  if (raices.length === 0) return false;
+
   const vistas = new Set<string>();
   let frontera = desde;
 
   for (let nivel = 0; nivel < NIVELES && frontera.length > 0; nivel++) {
-    if (frontera.includes(raiz)) return true;
+    if (frontera.some((id) => raices.includes(id))) return true;
 
     // Se pregunta por toda la frontera de una vez: de a uno serían tantas
     // lecturas del almacén como carpetas tenga el camino.
-    const escondidas = await escondidosEntre(frontera);
+    const escondidas = respetarEscondidos
+      ? await escondidosEntre(frontera)
+      : new Set<string>();
 
     const siguiente: string[] = [];
     for (const id of frontera) {
@@ -119,7 +134,7 @@ async function hayCaminoLimpio(desde: string[], raiz: string): Promise<boolean> 
       if (escondidas.has(id)) continue;
 
       const { padres, nombre } = await nodo(id);
-      if (esCarpetaDeFacturas(nombre)) continue;
+      if (respetarEscondidos && esCarpetaDeFacturas(nombre)) continue;
 
       siguiente.push(...padres);
     }
@@ -158,9 +173,30 @@ export async function archivoAutorizado(
     // El archivo en sí puede estar escondido aunque su carpeta se muestre.
     if ((await escondidosEntre([fileId])).has(fileId)) return null;
 
-    const adentro = await hayCaminoLimpio(archivo.parents ?? [], carpetaDelCliente);
+    const adentro = await hayCamino(archivo.parents ?? [], [carpetaDelCliente], {
+      respetarEscondidos: true,
+    });
     return adentro ? archivo : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Si esto cuelga del árbol de algún cliente, mire quien mire.
+ *
+ * Es para gestión, y por eso **no** respeta lo escondido: la agencia tiene que
+ * poder volver a prender lo que apagó. Sirve para no dejar que una pantalla de
+ * gestión toque un identificador suelto de Drive que no sea de ningún cliente.
+ */
+export async function esDeAlgunCliente(id: string): Promise<boolean> {
+  const raices = await carpetasAdministradas();
+  if (raices.includes(id)) return true;
+
+  try {
+    const { parents } = await metadatosArchivo(id);
+    return await hayCamino(parents ?? [], raices, { respetarEscondidos: false });
+  } catch {
+    return false;
   }
 }

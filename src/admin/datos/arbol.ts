@@ -1,11 +1,25 @@
-// El contenido de un cliente, nivel por nivel.
+// El contenido de una carpeta, nivel por nivel, hasta donde llegue.
 //
-// La pantalla de clientes es un árbol que se abre: cliente, sus carpetas, los
-// archivos de cada una. Cada nivel se pide **cuando se abre** y no antes: leer
-// de Drive todos los archivos de todos los clientes para dibujar una lista que
-// arranca cerrada sería pagar por adelantado algo que casi nunca se mira.
+// **Gestión muestra todo lo que el robot puede ver.** La agencia arma en Drive
+// la estructura que le sirve —«Logos», «Calendario septiembre», y adentro las
+// subcarpetas que hagan falta— y acá aparece tal cual es, sin un límite de
+// profundidad inventado por la aplicación. Lo que no se ve no se puede
+// configurar, y lo que no se puede configurar termina siendo una sorpresa.
+//
+// Es una sola función para cualquier nivel: la carpeta del cliente y una
+// subcarpeta de tercer nivel se piden igual. Tener una para «las carpetas del
+// cliente» y otra para «los archivos de una carpeta» fue lo que dejó el árbol
+// clavado en dos niveles.
+//
+// Cada nivel se pide **cuando se abre** y no antes: leer de Drive todo lo de
+// todos los clientes para dibujar una lista que arranca cerrada sería pagar por
+// adelantado algo que casi nunca se mira.
+//
+// Lo que se hereda —el tiempo de revisión y quién lo lleva— baja de escalón en
+// escalón: cada nivel recibe lo que corre arriba y le pasa a sus hijos lo que
+// corre en él. Así la regla es la misma a cualquier profundidad.
 
-import { ajustesDe, esCarpetaReservada } from "@/lib/ajustes";
+import { ajustesDe, esCarpetaReservada, escondidosEntre } from "@/lib/ajustes";
 import { personaPorId } from "@/lib/equipo";
 import { subcarpetasDe } from "@/lib/google";
 import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
@@ -39,6 +53,8 @@ export type NodoCarpeta = {
   diasQueCorren: number;
   piezas: number;
   sinRevisar: number;
+  /** Cuántas carpetas tiene adentro. Una carpeta puede no tener archivos. */
+  subcarpetas: number;
   /** `Entregas finales` no es un trabajo: no se configura. */
   reservada: boolean;
 };
@@ -46,6 +62,17 @@ export type NodoCarpeta = {
 export type NodoArchivo = {
   id: string;
   nombre: string;
+  /** Si el cliente lo ve. Se apaga y se prende igual que una carpeta. */
+  visible: boolean;
+  /**
+   * Los archivos de Drive de esta pieza: todas sus vueltas.
+   *
+   * Un renglón del árbol es **una pieza**, no un archivo: «9304.jpeg» y
+   * «9304 V2.jpeg» son el mismo renglón. Apagar la pieza tiene que apagar
+   * todas sus vueltas, o el cliente sigue viendo la V1 de algo que la agencia
+   * creyó haber escondido.
+   */
+  archivos: string[];
   enlaceDrive?: string;
   modificado?: string;
   estado: Estado;
@@ -66,13 +93,47 @@ export type NodoArchivo = {
   responsableA: string | null;
 };
 
-export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[]> {
-  const [carpetas, diasDelCliente, deQuienEsElCliente] = await Promise.all([
-    subcarpetasDe(clienteId),
-    plazoDe(clienteId),
-    responsableDe(clienteId),
-  ]);
+/**
+ * Lo que corre a nivel del cliente: el escalón de más arriba.
+ *
+ * De acá arranca la herencia y baja sola por cada nivel, sin importar cuántos
+ * haya.
+ */
+export async function heredadoDelCliente(clienteId: string): Promise<Heredado> {
+  const [dias, quien] = await Promise.all([plazoDe(clienteId), responsableDe(clienteId)]);
+  return {
+    dias: plazoQueCorre(undefined, undefined, dias),
+    responsable: responsableQueCorre(undefined, undefined, quien),
+  };
+}
 
+export type Contenido = { carpetas: NodoCarpeta[]; archivos: NodoArchivo[] };
+
+/** Lo que se hereda de arriba, ya resuelto. */
+export type Heredado = { dias: number; responsable: string | null };
+
+/**
+ * Todo lo que hay dentro de una carpeta: sus subcarpetas y sus archivos.
+ *
+ * Sirve igual para la carpeta de un cliente que para una subcarpeta de cuarto
+ * nivel. Lo único que cambia es qué se hereda, y eso llega como parámetro.
+ */
+export async function contenidoDe(
+  carpetaId: string,
+  heredado: Heredado
+): Promise<Contenido> {
+  const [carpetas, archivos] = await Promise.all([
+    subcarpetasDeCarpeta(carpetaId, heredado),
+    archivosDeCarpeta(carpetaId, heredado),
+  ]);
+  return { carpetas, archivos };
+}
+
+async function subcarpetasDeCarpeta(
+  carpetaId: string,
+  heredado: Heredado
+): Promise<NodoCarpeta[]> {
+  const carpetas = await subcarpetasDe(carpetaId);
   const ids = carpetas.map((c) => c.id);
   const [propios, responsables] = await Promise.all([plazosDe(ids), responsablesDe(ids)]);
 
@@ -80,11 +141,8 @@ export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[
     carpetas.map(async (carpeta): Promise<NodoCarpeta> => {
       const reservada = esCarpetaReservada(carpeta.name);
       const ajustes = await ajustesDe(carpeta.id);
-      const quien = responsableQueCorre(
-        undefined,
-        carpeta.id in responsables ? responsables[carpeta.id] : undefined,
-        deQuienEsElCliente
-      );
+      const propio = carpeta.id in responsables ? responsables[carpeta.id] : undefined;
+      const quien = responsableQueCorre(propio, heredado.responsable, undefined);
       const persona = await personaPorId(quien ?? undefined);
 
       const base = {
@@ -94,16 +152,23 @@ export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[
         visible: ajustes.visible,
         vista: ajustes.vista,
         token: ajustes.token,
-        responsable: carpeta.id in responsables ? responsables[carpeta.id] : undefined,
+        responsable: propio,
         responsableQueCorre: quien,
         responsableA: persona?.nombre ?? null,
         dias: propios[carpeta.id],
-        diasQueCorren: plazoQueCorre(undefined, propios[carpeta.id], diasDelCliente),
+        diasQueCorren: plazoQueCorre(propios[carpeta.id], heredado.dias, undefined),
         reservada,
       };
 
+      // Cuántas carpetas tiene adentro se pregunta siempre: una carpeta sin
+      // archivos pero con subcarpetas no está vacía, y decir «0 piezas» a
+      // secas invitaría a pensar que sí.
+      const adentro = await subcarpetasDe(carpeta.id).catch(() => []);
+
       // De una carpeta reservada no se cuenta nada: no se revisa.
-      if (reservada) return { ...base, piezas: 0, sinRevisar: 0 };
+      if (reservada) {
+        return { ...base, piezas: 0, sinRevisar: 0, subcarpetas: adentro.length };
+      }
 
       const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpeta.id));
       const ultimas = agrupadas.map((p) => p.versiones[p.versiones.length - 1].archivo.id);
@@ -115,24 +180,25 @@ export async function carpetasDeCliente(clienteId: string): Promise<NodoCarpeta[
         sinRevisar: Object.values(estados).filter(
           (p) => p.estado === "entregada" || p.estado === "en_revision"
         ).length,
+        subcarpetas: adentro.length,
       };
     })
   );
 }
 
-export async function archivosDeCarpeta(
+async function archivosDeCarpeta(
   carpetaId: string,
-  /** Lo que hereda esta carpeta. Los archivos parten de acá. */
-  heredado: { dias: number; responsable: string | null }
+  heredado: Heredado
 ): Promise<NodoArchivo[]> {
   const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
   const ultimas = agrupadas.map((p) => p.versiones[p.versiones.length - 1].archivo.id);
 
-  const [estados, dias, propios, responsables] = await Promise.all([
+  const [estados, dias, propios, responsables, escondidos] = await Promise.all([
     estadosDe(carpetaId, ultimas),
     publicacionesDe(ultimas),
     plazosDe(ultimas),
     responsablesDe(ultimas),
+    escondidosEntre(agrupadas.flatMap((p) => p.versiones.map((v) => v.archivo.id))),
   ]);
 
   const nombres = new Map<string, string | null>();
@@ -150,9 +216,15 @@ export async function archivosDeCarpeta(
     const propio = ultima.id in responsables ? responsables[ultima.id] : undefined;
     const quien = responsableQueCorre(propio, heredado.responsable, undefined);
 
+    const suyos = pieza.versiones.map((v) => v.archivo.id);
+
     return {
       id: ultima.id,
       nombre: pieza.titulo,
+      // Si alguna vuelta está escondida, la pieza se muestra como escondida:
+      // mitad visible y mitad no es un estado que nadie quiso.
+      visible: !suyos.some((a) => escondidos.has(a)),
+      archivos: suyos,
       enlaceDrive: ultima.webViewLink,
       modificado: ultima.modifiedTime,
       estado: estado.estado,

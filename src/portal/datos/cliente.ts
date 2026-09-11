@@ -16,7 +16,7 @@
 // estado. En qué anda cada pieza —aprobada, con cambios, en qué ronda— lo
 // lleva el navegador hasta que exista dónde guardarlo de verdad.
 
-import { ajustesDe, soloLasVisibles, type Vista } from "@/lib/ajustes";
+import { ajustesDe, escondidosEntre, soloLoVisible, type Vista } from "@/lib/ajustes";
 import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones } from "@/lib/versiones";
@@ -67,6 +67,54 @@ const RONDAS_INCLUIDAS = 2;
 const MOSTRABLES = /^(image\/|application\/pdf$)/;
 
 /**
+ * Hasta dónde se baja buscando carpetas.
+ *
+ * Es un tope, no una expectativa. Drive deja armar atajos que hacen ciclos, y
+ * sin un límite una estructura rara se convierte en una cadena infinita de
+ * pedidos a Google. El mismo número que usa el permiso, para que lo que se
+ * muestra y lo que se sirve no puedan opinar distinto.
+ */
+const HONDURA = 6;
+
+/**
+ * Todas las carpetas visibles que cuelgan de una, a cualquier profundidad.
+ *
+ * **El cliente ve todo lo que la agencia dejó visible**, esté donde esté. Antes
+ * se miraba un solo nivel: si había archivos en una subcarpeta, el cliente no
+ * los veía y nadie se enteraba, porque desde gestión tampoco se veían.
+ *
+ * Lo que vuelve es una lista **llana**, con el camino en el nombre —«Calendario
+ * septiembre / Semana 1»—, y no un árbol para ir abriendo. Es a propósito: el
+ * cliente entra una vez cada varios días, desde el teléfono, a hacer una cosa.
+ * Hacerlo navegar carpetas es ponerle entre él y el trabajo la parte de Drive
+ * que el portal vino a sacar del medio. Con el camino en el nombre no se pierde
+ * de dónde salió cada cosa, y no hay nada que aprender.
+ */
+async function carpetasVisiblesBajo(
+  raiz: string,
+  camino: string[],
+  hondura: number
+): Promise<Array<{ id: string; name: string; webViewLink?: string; camino: string[] }>> {
+  if (hondura >= HONDURA) return [];
+
+  const hijas = await soloLoVisible(await subcarpetasDe(raiz));
+
+  const salida = await Promise.all(
+    hijas.map(async (hija) => {
+      const suCamino = [...camino, hija.name];
+      const nietas = await carpetasVisiblesBajo(hija.id, suCamino, hondura + 1).catch(
+        // Una subcarpeta que Drive no contesta no puede tumbar la pantalla
+        // entera: se pierde esa rama, no el portal.
+        () => []
+      );
+      return [{ ...hija, camino: suCamino }, ...nietas];
+    })
+  );
+
+  return salida.flat();
+}
+
+/**
  * Lo que ve un cliente, leído de su carpeta.
  *
  * Recibe **de qué cliente se trata** y no lo saca de la configuración: hay
@@ -74,28 +122,43 @@ const MOSTRABLES = /^(image\/|application\/pdf$)/;
  */
 export async function portalDelCliente(
   raiz: string,
-  /** Si viene, se muestra esa carpeta sola: es el link de una carpeta. */
+  /** Si viene, se muestra esa carpeta y lo que cuelgue de ella: es su link. */
   soloEsta?: string
 ): Promise<PortalDeCliente> {
-  const [cliente, subcarpetas] = await Promise.all([
-    datosDeCarpeta(raiz),
-    subcarpetasDe(raiz),
-  ]);
+  const cliente = await datosDeCarpeta(raiz);
 
-  const visibles = (await soloLasVisibles(subcarpetas)).filter(
-    (c) => !soloEsta || c.id === soloEsta
-  );
+  const todas = await carpetasVisiblesBajo(raiz, [], 0);
 
-  // Las carpetas se leen en paralelo: son pocas y esperar una por una haría
-  // que la pantalla tarde la suma de todas.
+  // El link de una carpeta muestra esa y lo que tenga adentro, no el resto.
+  const elegidas = soloEsta
+    ? todas.filter((c) => c.id === soloEsta || perteneceA(c, todas, soloEsta))
+    : todas;
+
+  // La carpeta del cliente también puede tener archivos sueltos. Antes no se
+  // miraban, así que un archivo dejado ahí no lo veía nadie.
+  const conLaRaiz = [
+    { id: raiz, name: cliente.name, webViewLink: cliente.webViewLink, camino: [] as string[] },
+    ...elegidas,
+  ];
+  const aMirar = soloEsta ? elegidas : conLaRaiz;
+
+  // Se leen en paralelo: esperar una por una haría que la pantalla tarde la
+  // suma de todas.
   const carpetas = await Promise.all(
-    visibles.map(async (carpeta): Promise<CarpetaDeTrabajo> => {
+    aMirar.map(async (carpeta): Promise<CarpetaDeTrabajo> => {
       const { vista } = await ajustesDe(carpeta.id);
+
       // Incluye las que ya se mudaron a «Entregas finales»: aprobar no puede
       // costarle al cliente perder de vista lo que acaba de aprobar.
-      const archivos = (await piezasDeLaCarpeta(carpeta.id)).filter((a) =>
+      const enLaCarpeta = (await piezasDeLaCarpeta(carpeta.id)).filter((a) =>
         MOSTRABLES.test(a.mimeType)
       );
+
+      // Un archivo se puede apagar solo, sin apagar su carpeta. Se filtra acá
+      // y además no se sirve: la pantalla no es el permiso, pero tampoco puede
+      // ofrecer algo que después va a dar «no encontrado».
+      const escondidos = await escondidosEntre(enLaCarpeta.map((a) => a.id));
+      const archivos = enLaCarpeta.filter((a) => !escondidos.has(a.id));
 
       // «9304.jpeg» y «9304 V2.jpeg» son una sola pieza en dos vueltas, no
       // dos piezas. La regla vive en `versiones.ts` y está probada aparte.
@@ -113,7 +176,9 @@ export async function portalDelCliente(
 
       return {
         id: carpeta.id,
-        nombre: carpeta.name,
+        // El camino completo, para no tener dos «Semana 1» idénticas en la
+        // lista y no saber de cuál mes es cada una.
+        nombre: carpeta.camino.length > 0 ? carpeta.camino.join(" / ") : carpeta.name,
         enlaceDrive: carpeta.webViewLink,
         vista,
         piezas: agrupadas.map((pieza) => {
@@ -162,4 +227,18 @@ export async function portalDelCliente(
     rondasIncluidas: RONDAS_INCLUIDAS,
     rondasExtra: 0,
   };
+}
+
+/** Si esta carpeta cuelga de aquella, mirando el camino que ya calculamos. */
+function perteneceA(
+  carpeta: { camino: string[] },
+  todas: Array<{ id: string; camino: string[] }>,
+  ancestro: string
+): boolean {
+  const suyo = todas.find((c) => c.id === ancestro);
+  if (!suyo) return false;
+  return (
+    carpeta.camino.length > suyo.camino.length &&
+    suyo.camino.every((paso, i) => carpeta.camino[i] === paso)
+  );
 }
