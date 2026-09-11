@@ -17,16 +17,26 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+/** El trabajo de todos los días. */
 const SECCIONES = [
   { href: "/gestion/tablero", texto: "Qué pasó" },
   // «Clientes» es la raíz, y la ficha de cada cliente cuelga de ella: estando
   // adentro de un cliente, la sección que corresponde marcar sigue siendo esta.
   { href: "/gestion", texto: "Clientes", tambien: "/gestion/cliente" },
   { href: "/gestion/chats", texto: "Conversaciones" },
-  { href: "/gestion/equipo", texto: "Equipo" },
   // El diagnóstico no está acá: cuando Drive falla, cada pantalla lo dice donde
   // pasa. La ruta sigue existiendo para cuando haga falta mirar la conexión.
 ] as const;
+
+/**
+ * Lo que se toca de vez en cuando, abajo y aparte.
+ *
+ * Las claves de los clientes y el equipo no son trabajo diario: se configuran
+ * al dar de alta a alguien y después se miran cada tanto. Mezcladas con las
+ * secciones de todos los días, ocupan el mismo peso visual que «Clientes» y
+ * no lo valen. Abajo del todo están donde se las busca cuando se las busca.
+ */
+const ABAJO = [{ href: "/gestion/admin", texto: "Admin" }] as const;
 
 /**
  * Si una sección es la que se está mirando.
@@ -34,7 +44,9 @@ const SECCIONES = [
  * `/gestion` necesita comparación exacta porque es prefijo de todas las demás:
  * sin eso quedarían dos secciones marcadas a la vez, que es peor que ninguna.
  */
-function esLaActual(ruta: string, seccion: (typeof SECCIONES)[number]): boolean {
+type Seccion = { href: string; texto: string; tambien?: string };
+
+function esLaActual(ruta: string, seccion: Seccion): boolean {
   if (seccion.href === "/gestion") {
     return ruta === "/gestion" || ruta.startsWith(`${seccion.tambien}/`);
   }
@@ -62,9 +74,31 @@ export function BarraLateral() {
         Mesa de trabajo
       </Link>
 
-      <nav aria-label="Secciones">
+      <Secciones cuales={SECCIONES} ruta={ruta} etiqueta="Secciones" />
+
+      {/* `mt-auto` lo empuja al pie de la columna en pantalla grande. En el
+          teléfono la barra es una fila y sigue a lo anterior, con una línea que
+          lo separa para que se lea como otro grupo. */}
+      <div className="mt-2 border-t border-lienzo/15 pt-2 lg:mt-auto lg:pt-4">
+        <Secciones cuales={ABAJO} ruta={ruta} etiqueta="Administración" />
+      </div>
+    </aside>
+  );
+}
+
+function Secciones({
+  cuales,
+  ruta,
+  etiqueta,
+}: {
+  cuales: readonly Seccion[];
+  ruta: string;
+  etiqueta: string;
+}) {
+  return (
+    <nav aria-label={etiqueta}>
         <ul className="flex gap-2 overflow-x-auto lg:flex-col lg:gap-0 lg:overflow-visible">
-          {SECCIONES.map((seccion) => {
+          {cuales.map((seccion) => {
             const actual = esLaActual(ruta, seccion);
             return (
               <li key={seccion.href} className="shrink-0 lg:shrink">
@@ -90,6 +124,5 @@ export function BarraLateral() {
           })}
         </ul>
       </nav>
-    </aside>
   );
 }

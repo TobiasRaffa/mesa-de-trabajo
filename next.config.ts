@@ -58,6 +58,12 @@ const CABECERAS = [
 ];
 
 const nextConfig: NextConfig = {
+  // El indicador de desarrollo de Next vive abajo a la izquierda, que es
+  // justo donde está «Admin» en la barra de gestión: lo tapaba. Se corre a la
+  // derecha. Solo aparece mientras se programa, pero la agencia usa la
+  // aplicación así todos los días hasta que se suba.
+  devIndicators: { position: "bottom-right" },
+
   // Next anuncia su presencia en cada respuesta. No hace falta.
   poweredByHeader: false,
 

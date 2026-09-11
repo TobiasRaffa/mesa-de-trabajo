@@ -27,7 +27,7 @@
 // cosa. Se probaron y tapaban lo importante: en una lista, lo que hay que leer
 // son los nombres y los estados, no un párrafo al lado de cada control.
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { abrirCarpeta, abrirCliente } from "@/app/(admin)/gestion/acciones";
 import type { Contenido, NodoArchivo, NodoCarpeta } from "@/admin/datos/arbol";
@@ -113,16 +113,20 @@ function BotonDeConfig({
   abierta,
   onTocar,
   que,
+  de,
 }: {
   abierta: boolean;
   onTocar: () => void;
   que: string;
+  /** De qué es esta configuración. Sirve para saber qué toque es «adentro». */
+  de: string;
 }) {
   return (
     <button
       type="button"
       onClick={onTocar}
       aria-expanded={abierta}
+      data-ajustes={de}
       title={`Configuración de ${que}`}
       className={`grid h-9 w-9 shrink-0 place-items-center transition-colors ${
         abierta ? "bg-tinta text-lienzo" : "text-apagado hover:bg-hueco hover:text-tinta"
@@ -169,9 +173,18 @@ function Fila({
 }
 
 /** El panel que se abre debajo de una fila, alineado con su contenido. */
-function Panel({ nivel, children }: { nivel: number; children: React.ReactNode }) {
+function Panel({
+  nivel,
+  de,
+  children,
+}: {
+  nivel: number;
+  de: string;
+  children: React.ReactNode;
+}) {
   return (
     <div
+      data-ajustes={de}
       className="border-t border-linea-tenue bg-lienzo py-4 pr-4"
       style={{ paddingLeft: nivel * SANGRIA + 44 }}
     >
@@ -190,6 +203,45 @@ export function ArbolDeClientes({
   equipo: Persona[];
 }) {
   const [cual, setCual] = useState<string | null>(null);
+
+  /**
+   * Tocar en otro lado cierra la configuración abierta.
+   *
+   * Sin esto quedaban abiertas para siempre: la única forma de cerrar una era
+   * volver a tocar su engranaje o abrir otra. Se acumulaban tres paneles en
+   * pantalla, el árbol se estiraba, y era fácil guardar un cambio creyendo que
+   * se estaba configurando otra cosa.
+   *
+   * «Adentro» son dos cosas y hacen falta las dos: el panel —para poder
+   * escribir y apretar Guardar sin que se cierre debajo del dedo— y el propio
+   * engranaje, que ya alterna por su cuenta y si no se cerraría dos veces y
+   * volvería a abrirse.
+   *
+   * Se escucha `pointerdown` y no `click`: un `click` llega después de que el
+   * navegador movió el foco, y en un formulario eso alcanza para que un botón
+   * pierda el suyo antes de enviarse.
+   */
+  useEffect(() => {
+    if (cual === null) return;
+
+    const alTocar = (e: PointerEvent) => {
+      const destino = e.target as Element | null;
+      const adentro = destino?.closest?.("[data-ajustes]");
+      if (adentro instanceof HTMLElement && adentro.dataset.ajustes === cual) return;
+      setCual(null);
+    };
+
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCual(null);
+    };
+
+    document.addEventListener("pointerdown", alTocar);
+    document.addEventListener("keydown", alTeclear);
+    return () => {
+      document.removeEventListener("pointerdown", alTocar);
+      document.removeEventListener("keydown", alTeclear);
+    };
+  }, [cual]);
 
   const contexto = useMemo(
     () => ({
@@ -283,6 +335,7 @@ function FilaCliente({
             abierta={config}
             onTocar={() => alternarConfig(cliente.id)}
             que={cliente.nombre}
+            de={cliente.id}
           />
         }
       >
@@ -318,7 +371,7 @@ function FilaCliente({
       </Fila>
 
       {config && (
-        <Panel nivel={0}>
+        <Panel nivel={0} de={cliente.id}>
           <ConfiguracionDeCliente
             cliente={cliente}
             equipo={equipo}
@@ -478,6 +531,7 @@ function FilaCarpeta({
             abierta={config}
             onTocar={() => alternarConfig(carpeta.id)}
             que={carpeta.nombre}
+            de={carpeta.id}
           />
         }
       >
@@ -524,7 +578,7 @@ function FilaCarpeta({
       </Fila>
 
       {config && (
-        <Panel nivel={nivel}>
+        <Panel nivel={nivel} de={carpeta.id}>
           {carpeta.reservada ? (
             <ConfiguracionDeReservada carpeta={carpeta} />
           ) : (
@@ -630,6 +684,7 @@ function FilaArchivo({
             abierta={config}
             onTocar={() => alternarConfig(archivo.id)}
             que={archivo.nombre}
+            de={archivo.id}
           />
         }
       >
@@ -665,7 +720,7 @@ function FilaArchivo({
       </Fila>
 
       {config && (
-        <Panel nivel={nivel}>
+        <Panel nivel={nivel} de={archivo.id}>
           <ConfiguracionDeArchivo
             archivo={archivo}
             carpetaId={carpetaId}

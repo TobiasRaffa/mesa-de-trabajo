@@ -1,26 +1,21 @@
 "use client";
 
-// Todo lo que se configura de un cliente.
+// Lo que se configura de un cliente, todos los días.
 //
-// La clave está tapada y pide contraseña para verse o cambiarse. Es el dato
-// con el que alguien entra al portal del cliente: no tiene por qué estar
-// escrito en pantalla para quien pase por atrás, ni viajar al navegador hasta
-// que alguien lo pida.
+// **La clave no está acá**: vive en Admin. Es un dato que se pone una vez y
+// después se mira el día que alguien no puede entrar, y estando arriba de todo
+// empujaba hacia abajo lo que sí se usa seguido —quién lo lleva, cuántos días
+// tiene para revisar, si el portal está prendido—.
 
 import { useActionState, useEffect } from "react";
-import {
-  cambiarCliente,
-  ponerTagDeCliente,
-  renovarLinkDeCliente,
-  verClaveDeCliente,
-} from "@/app/(admin)/gestion/acciones";
+import { cambiarCliente, renovarLinkDeCliente } from "@/app/(admin)/gestion/acciones";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import { Responsable } from "@/admin/Responsable";
 import type { ClienteEnGestion } from "@/admin/datos/carpetas";
 import type { Persona } from "@/lib/equipo";
 
-import { BOTON, CAMPO, ETIQUETA, TITULO } from "@/admin/estilos";
+import { TITULO } from "@/admin/estilos";
 
 export function ConfiguracionDeCliente({
   cliente,
@@ -34,68 +29,14 @@ export function ConfiguracionDeCliente({
 }) {
   const [estado, guardar, esperando] = useActionState(cambiarCliente, null);
   const [estadoLink, renovar, renovando] = useActionState(renovarLinkDeCliente, null);
-  const [estadoTag, guardarTag, guardandoTag] = useActionState(ponerTagDeCliente, null);
-  const [estadoVer, verClave, viendo] = useActionState(verClaveDeCliente, null);
-
   const apagado = !cliente.habilitado;
-  const revelada = estadoVer?.ok ? estadoVer.clave : null;
 
   useEffect(() => {
-    if (estado?.ok || estadoTag?.ok || estadoLink?.ok) alGuardar();
-  }, [estado, estadoTag, estadoLink, alGuardar]);
+    if (estado?.ok || estadoLink?.ok) alGuardar();
+  }, [estado, estadoLink, alGuardar]);
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ------------------------------- La clave ------------------------ */}
-      <section>
-        <div className="flex flex-wrap items-center gap-2">
-          <h4 className={TITULO}>Clave del cliente</h4>
-          {!cliente.tieneClave && (
-            <span className={ETIQUETA}>falta</span>
-          )}
-        </div>
-
-        {revelada === null ? (
-          <form action={verClave} className="mt-2 flex flex-wrap items-center gap-2">
-            <input type="hidden" name="clienteId" value={cliente.id} />
-            <input
-              name="contrasena"
-              type="password"
-              autoComplete="off"
-              placeholder="contraseña"
-              aria-label="Contraseña de administración"
-              className={`${CAMPO} w-44`}
-            />
-            <button type="submit" disabled={viendo} className={BOTON}>
-              Ver o cambiar
-            </button>
-          </form>
-        ) : (
-          <form action={guardarTag} className="mt-2 flex flex-wrap items-center gap-2">
-            <input type="hidden" name="clienteId" value={cliente.id} />
-            <input
-              name="tag"
-              type="text"
-              defaultValue={revelada}
-              autoComplete="off"
-              aria-label="Clave del cliente"
-              className={`${CAMPO} flex-1`}
-            />
-            <input
-              name="contrasena"
-              type="password"
-              autoComplete="off"
-              placeholder="contraseña"
-              aria-label="Contraseña de administración"
-              className={`${CAMPO} w-40`}
-            />
-            <button type="submit" disabled={guardandoTag} className={BOTON}>
-              Guardar
-            </button>
-          </form>
-        )}
-      </section>
-
       {/* -------------------------------- El link ------------------------ */}
       {!apagado && (
         <section>
@@ -187,7 +128,7 @@ export function ConfiguracionDeCliente({
         </form>
       </section>
 
-      {[estado, estadoLink, estadoTag, estadoVer]
+      {[estado, estadoLink]
         .filter((r) => r && !r.ok)
         .map((r, i) => (
           <p key={i} aria-live="polite" className="text-menudo font-semibold text-alerta">
