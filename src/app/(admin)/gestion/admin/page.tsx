@@ -9,7 +9,7 @@
 // Juntas y abajo del todo en la barra: se las busca cuando se las necesita, y
 // mientras tanto no ocupan lugar.
 
-import { panelDeClientes } from "@/admin/datos/carpetas";
+import { todosLosClientes } from "@/lib/clientes";
 import { ClavesDeClientes } from "@/admin/ClavesDeClientes";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { FilaDePersona, SumarPersona } from "@/admin/Equipo";
@@ -22,7 +22,7 @@ export default async function Admin() {
   let clientes;
   let gente;
   try {
-    [clientes, gente] = await Promise.all([panelDeClientes(), elEquipo()]);
+    [clientes, gente] = await Promise.all([todosLosClientes(), elEquipo()]);
   } catch (error) {
     return <ErrorDeDrive error={error} />;
   }
@@ -50,12 +50,10 @@ export default async function Admin() {
           pasás por donde le escribís siempre, nunca dentro del mismo mensaje que
           el link: si van juntos, alcanza con que ese mensaje se reenvíe.
         </p>
+        {/* La clave viaja a esta pantalla y a ninguna otra: el árbol de
+            clientes no la necesita, y lo que no se manda no se puede filtrar. */}
         <ClavesDeClientes
-          clientes={clientes.map((c) => ({
-            id: c.id,
-            nombre: c.nombre,
-            tieneClave: c.tieneClave,
-          }))}
+          clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre, clave: c.tag }))}
         />
       </section>
 

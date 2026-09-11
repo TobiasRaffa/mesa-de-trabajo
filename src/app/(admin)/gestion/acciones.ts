@@ -27,13 +27,11 @@ import {
 } from "@/lib/ajustes";
 import { esCarpetaDelCliente, idsDeCarpetasReales, olvidarCarpetas } from "@/lib/carpetas";
 import {
-  clientePorId,
   habilitarCliente,
   ponerTag,
   renovarLink,
   todosLosClientes,
 } from "@/lib/clientes";
-import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
 import {
   agregarMensaje,
   leerConversacion,
@@ -163,21 +161,17 @@ export async function renovarLinkDeCliente(_previo: unknown, formulario: FormDat
  * Es la palabra que el cliente escribe para entrar. Sin tag, su portal no deja
  * pasar a nadie —ni con el link correcto—, que es el estado seguro mientras
  * alguien no decidió cuál va.
+ *
+ * **Ya no pide la contraseña de nuevo.** La pedía para que la clave no
+ * estuviera escrita en pantalla para el que pasa por atrás, pero entrar a
+ * gestión ya la pide una vez, y era la misma: escribirla dos veces no agregaba
+ * nada más que fastidio. Quién puede ver una clave va a ser cuestión de roles,
+ * cuando existan los usuarios.
  */
 export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) {
   const clienteId = String(formulario.get("clienteId") ?? "");
   const tag = String(formulario.get("tag") ?? "").trim();
-  const contrasena = String(formulario.get("contrasena") ?? "");
 
-  if (!hayContrasena()) {
-    return {
-      ok: false as const,
-      motivo: "Falta configurar CLAVE_DE_ADMIN en .env.local.",
-    };
-  }
-  if (!contrasenaCorrecta(contrasena)) {
-    return { ok: false as const, motivo: "Esa contraseña no es." };
-  }
   if (!(await esClienteReal(clienteId))) {
     return { ok: false as const, motivo: "Ese cliente no existe." };
   }
@@ -190,40 +184,6 @@ export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) 
   return { ok: true as const };
 }
 
-/**
- * Muestra la clave de un cliente, con contraseña.
- *
- * La clave **no viaja al navegador** hasta acá: la pantalla solo sabe si el
- * cliente tiene una o no. Es una cortina y no una puerta —administración
- * sigue sin login— pero evita que esté escrita para el que pasa por atrás.
- */
-export async function verClaveDeCliente(
-  _previo: unknown,
-  formulario: FormData
-): Promise<{ ok: true; clave: string } | { ok: false; motivo: string }> {
-  const clienteId = String(formulario.get("clienteId") ?? "");
-  const contrasena = String(formulario.get("contrasena") ?? "");
-
-  if (!hayContrasena()) {
-    return { ok: false, motivo: "Falta configurar CLAVE_DE_ADMIN en .env.local." };
-  }
-  if (!contrasenaCorrecta(contrasena)) {
-    return { ok: false, motivo: "Esa contraseña no es." };
-  }
-
-  const cliente = await clientePorId(clienteId);
-  if (!cliente) return { ok: false, motivo: "Ese cliente no existe." };
-
-  return { ok: true, clave: cliente.tag };
-}
-
-/**
- * El link propio de una carpeta, generándolo si hace falta.
- *
- * Muestra esa carpeta sola. Sirve para mandarle a un cliente «Calendario
- * septiembre» sin que de paso vea el resto de sus trabajos. Se entra con el
- * mismo tag del cliente.
- */
 export async function pedirLinkDeCarpeta(carpetaId: string): Promise<
   { ok: true; token: string } | { ok: false; motivo: string }
 > {
@@ -455,7 +415,7 @@ export async function agregarAlEquipo(_previo: unknown, formulario: FormData) {
     return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
   }
 
-  await sumarAlEquipo(nombre, correo);
+  await sumarAlEquipo(nombre, correo, formulario.get("avisaDeTodo") === "si");
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
@@ -473,7 +433,7 @@ export async function editarDelEquipo(_previo: unknown, formulario: FormData) {
     return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
   }
 
-  await cambiarPersona(id, nombre, correo);
+  await cambiarPersona(id, nombre, correo, formulario.get("avisaDeTodo") === "si");
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }

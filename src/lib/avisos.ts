@@ -32,7 +32,15 @@ export type Aviso = {
   carpetaId: string;
   /** Una línea, ya escrita para leer. */
   texto: string;
-  /** A quién estaba asignado el trabajo, si lo estaba. */
+  /**
+   * A quiénes les tocaba: quien lo lleva, más quienes reciben todo.
+   *
+   * Son varios porque el trabajo puede estar repartido: dos personas con
+   * subcarpetas distintas del mismo cliente reciben cada una lo suyo, y quien
+   * lleva la agencia recibe las dos cosas.
+   */
+  paraQuienes?: string[];
+  /** Cómo se guardaba antes, cuando era uno solo. Se sigue leyendo. */
   paraQuien?: string;
   /** Si salió por correo, y si no, por qué. */
   correo: "sin_configurar" | "enviado" | "fallo" | "sin_destinatario";

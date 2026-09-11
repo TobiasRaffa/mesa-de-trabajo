@@ -16,6 +16,15 @@ export type Persona = {
   nombre: string;
   /** A dónde le llegan los avisos. Vacío significa que no le llega ninguno. */
   correo: string;
+  /**
+   * Le llega **todo**, esté asignada o no.
+   *
+   * Es el primer paso hacia los roles, y por ahora el único que hace falta:
+   * alguien de la agencia tiene que enterarse de todo lo que pasa, y el resto
+   * solo de lo suyo. Sin esto, un aviso de una carpeta que nadie tiene
+   * asignada no le llegaba a nadie.
+   */
+  avisaDeTodo: boolean;
 };
 
 /**
@@ -41,14 +50,20 @@ export async function elEquipo(): Promise<Persona[]> {
   return Object.values(await almacen.todo()).map((p) => ({
     ...p,
     correo: typeof p.correo === "string" ? p.correo : "",
+    avisaDeTodo: p.avisaDeTodo === true,
   }));
 }
 
-export async function sumarAlEquipo(nombre: string, correo: string): Promise<Persona> {
+export async function sumarAlEquipo(
+  nombre: string,
+  correo: string,
+  avisaDeTodo = false
+): Promise<Persona> {
   const persona: Persona = {
     id: randomUUID(),
     nombre: nombre.trim().slice(0, 60),
     correo: correo.trim().slice(0, 120),
+    avisaDeTodo,
   };
   await almacen.guardar(persona.id, persona);
   return persona;
@@ -57,7 +72,8 @@ export async function sumarAlEquipo(nombre: string, correo: string): Promise<Per
 export async function cambiarPersona(
   id: string,
   nombre: string,
-  correo: string
+  correo: string,
+  avisaDeTodo: boolean
 ): Promise<void> {
   const actual = await almacen.uno(id);
   if (!actual) return;
@@ -65,6 +81,7 @@ export async function cambiarPersona(
     ...actual,
     nombre: nombre.trim().slice(0, 60),
     correo: correo.trim().slice(0, 120),
+    avisaDeTodo,
   });
 }
 
@@ -82,4 +99,9 @@ export async function sacarDelEquipo(id: string): Promise<void> {
 export async function personaPorId(id: string | undefined): Promise<Persona | null> {
   if (!id) return null;
   return (await almacen.uno(id)) ?? null;
+}
+
+/** Quiénes reciben todo, tengan o no algo asignado. */
+export async function quienesRecibenTodo(): Promise<Persona[]> {
+  return (await elEquipo()).filter((p) => p.avisaDeTodo);
 }

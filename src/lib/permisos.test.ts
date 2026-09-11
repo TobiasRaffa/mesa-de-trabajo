@@ -18,7 +18,12 @@ const ESCONDIDOS = new Set<string>();
 
 import { clientesHabilitados } from "@/lib/clientes";
 import { metadatosArchivo } from "@/lib/google";
-import { archivoAutorizado, carpetasAdministradas, olvidarElArbol } from "@/lib/permisos";
+import {
+  archivoAutorizado,
+  cadenaHasta,
+  carpetasAdministradas,
+  olvidarElArbol,
+} from "@/lib/permisos";
 
 const CLIENTE = "carpeta-del-cliente";
 const AJENA = "carpeta-que-no-administramos";
@@ -279,5 +284,61 @@ describe("lo escondido no se sirve", () => {
       parents: { "archivo-1": ["ef"], ef: [CLIENTE] }[id],
     }));
     await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * La cadena de la herencia.
+ *
+ * El plazo y quién lleva un trabajo se ponen en cualquier escalón y valen para
+ * todo lo de abajo. Mientras la estructura tuvo dos niveles alcanzaba con
+ * mirar la carpeta y el cliente; con subcarpetas adentro de subcarpetas, mirar
+ * dos escalones **se saltea el del medio**, que es justo donde suele estar
+ * puesto quién lo lleva. Entonces el aviso le llegaba a la persona equivocada,
+ * o a nadie, y eso no se nota mirando la pantalla.
+ */
+describe("la cadena hasta el cliente", () => {
+  it("devuelve el camino entero, de abajo hacia arriba", async () => {
+    driveConArbol({
+      "archivo-1": ["semana-2"],
+      "semana-2": ["septiembre"],
+      septiembre: [CLIENTE],
+    });
+
+    await expect(cadenaHasta("archivo-1", CLIENTE)).resolves.toEqual([
+      "archivo-1",
+      "semana-2",
+      "septiembre",
+      CLIENTE,
+    ]);
+  });
+
+  it("la carpeta del cliente es su propia cadena", async () => {
+    await expect(cadenaHasta(CLIENTE, CLIENTE)).resolves.toEqual([CLIENTE]);
+  });
+
+  it("no devuelve nada si no cuelga de ese cliente", async () => {
+    // Heredar de un cliente que no es el suyo sería asignarle el trabajo a
+    // quien lleva otra cuenta.
+    driveConArbol({ "archivo-1": ["ajena-hija"], "ajena-hija": [AJENA] });
+    await expect(cadenaHasta("archivo-1", CLIENTE)).resolves.toEqual([]);
+  });
+
+  it("no se cuelga con un ciclo", async () => {
+    // Drive deja armar rombos con atajos, y una cadena infinita de pedidos a
+    // Google se come la cuota antes de que nadie se entere.
+    driveConArbol({ a: ["b"], b: ["a"] });
+    await expect(cadenaHasta("a", CLIENTE)).resolves.toEqual([]);
+  });
+
+  it("corta si el árbol es más hondo que el tope", async () => {
+    const arbol: Record<string, string[]> = { hondo: ["n0"] };
+    for (let i = 0; i < 9; i++) arbol[`n${i}`] = [`n${i + 1}`];
+    arbol.n9 = [CLIENTE];
+    driveConArbol(arbol);
+
+    await expect(cadenaHasta("hondo", CLIENTE)).resolves.toEqual([]);
   });
 });

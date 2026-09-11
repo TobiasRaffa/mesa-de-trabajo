@@ -37,6 +37,7 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
           <p className="font-bold tracking-tight">{persona.nombre}</p>
           <p className="mt-0.5 text-menudo text-apagado">
             {persona.correo || "sin correo"}
+            {persona.avisaDeTodo && " · recibe todos los avisos"}
           </p>
         </div>
         <button type="button" onClick={() => setEditando(true)} className={BOTON}>
@@ -65,6 +66,16 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
             aria-label="Correo"
             className={CAMPO}
           />
+          <label className="flex items-center gap-2 text-menudo font-semibold">
+            <input
+              type="checkbox"
+              name="avisaDeTodo"
+              value="si"
+              defaultChecked={persona.avisaDeTodo}
+              className="h-4 w-4 accent-[var(--color-acento)]"
+            />
+            Recibe todo
+          </label>
           <button type="submit" disabled={guardando} className={BOTON}>
             Guardar
           </button>
@@ -123,6 +134,15 @@ export function SumarPersona() {
           aria-label="Correo"
           className={CAMPO}
         />
+        <label className="flex items-center gap-2 text-menudo font-semibold">
+          <input
+            type="checkbox"
+            name="avisaDeTodo"
+            value="si"
+            className="h-4 w-4 accent-[var(--color-acento)]"
+          />
+          Recibe todo
+        </label>
         <button type="submit" disabled={sumando} className={BOTON}>
           Agregar
         </button>

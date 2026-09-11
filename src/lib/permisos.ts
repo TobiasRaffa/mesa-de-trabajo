@@ -200,3 +200,47 @@ export async function esDeAlgunCliente(id: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * El camino desde algo hasta la carpeta del cliente, de abajo hacia arriba.
+ *
+ * `["archivo", "Semana 1", "Septiembre", "<cliente>"]`. Devuelve una lista
+ * vacía si no cuelga de esa raíz.
+ *
+ * Existe para la herencia: el plazo y quién lleva un trabajo se ponen en
+ * cualquier escalón y valen para todo lo de abajo. Mientras la estructura tuvo
+ * dos niveles alcanzaba con mirar la carpeta y el cliente; ahora que puede
+ * haber subcarpetas adentro de subcarpetas, mirar solo dos escalones se saltea
+ * al del medio —justamente donde suele estar puesto quién lo lleva—.
+ *
+ * Sube por **un** camino: el primero que llegue. En Drive una cosa puede tener
+ * varias madres, pero heredar de dos lugares a la vez no significa nada, así
+ * que se toma uno y se avisa con el orden en que Drive los devuelve.
+ */
+export async function cadenaHasta(id: string, raiz: string): Promise<string[]> {
+  if (id === raiz) return [raiz];
+
+  const vistas = new Set<string>([id]);
+  let camino: string[] = [id];
+  let actual = id;
+
+  for (let nivel = 0; nivel < NIVELES; nivel++) {
+    let padres: string[];
+    try {
+      padres = (await nodo(actual)).padres;
+    } catch {
+      return [];
+    }
+
+    if (padres.includes(raiz)) return [...camino, raiz];
+
+    const seguir = padres.find((p) => !vistas.has(p));
+    if (!seguir) return [];
+
+    vistas.add(seguir);
+    camino = [...camino, seguir];
+    actual = seguir;
+  }
+
+  return [];
+}
