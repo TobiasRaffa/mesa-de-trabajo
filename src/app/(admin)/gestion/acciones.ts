@@ -41,6 +41,7 @@ import {
   type Mensaje,
 } from "@/lib/conversaciones";
 import { piezasDeLaCarpeta } from "@/lib/piezas";
+import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
 import { correoValido } from "@/lib/equipo";
 import {
@@ -241,7 +242,15 @@ export async function pedirLinkDeCarpeta(carpetaId: string): Promise<
 // ---------------------------------------------------------------------------
 // Calendario
 
-export type CambioDeFecha = { archivo: string; dia: DiaSuelto | null };
+/**
+ * Se llama `pieza` y no `archivo` porque eso es lo que es.
+ *
+ * La fecha de publicación es de la pieza: subir una V2 no hace que haya que
+ * volver a ponerla. Cuando esto se llamaba `archivo` y guardaba por
+ * identificador de Drive, subir una vuelta nueva borraba la fecha del
+ * calendario sin que nadie avisara.
+ */
+export type CambioDeFecha = { pieza: string; dia: DiaSuelto | null };
 
 /**
  * Guarda las fechas de publicación de una carpeta, todas juntas.
@@ -265,22 +274,26 @@ export async function guardarCalendario(
   // Las piezas que llegan tienen que estar de verdad en esa carpeta: si no,
   // esto sería una forma de ponerle fecha a cualquier archivo de cualquier
   // cliente.
-  const adentro = new Set((await piezasDeLaCarpeta(carpetaId)).map((a) => a.id));
+  const adentro = new Set(
+    agruparVersiones(await piezasDeLaCarpeta(carpetaId)).map((p) =>
+      identidadDePieza(carpetaId, p.versiones[0].archivo.name)
+    )
+  );
 
   const aGuardar: Record<string, DiaSuelto | null> = {};
   for (const cambio of cambios) {
-    const archivo = String(cambio?.archivo ?? "");
+    const pieza = String(cambio?.pieza ?? "");
 
     // **Descartar en silencio y contestar que sí es lo peor que puede hacer
     // esto.** Pasó: una pieza aprobada ya no estaba en el listado de Drive, su
     // cambio se salteaba, y la pantalla decía «Listo, el cliente ya lo ve
     // así». Si algo no se puede guardar, se dice.
-    if (!adentro.has(archivo)) {
+    if (!adentro.has(pieza)) {
       return { ok: false, motivo: "Una de las piezas ya no está en la carpeta." };
     }
 
-    if (cambio.dia === null) aGuardar[archivo] = null;
-    else if (esDiaValido(cambio.dia)) aGuardar[archivo] = cambio.dia;
+    if (cambio.dia === null) aGuardar[pieza] = null;
+    else if (esDiaValido(cambio.dia)) aGuardar[pieza] = cambio.dia;
     else return { ok: false, motivo: "Hay una fecha que no existe." };
   }
 

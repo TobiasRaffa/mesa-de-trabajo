@@ -8,23 +8,30 @@
 import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustes";
 import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
-import { datosDeCarpeta, subcarpetasDe, type ArchivoDrive } from "@/lib/google";
+import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { plazosDe } from "@/lib/plazos";
 import { responsablesDe } from "@/lib/responsables";
 import { DIAS_POR_OMISION } from "@/lib/dias";
 import { publicacionesDe, type DiaSuelto } from "@/lib/publicaciones";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
-import { agruparVersiones } from "@/lib/versiones";
-
-const ultimoId = (versiones: Array<{ archivo: ArchivoDrive }>) =>
-  versiones[versiones.length - 1].archivo.id;
+import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 
 // ---------------------------------------------------------------------------
 
 export type PiezaParaFechar = {
-  /** El archivo de la última vuelta: es el que sale publicado. */
+  /** La pieza. No es un archivo: sobrevive a que se suba una vuelta nueva. */
   id: string;
+  /**
+   * El archivo de Drive de la última vuelta.
+   *
+   * Va aparte del identificador a propósito. La fecha de publicación es de la
+   * **pieza** —no se vuelve a poner cada vez que se sube una V2— pero la
+   * miniatura que se ve arrastrando es la del **archivo** de la última vuelta.
+   * Mezclar las dos cosas en un solo campo fue lo que hizo que subir una
+   * vuelta nueva borrara la fecha del calendario.
+   */
+  archivo: string;
   nombre: string;
   modificado?: string;
   vueltas: number;
@@ -57,32 +64,36 @@ export async function carpetaParaFechar(
   // Se la trae por su identificador: la historia de una pieza aprobada es
   // justamente la que más se consulta.
   const agrupadas = agruparVersiones(archivos);
-  const ultimas = agrupadas.map((p) => ultimoId(p.versiones));
+  const identidades = agrupadas.map((p) =>
+    identidadDePieza(carpetaId, p.versiones[0].archivo.name)
+  );
   const [dias, estados] = await Promise.all([
-    publicacionesDe(ultimas),
-    estadosDe(carpetaId, ultimas),
+    publicacionesDe(identidades),
+    estadosDe(carpetaId, identidades),
   ]);
 
   return {
     cliente,
-    historia: agrupadas.map((pieza) => {
-      const id = ultimoId(pieza.versiones);
-      return { ...estados[id], id, nombre: pieza.titulo };
-    }),
+    historia: agrupadas.map((pieza, i) => ({
+      ...estados[identidades[i]],
+      id: identidades[i],
+      nombre: pieza.titulo,
+    })),
     carpeta: {
       id: carpetaId,
       nombre: datos.name,
       enlaceDrive: datos.webViewLink,
       ...ajustes,
     },
-    piezas: agrupadas.map((pieza) => {
+    piezas: agrupadas.map((pieza, i) => {
       const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
       return {
-        id: ultima.id,
+        id: identidades[i],
+        archivo: ultima.id,
         nombre: pieza.titulo,
         modificado: ultima.modifiedTime,
         vueltas: pieza.versiones.length,
-        dia: dias[ultima.id] ?? null,
+        dia: dias[identidades[i]] ?? null,
       };
     }),
   };

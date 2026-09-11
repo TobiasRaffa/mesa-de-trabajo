@@ -131,7 +131,7 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
     try {
       const cambios = piezas
         .filter((p) => (borrador[p.id] ?? null) !== (guardado[p.id] ?? null))
-        .map((p) => ({ archivo: p.id, dia: borrador[p.id] ?? null }));
+        .map((p) => ({ pieza: p.id, dia: borrador[p.id] ?? null }));
 
       const r = await guardarCalendario(carpetaId, cambios);
       if (r.ok) {
@@ -276,7 +276,7 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
                       <span className="relative h-7 w-7 shrink-0 overflow-hidden bg-lienzo/10">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={urlDeMiniatura(pieza.id, 110, pieza.modificado)}
+                          src={urlDeMiniatura(pieza.archivo, 110, pieza.modificado)}
                           alt=""
                           className="absolute inset-0 h-full w-full object-cover"
                         />
@@ -345,7 +345,7 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
                     <span className="relative h-8 w-8 shrink-0 overflow-hidden bg-hueco">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={urlDeMiniatura(pieza.id, 110, pieza.modificado)}
+                        src={urlDeMiniatura(pieza.archivo, 110, pieza.modificado)}
                         alt=""
                         className="absolute inset-0 h-full w-full object-cover"
                       />

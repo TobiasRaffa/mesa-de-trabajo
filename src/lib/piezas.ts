@@ -51,6 +51,14 @@ export type EstadoDePieza = {
   enviada: boolean;
   /** Se movió a «Entregas finales» y ya no está en la carpeta de trabajo. */
   mudada: boolean;
+  /**
+   * El archivo de Drive que se mudó a «Entregas finales», si se mudó.
+   *
+   * Hace falta porque el identificador de la pieza ya no es el de un archivo:
+   * sin esto no habría con qué ir a buscarlo para que siga apareciendo en su
+   * carpeta de origen.
+   */
+  archivoMudado?: string;
   historia: EntradaDeHistoria[];
 };
 
@@ -116,6 +124,8 @@ function normalizar(v: EstadoDePieza): EstadoDePieza {
     cambios: Array.isArray(crudo.cambios) ? crudo.cambios.filter(esCambio) : [],
     enviada: crudo.enviada === true,
     mudada: crudo.mudada === true,
+    archivoMudado:
+      typeof crudo.archivoMudado === "string" ? crudo.archivoMudado : undefined,
     historia: Array.isArray(crudo.historia) ? crudo.historia.filter(esHito) : [],
   };
 }
@@ -141,12 +151,19 @@ export async function estadoDe(
   return guardada ? normalizar(guardada) : sinTocar(carpetaId);
 }
 
-/** Las piezas que se mudaron a «Entregas finales» pero salieron de esta carpeta. */
+/**
+ * Los archivos que se mudaron a «Entregas finales» pero salieron de esta
+ * carpeta.
+ *
+ * Devuelve identificadores **de Drive**, no de piezas: son para ir a buscar el
+ * archivo. Las piezas viejas, guardadas cuando el identificador de la pieza
+ * era el del archivo, siguen funcionando porque se cae a la clave.
+ */
 async function mudadasDe(carpetaId: string): Promise<string[]> {
   const todo = await almacen.todo();
   return Object.entries(todo)
     .filter(([, p]) => p.mudada && p.carpetaId === carpetaId)
-    .map(([id]) => id);
+    .map(([id, p]) => p.archivoMudado ?? id);
 }
 
 export async function guardarPieza(piezaId: string, estado: EstadoDePieza): Promise<void> {

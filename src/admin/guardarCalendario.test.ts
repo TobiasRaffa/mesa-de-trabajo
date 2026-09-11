@@ -25,7 +25,10 @@ import { guardarPublicaciones } from "@/lib/publicaciones";
 const enLaCarpeta = vi.mocked(piezasDeLaCarpeta);
 const guardado = vi.mocked(guardarPublicaciones);
 
-const archivo = (id: string) => ({ id, name: id, mimeType: "image/jpeg" });
+const archivo = (id: string) => ({ id, name: `${id}.jpeg`, mimeType: "image/jpeg" });
+
+/** Cómo se llama una pieza: la carpeta más el nombre sin el sufijo de vuelta. */
+const pieza = (nombre: string) => `carpeta-1::${nombre}.jpeg`;
 
 beforeEach(() => {
   enLaCarpeta.mockReset();
@@ -38,12 +41,15 @@ describe("guardarCalendario", () => {
     enLaCarpeta.mockResolvedValue([archivo("a"), archivo("b")]);
 
     const r = await guardarCalendario("carpeta-1", [
-      { archivo: "a", dia: "2026-09-18" },
-      { archivo: "b", dia: null },
+      { pieza: pieza("a"), dia: "2026-09-18" },
+      { pieza: pieza("b"), dia: null },
     ]);
 
     expect(r.ok).toBe(true);
-    expect(guardado).toHaveBeenCalledWith({ a: "2026-09-18", b: null });
+    expect(guardado).toHaveBeenCalledWith({
+      [pieza("a")]: "2026-09-18",
+      [pieza("b")]: null,
+    });
   });
 
   /**
@@ -57,11 +63,11 @@ describe("guardarCalendario", () => {
     enLaCarpeta.mockResolvedValue([archivo("suelta"), archivo("aprobada")]);
 
     const r = await guardarCalendario("carpeta-1", [
-      { archivo: "aprobada", dia: "2026-09-18" },
+      { pieza: pieza("aprobada"), dia: "2026-09-18" },
     ]);
 
     expect(r.ok).toBe(true);
-    expect(guardado).toHaveBeenCalledWith({ aprobada: "2026-09-18" });
+    expect(guardado).toHaveBeenCalledWith({ [pieza("aprobada")]: "2026-09-18" });
   });
 
   it("NO dice que guardó cuando hay algo que no puede guardar", async () => {
@@ -70,8 +76,8 @@ describe("guardarCalendario", () => {
     enLaCarpeta.mockResolvedValue([archivo("a")]);
 
     const r = await guardarCalendario("carpeta-1", [
-      { archivo: "a", dia: "2026-09-18" },
-      { archivo: "de-otra-carpeta", dia: "2026-09-19" },
+      { pieza: pieza("a"), dia: "2026-09-18" },
+      { pieza: "carpeta-9::de-otra-carpeta.jpeg", dia: "2026-09-19" },
     ]);
 
     expect(r.ok).toBe(false);
@@ -82,7 +88,7 @@ describe("guardarCalendario", () => {
     enLaCarpeta.mockResolvedValue([archivo("a")]);
 
     const r = await guardarCalendario("carpeta-1", [
-      { archivo: "a", dia: "2026-02-31" },
+      { pieza: pieza("a"), dia: "2026-02-31" },
     ]);
 
     expect(r.ok).toBe(false);
@@ -92,7 +98,7 @@ describe("guardarCalendario", () => {
   it("rechaza una tanda absurda de cambios", async () => {
     enLaCarpeta.mockResolvedValue([archivo("a")]);
     const muchos = Array.from({ length: 501 }, () => ({
-      archivo: "a",
+      pieza: pieza("a"),
       dia: "2026-09-18",
     }));
 

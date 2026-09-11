@@ -21,7 +21,7 @@ import { subcarpetasDe } from "@/lib/google";
 import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { calcularVencimiento } from "@/lib/fechas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
-import { agruparVersiones } from "@/lib/versiones";
+import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 
 export type CarpetaEnElTablero = {
   clienteId: string;
@@ -72,12 +72,12 @@ export async function elTablero(): Promise<Tablero> {
             ]);
 
             const agrupadas = agruparVersiones(archivos);
-            const ultimas = agrupadas.map(
-              (p) => p.versiones[p.versiones.length - 1].archivo.id
+            const identidades = agrupadas.map((p) =>
+              identidadDePieza(carpeta.id, p.versiones[0].archivo.name)
             );
             const [estados, propios] = await Promise.all([
-              estadosDe(carpeta.id, ultimas),
-              plazosDe(ultimas),
+              estadosDe(carpeta.id, identidades),
+              plazosDe(identidades),
             ]);
 
             const piezas = Object.values(estados);
@@ -88,11 +88,11 @@ export async function elTablero(): Promise<Tablero> {
             // Cada pieza vence el día que se subió más sus días. La carpeta
             // vence cuando vence la primera: es la fecha que hay que mirar.
             const fechas = agrupadas
-              .map((pieza) => {
+              .map((pieza, i) => {
                 const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
                 if (!ultima.modifiedTime) return null;
                 const dias = plazoQueCorre(
-                  propios[ultima.id],
+                  propios[identidades[i]],
                   diasDeLaCarpeta,
                   diasDelCliente
                 );

@@ -103,3 +103,30 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
 
   return [...porBase.values()];
 }
+
+// ---------------------------------------------------------------------------
+
+/**
+ * **Cómo se llama una pieza, para nosotros.**
+ *
+ * Una pieza no es un archivo: es el trabajo que la agencia llama «9304» dentro
+ * de una carpeta, y del que hay una o varias vueltas. `9304.jpeg` y
+ * `9304 V2.jpeg` son dos archivos y **una sola** pieza.
+ *
+ * Durante un tiempo la pieza se guardó con el identificador de Drive de su
+ * última vuelta, y eso tenía una consecuencia fea: al subir la V2, el
+ * identificador cambiaba, y lo anotado —los cambios que pidió el cliente, la
+ * historia, en qué ronda iba— quedaba guardado bajo un nombre que ya nadie
+ * preguntaba. No se perdía; dejaba de encontrarse. Y pasaba justo cuando el
+ * diseñador estaba trabajando esos cambios.
+ *
+ * La identidad es la carpeta más el nombre sin el sufijo de versión, que es
+ * exactamente lo que ya define una pieza cuando se agrupan las vueltas. No se
+ * inventa nada nuevo: se nombra lo que ya estaba.
+ *
+ * Los dos puntos separan porque un identificador de Drive no los tiene, así
+ * que no hay forma de que una carpeta y un nombre se confundan con otro par.
+ */
+export function identidadDePieza(carpetaId: string, nombreDelArchivo: string): string {
+  return `${carpetaId}::${leerNombre(nombreDelArchivo).base}`;
+}

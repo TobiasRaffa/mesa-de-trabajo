@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agruparVersiones, leerNombre } from "@/lib/versiones";
+import { agruparVersiones, leerNombre, identidadDePieza } from "@/lib/versiones";
 
 describe("leerNombre", () => {
   it("un archivo sin sufijo es la primera versión", () => {
@@ -118,5 +118,50 @@ describe("agruparVersiones", () => {
     const piezas = agruparVersiones(archivos("9304.jpeg", "9304 V1.jpeg"));
     expect(piezas).toHaveLength(1);
     expect(piezas[0].versiones).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("la identidad de una pieza", () => {
+  /**
+   * **Esta es la prueba que importa de todo el archivo.**
+   *
+   * Durante un tiempo la pieza se guardó con el identificador de Drive de su
+   * última vuelta. Al subir la V2, ese identificador cambiaba, y lo anotado
+   * —los cambios que pidió el cliente, la historia, la fecha de publicación—
+   * quedaba guardado bajo un nombre que ya nadie preguntaba. No se perdía:
+   * dejaba de encontrarse. Y pasaba justo cuando el diseñador estaba
+   * trabajando esos cambios.
+   */
+  it("no cambia al subir una vuelta nueva", () => {
+    const carpeta = "carpeta-1";
+    const primera = identidadDePieza(carpeta, "9304.jpeg");
+
+    expect(identidadDePieza(carpeta, "9304 V2.jpeg")).toBe(primera);
+    expect(identidadDePieza(carpeta, "9304 V3.jpeg")).toBe(primera);
+    // Escrito como lo escribe la gente: con guion, guion bajo, o en mayúscula.
+    expect(identidadDePieza(carpeta, "9304-v4.jpeg")).toBe(primera);
+    expect(identidadDePieza(carpeta, "9304_V5.jpeg")).toBe(primera);
+  });
+
+  it("dos carpetas con un archivo del mismo nombre son dos piezas", () => {
+    // Si no, ponerle fecha a «portada.jpg» de septiembre se la pondría también
+    // a la «portada.jpg» de octubre.
+    expect(identidadDePieza("septiembre", "portada.jpg")).not.toBe(
+      identidadDePieza("octubre", "portada.jpg")
+    );
+  });
+
+  it("dos formatos del mismo trabajo son dos piezas", () => {
+    // Es común entregar lo mismo para mirar y para imprimir. Juntarlos sería
+    // mentir sobre qué se está aprobando.
+    expect(identidadDePieza("c", "9304.jpg")).not.toBe(identidadDePieza("c", "9304.png"));
+  });
+
+  it("dos trabajos distintos no se juntan nunca", () => {
+    expect(identidadDePieza("c", "9304.jpeg")).not.toBe(
+      identidadDePieza("c", "9305.jpeg")
+    );
   });
 });

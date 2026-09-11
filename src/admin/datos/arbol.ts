@@ -31,7 +31,7 @@ import {
 } from "@/lib/responsables";
 import { diaDe, publicacionesDe } from "@/lib/publicaciones";
 import { calcularVencimiento } from "@/lib/fechas";
-import { agruparVersiones } from "@/lib/versiones";
+import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 import type { Estado } from "@/dominio/pieza";
 
 export type NodoCarpeta = {
@@ -171,8 +171,10 @@ async function subcarpetasDeCarpeta(
       }
 
       const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpeta.id));
-      const ultimas = agrupadas.map((p) => p.versiones[p.versiones.length - 1].archivo.id);
-      const estados = await estadosDe(carpeta.id, ultimas);
+      const identidades = agrupadas.map((p) =>
+        identidadDePieza(carpeta.id, p.versiones[0].archivo.name)
+      );
+      const estados = await estadosDe(carpeta.id, identidades);
 
       return {
         ...base,
@@ -191,13 +193,20 @@ async function archivosDeCarpeta(
   heredado: Heredado
 ): Promise<NodoArchivo[]> {
   const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
-  const ultimas = agrupadas.map((p) => p.versiones[p.versiones.length - 1].archivo.id);
+
+  // Todo lo que se anota sobre el trabajo —el estado, la fecha de publicación,
+  // el plazo, quién lo lleva— va por la identidad de la pieza y no por el
+  // archivo: si no, subir una vuelta nueva lo dejaba todo guardado bajo un
+  // nombre que ya nadie pregunta.
+  const identidades = agrupadas.map((p) =>
+    identidadDePieza(carpetaId, p.versiones[0].archivo.name)
+  );
 
   const [estados, dias, propios, responsables, escondidos] = await Promise.all([
-    estadosDe(carpetaId, ultimas),
-    publicacionesDe(ultimas),
-    plazosDe(ultimas),
-    responsablesDe(ultimas),
+    estadosDe(carpetaId, identidades),
+    publicacionesDe(identidades),
+    plazosDe(identidades),
+    responsablesDe(identidades),
     escondidosEntre(agrupadas.flatMap((p) => p.versiones.map((v) => v.archivo.id))),
   ]);
 
@@ -209,17 +218,18 @@ async function archivosDeCarpeta(
     ? ((await personaPorId(heredado.responsable))?.nombre ?? null)
     : null;
 
-  return agrupadas.map((pieza): NodoArchivo => {
+  return agrupadas.map((pieza, i): NodoArchivo => {
     const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
-    const estado = estados[ultima.id];
-    const corren = plazoQueCorre(propios[ultima.id], heredado.dias, undefined);
-    const propio = ultima.id in responsables ? responsables[ultima.id] : undefined;
+    const suya = identidades[i];
+    const estado = estados[suya];
+    const corren = plazoQueCorre(propios[suya], heredado.dias, undefined);
+    const propio = suya in responsables ? responsables[suya] : undefined;
     const quien = responsableQueCorre(propio, heredado.responsable, undefined);
 
     const suyos = pieza.versiones.map((v) => v.archivo.id);
 
     return {
-      id: ultima.id,
+      id: suya,
       nombre: pieza.titulo,
       // Si alguna vuelta está escondida, la pieza se muestra como escondida:
       // mitad visible y mitad no es un estado que nadie quiso.
@@ -230,8 +240,8 @@ async function archivosDeCarpeta(
       estado: estado.estado,
       vueltas: pieza.versiones.length,
       mudada: estado.mudada,
-      publicaEl: dias[ultima.id],
-      dias: propios[ultima.id],
+      publicaEl: dias[suya],
+      dias: propios[suya],
       diasQueCorren: corren,
       vence: ultima.modifiedTime
         ? diaDe(calcularVencimiento(new Date(ultima.modifiedTime), corren))

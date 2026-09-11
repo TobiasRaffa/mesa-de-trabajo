@@ -19,7 +19,7 @@
 import { ajustesDe, escondidosEntre, soloLoVisible, type Vista } from "@/lib/ajustes";
 import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
-import { agruparVersiones } from "@/lib/versiones";
+import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 
 /** Una vuelta anterior de la misma pieza. */
@@ -164,14 +164,15 @@ export async function portalDelCliente(
       // dos piezas. La regla vive en `versiones.ts` y está probada aparte.
       const agrupadas = agruparVersiones(archivos);
 
-      // Las fechas las puso la agencia arrastrando en el calendario. Se piden
-      // todas juntas: una consulta por pieza serían doce lecturas del archivo.
-      const ultimas = agrupadas.map(
-        (p) => p.versiones[p.versiones.length - 1].archivo.id
+      // Todo lo anotado sobre el trabajo va por la identidad de la pieza, no
+      // por el archivo: subir una vuelta nueva no puede hacer desaparecer los
+      // cambios que el cliente pidió ni la fecha en que sale publicada.
+      const identidades = agrupadas.map((p) =>
+        identidadDePieza(carpeta.id, p.versiones[0].archivo.name)
       );
       const [dias, estados] = await Promise.all([
-        publicacionesDe(ultimas),
-        estadosDe(carpeta.id, ultimas),
+        publicacionesDe(identidades),
+        estadosDe(carpeta.id, identidades),
       ]);
 
       return {
@@ -181,7 +182,7 @@ export async function portalDelCliente(
         nombre: carpeta.camino.length > 0 ? carpeta.camino.join(" / ") : carpeta.name,
         enlaceDrive: carpeta.webViewLink,
         vista,
-        piezas: agrupadas.map((pieza) => {
+        piezas: agrupadas.map((pieza, i) => {
           const versiones = pieza.versiones.map((v, i) => ({
             // Se renumeran de corrido: si alguien salteó la V2, el cliente no
             // tiene por qué ver un hueco.
@@ -195,20 +196,19 @@ export async function portalDelCliente(
           }));
           const ultima = versiones[versiones.length - 1];
 
-          const guardado = estados[ultima.driveFileId];
+          const suya = identidades[i];
+          const guardado = estados[suya];
 
           return {
             ...guardado,
-            id: ultima.driveFileId,
+            id: suya,
             nombre: pieza.titulo,
             driveFileId: ultima.driveFileId,
             modificado: ultima.modificado,
             enlaceDrive: ultima.enlaceDrive,
             // La fecha va con la vuelta que se está mirando: si se subió una
             // V2, es esa la que sale publicada.
-            publicaEl: dias[ultima.driveFileId]
-              ? fechaDeDia(dias[ultima.driveFileId])
-              : undefined,
+            publicaEl: dias[suya] ? fechaDeDia(dias[suya]) : undefined,
             // La ronda es la mayor entre lo que dice el estado guardado y las
             // vueltas que hay en Drive: subir una V2 es entrar en la ronda uno
             // aunque nadie haya tocado el portal todavía.

@@ -221,3 +221,69 @@ describe("lo escondido no llega al portal", () => {
     expect(await portalDelCliente(RAIZ).then((p) => p.carpetas)).toEqual([]);
   });
 });
+
+describe("subir una vuelta nueva no borra lo anotado", () => {
+  /**
+   * **Este es el caso.** El cliente pide tres cambios, el diseñador sube la
+   * V2, y hasta ahora los tres cambios desaparecían de la pantalla: lo
+   * guardado estaba bajo el identificador de Drive de la vuelta anterior, y
+   * nadie preguntaba más por ese. No se perdía; dejaba de encontrarse. Y
+   * pasaba justo cuando el diseñador estaba trabajando esos cambios.
+   */
+  it("los cambios del cliente siguen ahí cuando aparece la V2", async () => {
+    const LOQUEPIDIO = [
+      { id: "c1", texto: "el sol pisa la bajada" },
+      { id: "c2", texto: "la fecha tiene que decir 12/3" },
+    ];
+
+    // Lo guardado vive bajo la identidad de la pieza, no bajo un archivo. Se
+    // vuelve a poner después de cada `driveCon` porque ese ayudante también
+    // repone los estados: el almacén no se borra cuando Drive cambia.
+    const loGuardado = () =>
+      vi.mocked(estadosDe).mockImplementation(async (carpeta: string, ids: string[]) =>
+        Object.fromEntries(
+          ids.map((id) => [
+            id,
+            {
+              carpetaId: carpeta,
+              estado: "en_curso" as const,
+              ronda: 1,
+              rondasExtra: 0,
+              cambios: id === "logos::9304.jpeg" ? LOQUEPIDIO : [],
+              enviada: true,
+              mudada: false,
+              historia: [],
+            },
+          ])
+        )
+      );
+
+    driveCon({ [RAIZ]: [{ id: "logos", name: "Logos" }] }, { logos: ["9304.jpeg"] });
+    loGuardado();
+
+    const antes = await portalDelCliente(RAIZ);
+    expect(antes.carpetas[0].piezas[0].cambios).toHaveLength(2);
+
+    // Ahora el diseñador sube la V2 a la misma carpeta. La V1 se queda.
+    driveCon(
+      { [RAIZ]: [{ id: "logos", name: "Logos" }] },
+      { logos: ["9304.jpeg", "9304 V2.jpeg"] }
+    );
+    loGuardado();
+
+    const despues = await portalDelCliente(RAIZ);
+    const pieza = despues.carpetas[0].piezas[0];
+
+    expect(
+      pieza.cambios,
+      "Subir una vuelta nueva no puede hacer desaparecer lo que el cliente " +
+        "pidió: es justo lo que el diseñador está por resolver."
+    ).toEqual(LOQUEPIDIO);
+
+    // Y sigue siendo **una** pieza, ahora con dos vueltas.
+    expect(despues.carpetas[0].piezas).toHaveLength(1);
+    expect(pieza.versiones).toHaveLength(2);
+    // La que se mira es la nueva.
+    expect(pieza.driveFileId).toBe("logos:9304 V2.jpeg");
+  });
+});

@@ -17,6 +17,7 @@
 
 import { cookies } from "next/headers";
 import { aplicar, type Evento } from "@/dominio/pieza";
+import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 import { entroAlCliente } from "@/lib/acceso";
 import { avisar } from "@/lib/avisar";
 import { clienteDeCarpeta, esCarpetaDelCliente } from "@/lib/carpetas";
@@ -97,12 +98,24 @@ export type RespuestaDeChat =
  * origen aunque Drive ya no la liste ahí: por eso se acepta también cuando el
  * estado guardado dice que salió de ahí.
  */
-async function piezaDeLaCarpeta(carpetaId: string, piezaId: string): Promise<boolean> {
-  if (!(await esCarpetaDelCliente(carpetaId))) return false;
+async function piezaDeLaCarpeta(
+  carpetaId: string,
+  piezaId: string
+): Promise<{ archivoActual: string } | null> {
+  if (!(await esCarpetaDelCliente(carpetaId))) return null;
   try {
-    return (await piezasDeLaCarpeta(carpetaId)).some((a) => a.id === piezaId);
+    const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+    for (const pieza of agrupadas) {
+      if (identidadDePieza(carpetaId, pieza.versiones[0].archivo.name) !== piezaId) {
+        continue;
+      }
+      // El archivo de la última vuelta: es el que se muda al aprobar. La pieza
+      // no es un archivo, así que su identificador no sirve para ir a buscarlo.
+      return { archivoActual: pieza.versiones[pieza.versiones.length - 1].archivo.id };
+    }
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -123,9 +136,8 @@ export async function moverPieza(
   const donde = await quienEntro(carpetaId);
   if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
-  if (!(await piezaDeLaCarpeta(carpetaId, piezaId))) {
-    return { ok: false, motivo: "No encontramos esa pieza." };
-  }
+  const cual = await piezaDeLaCarpeta(carpetaId, piezaId);
+  if (!cual) return { ok: false, motivo: "No encontramos esa pieza." };
 
   // El portal no puede aprobar en nombre de otro ni reabrir: son eventos de la
   // agencia. Se listan los permitidos en vez de prohibir los otros, para que
@@ -179,9 +191,15 @@ export async function moverPieza(
   // una condición: si Drive no contesta, la aprobación vale igual y se anota
   // que no se pudo mover.
   if (evento.tipo === "aprobar" && !pieza.mudada) {
-    const mudanza = await mudarAFinales(donde.cliente.id, piezaId, carpetaId);
+    const mudanza = await mudarAFinales(donde.cliente.id, cual.archivoActual, carpetaId);
     if (mudanza.movida) {
-      pieza = anotar({ ...pieza, mudada: true }, "movida_a_finales", "La aplicación");
+      // Se anota **qué archivo** se mudó: sin eso no habría con qué ir a
+      // buscarlo para que siga apareciendo en su carpeta de origen.
+      pieza = anotar(
+        { ...pieza, mudada: true, archivoMudado: cual.archivoActual },
+        "movida_a_finales",
+        "La aplicación"
+      );
     } else {
       pieza = anotar(pieza, "no_se_pudo_mover", "La aplicación", mudanza.motivo);
     }
@@ -281,14 +299,16 @@ export async function enviarRevision(
   const donde = await quienEntro(carpetaId);
   if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
-  let archivos: string[];
+  let piezas: string[];
   try {
-    archivos = (await piezasDeLaCarpeta(carpetaId)).map((a) => a.id);
+    piezas = agruparVersiones(await piezasDeLaCarpeta(carpetaId)).map((p) =>
+      identidadDePieza(carpetaId, p.versiones[0].archivo.name)
+    );
   } catch {
     return { ok: false, motivo: "No pudimos leer la carpeta. Probá de nuevo." };
   }
 
-  const estados = await estadosDe(carpetaId, archivos);
+  const estados = await estadosDe(carpetaId, piezas);
   const aGuardar: Record<string, EstadoDePieza> = {};
 
   for (const [id, guardada] of Object.entries(estados)) {
