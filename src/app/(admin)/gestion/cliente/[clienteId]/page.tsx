@@ -98,6 +98,7 @@ export default async function UnCliente({
             clienteId={cliente.id}
             nombre={cliente.nombre}
             sinLeer={cliente.sinLeer}
+            equipo={equipo.map((p) => p.nombre)}
           />
         }
       />

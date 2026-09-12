@@ -16,7 +16,13 @@
 // estado. En qué anda cada pieza —aprobada, con cambios, en qué ronda— lo
 // lleva el navegador hasta que exista dónde guardarlo de verdad.
 
-import { ajustesDe, escondidosEntre, soloLoVisible, type Vista } from "@/lib/ajustes";
+import {
+  ajustesDe,
+  escondidosEntre,
+  esCarpetaDeEntregas,
+  soloLoVisible,
+  type Vista,
+} from "@/lib/ajustes";
 import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
@@ -47,6 +53,15 @@ export type PiezaDeCarpeta = EstadoDePieza & {
 export type CarpetaDeTrabajo = {
   id: string;
   nombre: string;
+  /**
+   * Qué clase de carpeta es.
+   *
+   * `entregas` es «Entregas finales»: no es trabajo a revisar, es el cajón con
+   * lo que el cliente ya aprobó. Se muestra para mirar y descargar, y sus
+   * piezas llegan ya cerradas —no puede haber un botón de aprobar sobre algo
+   * que se aprobó—.
+   */
+  clase: "trabajo" | "entregas";
   /** Para abrirla en Drive. Solo funciona para quien ya tenga acceso. */
   enlaceDrive?: string;
   vista: Vista;
@@ -170,13 +185,29 @@ export async function portalDelCliente(
       const identidades = agrupadas.map((p) =>
         identidadDePieza(carpeta.id, p.versiones[0].archivo.name)
       );
-      const [dias, estados] = await Promise.all([
+      const entregas = esCarpetaDeEntregas(carpeta.name);
+
+      const [dias, guardados] = await Promise.all([
         publicacionesDe(identidades),
         estadosDe(carpeta.id, identidades),
       ]);
 
+      // En «Entregas finales» todo está aprobado por definición: llegó ahí
+      // porque el cliente lo aprobó. Lo anotado de cada pieza vive bajo su
+      // carpeta de origen, así que preguntar acá devolvería piezas «sin tocar»
+      // —con botón de aprobar incluido— sobre trabajo ya cerrado.
+      const estados = entregas
+        ? Object.fromEntries(
+            Object.entries(guardados).map(([id, p]) => [
+              id,
+              { ...p, estado: "final" as const, mudada: true },
+            ])
+          )
+        : guardados;
+
       return {
         id: carpeta.id,
+        clase: entregas ? ("entregas" as const) : ("trabajo" as const),
         // El camino completo, para no tener dos «Semana 1» idénticas en la
         // lista y no saber de cuál mes es cada una.
         nombre: carpeta.camino.length > 0 ? carpeta.camino.join(" / ") : carpeta.name,
@@ -223,7 +254,13 @@ export async function portalDelCliente(
   return {
     cliente: { id: raiz, nombre: cliente.name, enlaceDrive: cliente.webViewLink },
     // Una carpeta vacía no se muestra: no hay nada que revisar adentro.
-    carpetas: carpetas.filter((c) => c.piezas.length > 0),
+    //
+    // «Entregas finales» va al final de la lista, siempre. Es lo terminado, y
+    // arriba tiene que estar lo que espera una decisión: si se ordenara por
+    // nombre quedaría primera, delante del trabajo que hay que mirar.
+    carpetas: carpetas
+      .filter((c) => c.piezas.length > 0)
+      .sort((a, b) => Number(a.clase === "entregas") - Number(b.clase === "entregas")),
     rondasIncluidas: RONDAS_INCLUIDAS,
     rondasExtra: 0,
   };

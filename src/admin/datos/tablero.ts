@@ -23,6 +23,20 @@ import { calcularVencimiento } from "@/lib/fechas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 
+/**
+ * De quién es el próximo movimiento.
+ *
+ * Es la pregunta que la agencia se hace de verdad mirando el tablero: **¿esto
+ * lo tengo que mover yo, o estoy esperando al cliente?** El estado de cada
+ * pieza ya lo dice, pero repartido en cinco nombres; esto los junta en la
+ * única distinción que cambia lo que alguien hace a continuación.
+ *
+ * Cuando hay de las dos, manda la agencia: si algo espera trabajo nuestro, la
+ * carpeta está en nuestra cancha aunque además falte que el cliente mire otra
+ * pieza.
+ */
+export type Cancha = "agencia" | "cliente" | "listo";
+
 export type CarpetaEnElTablero = {
   clienteId: string;
   cliente: string;
@@ -39,6 +53,10 @@ export type CarpetaEnElTablero = {
   conCambios: number;
   /** Mensajes del cliente que nadie leyó. */
   sinLeer: number;
+  /** De quién es el próximo movimiento. */
+  cancha: Cancha;
+  /** Piezas que esperan trabajo de la agencia. */
+  enAgencia: number;
 };
 
 export type Tablero = {
@@ -81,9 +99,24 @@ export async function elTablero(): Promise<Tablero> {
             ]);
 
             const piezas = Object.values(estados);
+
+            // Lo que espera al cliente: se la entregamos y todavía no decidió.
             const sinRevisar = piezas.filter(
               (p) => p.estado === "entregada" || p.estado === "en_revision"
             ).length;
+
+            // Lo que espera a la agencia: el cliente ya habló y falta hacerlo.
+            // «extra_pedida» también es nuestra: el cliente pidió una revisión
+            // adicional y está esperando que alguien la habilite.
+            const enAgencia = piezas.filter(
+              (p) =>
+                p.estado === "en_curso" ||
+                p.estado === "extra_pedida" ||
+                (p.estado === "cambios_marcados" && p.enviada)
+            ).length;
+
+            const cancha: Cancha =
+              enAgencia > 0 ? "agencia" : sinRevisar > 0 ? "cliente" : "listo";
 
             // Cada pieza vence el día que se subió más sus días. La carpeta
             // vence cuando vence la primera: es la fecha que hay que mirar.
@@ -113,6 +146,8 @@ export async function elTablero(): Promise<Tablero> {
             const persona = await personaPorId(quien ?? undefined);
 
             return {
+              cancha,
+              enAgencia,
               clienteId: cliente.id,
               cliente: cliente.nombre,
               carpetaId: carpeta.id,

@@ -287,7 +287,9 @@ export type RespuestaDeChat =
  */
 export async function escribirComoAgencia(
   clienteId: string,
-  texto: string
+  texto: string,
+  /** Quién firma. Se valida contra el equipo: no se le cree al navegador. */
+  quien?: string
 ): Promise<RespuestaDeChat> {
   if (!(await esClienteReal(clienteId))) {
     return { ok: false, motivo: "Ese cliente no existe." };
@@ -300,8 +302,14 @@ export async function escribirComoAgencia(
   }
 
   try {
-    // El nombre queda fijo hasta que existan los usuarios y los roles.
-    const mensajes = await agregarMensaje(clienteId, "agencia", "El equipo", limpio);
+    // **La firma se valida contra el equipo.** Llega del navegador, así que
+    // creerle dejaría que un pedido armado a mano firmara con cualquier
+    // nombre —el de otro cliente, por ejemplo— en una conversación que el
+    // cliente lee. Si no es alguien del equipo, firma la agencia.
+    const nombres = (await elEquipo()).map((p) => p.nombre);
+    const firma = quien && nombres.includes(quien) ? quien : "El equipo";
+
+    const mensajes = await agregarMensaje(clienteId, "agencia", firma, limpio);
     // La agencia leyó lo que había cuando contestó.
     await marcarLeido("agencia", clienteId);
     revalidatePath("/gestion", "layout");

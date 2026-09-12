@@ -49,9 +49,18 @@ function aQuienes(aviso: Aviso): string[] {
 export function Bandeja({
   avisos,
   correoConfigurado,
+  plegable = true,
 }: {
   avisos: Aviso[];
   correoConfigurado: boolean;
+  /**
+   * Si se puede cerrar.
+   *
+   * Se pliega cuando comparte pantalla con otra cosa. En su propia sección no:
+   * ahí la lista **es** la pantalla, y un título que repite el de arriba con
+   * una flecha al lado es una puerta que no lleva a ningún lado.
+   */
+  plegable?: boolean;
 }) {
   const sinVer = avisos.filter((a) => !a.visto).length;
 
@@ -66,7 +75,7 @@ export function Bandeja({
 
   // Arranca abierta cuando hay algo nuevo. Si está todo leído, la novedad es
   // que no hay novedades, y para eso alcanza el título.
-  const [abierta, setAbierta] = useState(sinVer > 0);
+  const [abierta, setAbierta] = useState(!plegable || sinVer > 0);
   const [, marcar] = useTransition();
 
   useEffect(() => {
@@ -74,7 +83,8 @@ export function Bandeja({
   }, [abierta, sinVer]);
 
   return (
-    <section className="mt-10">
+    <section className={plegable ? "mt-10" : ""}>
+      {plegable && (
       <h2 className="text-titulo font-extrabold tracking-tight">
         <button
           type="button"
@@ -102,6 +112,7 @@ export function Bandeja({
           )}
         </button>
       </h2>
+      )}
 
       {!abierta ? null : (
         <>

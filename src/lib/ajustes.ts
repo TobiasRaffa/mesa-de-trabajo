@@ -77,6 +77,11 @@ export function esCarpetaDeFacturas(nombre: string): boolean {
   return limpio(nombre) === "facturas";
 }
 
+/** «Entregas finales»: donde termina lo que el cliente aprobó. */
+export function esCarpetaDeEntregas(nombre: string): boolean {
+  return limpio(nombre) === "entregas finales";
+}
+
 /**
  * Acepta solo lo que tiene la forma esperada.
  *
@@ -153,15 +158,20 @@ export async function escondidosEntre(ids: string[]): Promise<Set<string>> {
 /**
  * Deja solo lo que el cliente puede ver, sea carpeta o archivo.
  *
- * Las carpetas reservadas se filtran igual: «Entregas finales» y «Facturas» no
- * son trabajos, y el cliente no las revisa como piezas.
+ * **«Entregas finales» sí se muestra.** Se filtraba junto con «Facturas»
+ * porque las dos son reservadas, y eso dejaba al cliente sin el único lugar
+ * donde está junto todo lo que aprobó: lo entregado terminaba existiendo solo
+ * para la agencia. Se muestra, pero no como trabajo a revisar —ya está
+ * decidido—: quien la arma es la aplicación, no la agencia.
+ *
+ * «Facturas» no se muestra nunca. Es de la agencia.
  */
 export async function soloLoVisible<T extends { id: string; name?: string }>(
   cosas: T[]
 ): Promise<T[]> {
   const escondidos = await escondidosEntre(cosas.map((c) => c.id));
   return cosas.filter(
-    (c) => !escondidos.has(c.id) && !(c.name && esCarpetaReservada(c.name))
+    (c) => !escondidos.has(c.id) && !(c.name && esCarpetaDeFacturas(c.name))
   );
 }
 

@@ -30,8 +30,15 @@ vi.mock("@/lib/ajustes", async (original) => ({
   ...(await original<typeof import("@/lib/ajustes")>()),
   ajustesDe: vi.fn(async () => ({ visible: true, vista: "lista" as const })),
   escondidosEntre: vi.fn(async (ids: string[]) => new Set(ids.filter((i) => ESCONDIDOS.has(i)))),
-  soloLoVisible: vi.fn(async (cosas: Array<{ id: string }>) =>
-    cosas.filter((c) => !ESCONDIDOS.has(c.id))
+  // El doble filtra lo mismo que el de verdad: lo escondido **y** «Facturas».
+  // La primera versión solo miraba lo escondido, y con eso la prueba de que
+  // «Facturas» no se muestra pasaba en verde sin probar nada.
+  soloLoVisible: vi.fn(async (cosas: Array<{ id: string; name?: string }>) =>
+    cosas.filter(
+      (c) =>
+        !ESCONDIDOS.has(c.id) &&
+        !(c.name && c.name.trim().toLowerCase() === "facturas")
+    )
   ),
 }));
 
@@ -285,5 +292,70 @@ describe("subir una vuelta nueva no borra lo anotado", () => {
     expect(pieza.versiones).toHaveLength(2);
     // La que se mira es la nueva.
     expect(pieza.driveFileId).toBe("logos:9304 V2.jpeg");
+  });
+});
+
+describe("entregas finales", () => {
+  /**
+   * Se filtraba junto con «Facturas» porque las dos son reservadas, y eso
+   * dejaba al cliente sin el único lugar donde está junto todo lo que aprobó:
+   * lo entregado existía solo para la agencia.
+   */
+  it("aparece en el portal, y al final de la lista", async () => {
+    driveCon(
+      {
+        [RAIZ]: [
+          { id: "finales", name: "Entregas finales" },
+          { id: "logos", name: "Logos" },
+        ],
+      },
+      { finales: ["listo.jpeg"], logos: ["9304.jpeg"] }
+    );
+
+    const portal = await portalDelCliente(RAIZ);
+    expect(
+      portal.carpetas.map((c) => c.nombre),
+      "Lo terminado va abajo: arriba tiene que estar lo que espera decisión."
+    ).toEqual(["Logos", "Entregas finales"]);
+  });
+
+  it("sus piezas llegan aprobadas, no esperando decisión", async () => {
+    // Preguntar el estado acá devuelve piezas «sin tocar» —con botón de
+    // aprobar incluido— sobre trabajo que el cliente ya aprobó: lo anotado de
+    // cada pieza vive bajo su carpeta de origen, no bajo esta.
+    driveCon(
+      { [RAIZ]: [{ id: "finales", name: "Entregas finales" }] },
+      { finales: ["listo.jpeg"] }
+    );
+
+    const carpeta = (await portalDelCliente(RAIZ)).carpetas[0];
+    expect(carpeta.clase).toBe("entregas");
+    expect(carpeta.piezas[0].estado).toBe("final");
+  });
+
+  it("«Facturas» no se muestra nunca: es de la agencia", async () => {
+    driveCon(
+      {
+        [RAIZ]: [
+          { id: "fact", name: "Facturas" },
+          { id: "logos", name: "Logos" },
+        ],
+      },
+      { fact: ["factura-01.jpeg"], logos: ["9304.jpeg"] }
+    );
+
+    expect(
+      (await portalDelCliente(RAIZ)).carpetas.map((c) => c.nombre)
+    ).toEqual(["Logos"]);
+  });
+
+  it("una entregas finales escondida a mano tampoco se muestra", async () => {
+    ESCONDIDOS.add("finales");
+    driveCon(
+      { [RAIZ]: [{ id: "finales", name: "Entregas finales" }] },
+      { finales: ["listo.jpeg"] }
+    );
+
+    expect(await portalDelCliente(RAIZ).then((p) => p.carpetas)).toEqual([]);
   });
 });

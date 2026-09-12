@@ -19,11 +19,12 @@ import { usePathname } from "next/navigation";
 
 /** El trabajo de todos los días. */
 const SECCIONES = [
-  { href: "/gestion/tablero", texto: "Qué pasó" },
+  { href: "/gestion/tablero", texto: "Tablero" },
   // «Clientes» es la raíz, y la ficha de cada cliente cuelga de ella: estando
   // adentro de un cliente, la sección que corresponde marcar sigue siendo esta.
   { href: "/gestion", texto: "Clientes", tambien: "/gestion/cliente" },
   { href: "/gestion/chats", texto: "Conversaciones" },
+  { href: "/gestion/notificaciones", texto: "Notificaciones" },
   // El diagnóstico no está acá: cuando Drive falla, cada pantalla lo dice donde
   // pasa. La ruta sigue existiendo para cuando haga falta mirar la conexión.
 ] as const;

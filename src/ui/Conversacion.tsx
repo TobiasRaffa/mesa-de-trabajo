@@ -47,6 +47,9 @@ function cuandoEnPalabras(iso: string): string {
   return Number.isNaN(fecha.getTime()) ? "" : hora.format(fecha);
 }
 
+/** El mínimo para que un dedo acierte, en píxeles. Es `--spacing-toque`. */
+const PISO = 44;
+
 type Props = {
   carpeta: string;
   mensajes: Mensaje[];
@@ -56,6 +59,14 @@ type Props = {
   onCerrar: () => void;
   /** Se está esperando al servidor. */
   enviando?: boolean;
+  /**
+   * Quién firma lo que se escribe. Va arriba del campo.
+   *
+   * El portal no lo usa: del lado del cliente firma el cliente y no hay nada
+   * que elegir. Del lado de la agencia sí, porque son varias personas y el
+   * cliente tiene que saber con quién habló.
+   */
+  firma?: React.ReactNode;
 };
 
 export function Conversacion({
@@ -65,10 +76,30 @@ export function Conversacion({
   onEnviar,
   onCerrar,
   enviando = false,
+  firma,
 }: Props) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
   const [texto, setTexto] = useState("");
   const final = useRef<HTMLDivElement>(null);
+  const campo = useRef<HTMLTextAreaElement>(null);
+
+  // El campo crece con lo que se escribe. Se mide poniéndolo en cero primero:
+  // sin eso, `scrollHeight` devuelve el alto de antes y el campo nunca achica.
+  //
+  // El piso se aplica acá y no solo en el CSS: dejando el alto por debajo del
+  // mínimo, el navegador lo estira con `min-height` pero sigue creyendo que
+  // hay algo de sobra, y dibuja una barra de desplazamiento de un pelo con el
+  // campo vacío.
+  useEffect(() => {
+    const el = campo.current;
+    if (!el) return;
+    // `scrollHeight` mide el contenido; el alto que se fija incluye el borde.
+    // Sin sumarlo faltaba un pelo y el navegador dibujaba una barra de
+    // desplazamiento de un píxel con el campo vacío.
+    const borde = el.offsetHeight - el.clientHeight;
+    el.style.height = "0px";
+    el.style.height = `${Math.max(el.scrollHeight + borde, PISO)}px`;
+  }, [texto]);
 
   // Al abrir, y con cada mensaje nuevo, se mira el final: lo último dicho es
   // lo que importa. Sin esto habría que arrastrar hasta abajo cada vez.
@@ -97,10 +128,10 @@ export function Conversacion({
         onClick={(e) => e.stopPropagation()}
         className="flex h-[88vh] w-full max-w-xl flex-col overflow-hidden bg-lienzo sm:h-[80vh]"
       >
-        <header className="flex items-start gap-3 bg-acento px-6 py-4 text-white">
+        <header className="flex items-center gap-3 bg-acento px-4 py-3 text-white">
           <div className="min-w-0 flex-1">
-            <h2 className="text-titulo font-extrabold tracking-tight">Conversación</h2>
-            <p className="mt-0.5 truncate text-menudo text-white/70">{carpeta}</p>
+            <h2 className="text-guia font-extrabold tracking-tight">Conversación</h2>
+            <p className="truncate text-micro text-white/70">{carpeta}</p>
           </div>
           <button
             type="button"
@@ -112,13 +143,13 @@ export function Conversacion({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-papel px-5 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-papel px-4 py-4">
           {mensajes.length === 0 ? (
             <p className="py-10 text-center text-normal text-apagado">
               Todavía no hablaron por acá.
             </p>
           ) : (
-            <ul className="flex flex-col gap-4">
+            <ul className="flex flex-col gap-3">
               {mensajes.map((mensaje) => (
                 <Burbuja key={mensaje.id} mensaje={mensaje} yo={yo} />
               ))}
@@ -127,28 +158,45 @@ export function Conversacion({
           <div ref={final} />
         </div>
 
-        <footer className="border-t-2 border-tinta px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4">
-          <textarea
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            rows={3}
-            autoFocus
-            placeholder={yo === "cliente" ? "Escribile al equipo…" : "Escribile al cliente…"}
-            className="w-full resize-y border border-linea bg-lienzo p-3 text-normal
-                       transition-colors placeholder:text-apagado
-                       focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
-          />
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <p className="text-menudo text-apagado">
-              {yo === "cliente"
-                ? "Contesta una persona del equipo."
-                : "Le escribís al cliente."}
-            </p>
-            <Boton onClick={enviar} disabled={enviando || texto.trim().length === 0}>
+        {/*
+          El pie era un tercio de la ventana: tres renglones de textarea, una
+          línea de texto y un botón, todo fijo aunque no se estuviera
+          escribiendo. Lo que importa son los mensajes.
+
+          Ahora arranca en un renglón y crece con lo que se escribe, hasta un
+          tope: quien manda dos palabras ve dos palabras, y quien escribe un
+          párrafo lo ve entero sin desplazar.
+        */}
+        <footer className="border-t-2 border-tinta px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
+          {firma}
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={campo}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              rows={1}
+              autoFocus
+              placeholder={
+                yo === "cliente" ? "Escribile al equipo…" : "Escribile al cliente…"
+              }
+              className="max-h-40 min-h-toque w-full resize-none border border-linea bg-lienzo
+                         px-3 py-2.5 text-normal transition-colors placeholder:text-apagado
+                         focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
+            />
+            <Boton
+              onClick={enviar}
+              disabled={enviando || texto.trim().length === 0}
+              aria-label="Enviar"
+            >
               <IconoEnviar />
-              Enviar
+              <span className="sr-only sm:not-sr-only">Enviar</span>
             </Boton>
           </div>
+          <p className="mt-1.5 text-micro text-apagado">
+            {yo === "cliente"
+              ? "Contesta una persona del equipo."
+              : "Le escribís al cliente."}
+          </p>
         </footer>
       </div>
     </div>
@@ -184,7 +232,7 @@ function Burbuja({ mensaje, yo }: { mensaje: Mensaje; yo: "cliente" | "agencia" 
           {mensaje.quien} · {cuandoEnPalabras(mensaje.cuando)}
         </p>
         <p
-          className={`mt-1 whitespace-pre-wrap px-4 py-3 text-normal ${
+          className={`mt-0.5 whitespace-pre-wrap px-3 py-2 text-normal ${
             mio ? "bg-acento text-white" : "border border-linea bg-lienzo text-tinta"
           }`}
         >
