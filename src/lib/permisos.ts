@@ -3,17 +3,24 @@
 // Toda decisión de permisos vive acá y no desparramada en las pantallas: un
 // olvido en un archivo suelto no puede abrir una puerta.
 //
-// Un archivo se sirve cuando se cumplen **las tres** cosas:
+// **Hay dos clases de quien pregunta, y ven cosas distintas.**
 //
-//   1. Quien pregunta abrió la puerta de un cliente —lo decide `clienteQueEntro`
-//      y llega acá como parámetro—.
-//   2. El archivo cuelga del árbol de **ese** cliente, no de cualquiera.
-//   3. **El camino hasta él no pasa por nada escondido.**
+//   - **Un cliente.** Ve lo que cuelga de **su** carpeta y nada más, y solo si
+//     el camino hasta el archivo no pasa por nada escondido ni por «Facturas».
+//     Eso es lo que convierte «ocultar» en una regla: sin ello, apagar una
+//     carpeta en gestión solo dejaba de dibujarla, y el archivo se seguía
+//     sirviendo a quien escribiera la dirección a mano.
 //
-// La tercera es la que convierte «ocultar» en una regla. Sin ella, apagar una
-// carpeta en gestión solo dejaba de dibujarla: el archivo se pide por su
-// dirección, y quien la tuviera de antes la podía escribir a mano y bajárselo
-// igual. Esconder algo tiene que negar algo.
+//   - **La agencia.** Ve todo lo que el robot ve, de cualquier cliente,
+//     incluido lo que ella misma escondió y las facturas. Esconder algo es una
+//     decisión sobre qué ve el cliente, no sobre qué puede mirar quien la tomó;
+//     si esconder algo también se lo sacara a la agencia, no habría dónde
+//     volver a prenderlo.
+//
+// Los dos casos pasan por la misma función a propósito. Cuando la agencia no
+// estaba contemplada, el arreglo obvio era «que esta pantalla no pida permiso»,
+// y eso es cómo se abre un agujero: la segunda pantalla que lo necesite lo
+// copia. Acá se dice **quién pregunta** y la respuesta se angosta sola.
 //
 // **Por qué se sube por el árbol y no se mira solo la carpeta madre.** Lo que
 // la agencia comparte con la aplicación es la carpeta del cliente; los
@@ -25,7 +32,9 @@
 // exista un camino limpio hasta el cliente: negar por un camino sucio cuando
 // hay otro bueno sería esconder algo que la agencia dejó a la vista.
 
+import { clienteQueEntro } from "@/lib/acceso";
 import { esCarpetaDeFacturas, escondidosEntre } from "@/lib/ajustes";
+import { GALLETA_DE_GESTION, galletaDeGestionValida } from "@/lib/contrasena";
 import { clientesHabilitados } from "@/lib/clientes";
 import { metadatosArchivo, type MetadatosArchivo } from "@/lib/google";
 
@@ -144,8 +153,11 @@ async function hayCamino(
   return false;
 }
 
+/** Quién está del otro lado de un pedido de archivo. */
+export type QuienPide = { tipo: "cliente"; raiz: string } | { tipo: "agencia" };
+
 /**
- * Autoriza un archivo **para un cliente**, y de paso devuelve sus datos.
+ * Autoriza un archivo **para quien lo pide**, y de paso devuelve sus datos.
  *
  * El segundo parámetro no es opcional a propósito. Antes la pregunta era «¿este
  * archivo cuelga de *algún* cliente habilitado?», y con esa respuesta se servía
@@ -154,8 +166,8 @@ async function hayCamino(
  * sin haber escrito nunca una clave. Y un cliente legítimo se bajaba los
  * archivos de otro.
  *
- * Que la firma exija saber de quién es hace que la próxima ruta que sirva bytes
- * no pueda olvidarse: no compila sin decirlo.
+ * Que la firma exija saber quién pregunta hace que la próxima ruta que sirva
+ * bytes no pueda olvidarse: no compila sin decirlo.
  *
  * Devuelve los datos en vez de un booleano porque quien autoriza ya tuvo que
  * pedírselos a Google, y hacer que el llamador los pida de nuevo sería pagar
@@ -163,23 +175,45 @@ async function hayCamino(
  */
 export async function archivoAutorizado(
   fileId: string,
-  carpetaDelCliente: string
+  quien: QuienPide
 ): Promise<MetadatosArchivo | null> {
-  if (!carpetaDelCliente) return null;
+  const deLaAgencia = quien.tipo === "agencia";
+  if (!deLaAgencia && !quien.raiz) return null;
 
   try {
     const archivo = await metadatosArchivo(fileId);
 
     // El archivo en sí puede estar escondido aunque su carpeta se muestre.
-    if ((await escondidosEntre([fileId])).has(fileId)) return null;
+    if (!deLaAgencia && (await escondidosEntre([fileId])).has(fileId)) return null;
 
-    const adentro = await hayCamino(archivo.parents ?? [], [carpetaDelCliente], {
-      respetarEscondidos: true,
+    const raices = deLaAgencia ? await carpetasAdministradas() : [quien.raiz];
+    const adentro = await hayCamino(archivo.parents ?? [], raices, {
+      respetarEscondidos: !deLaAgencia,
     });
     return adentro ? archivo : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Quién está pidiendo esto, mirando sus galletas.
+ *
+ * `null` es «nadie»: no hay sesión de cliente ni de agencia. Es la única
+ * respuesta que no sirve para abrir nada, y es la de alguien que escribió una
+ * dirección sin haber entrado por ninguna puerta.
+ */
+export async function quienPide(galletas: {
+  get(nombre: string): { value: string } | undefined;
+}): Promise<QuienPide | null> {
+  // Primero la agencia: es una firma y no toca Drive. Buscar el cliente
+  // recorre sus carpetas, y sería trabajo tirado cuando quien mira es el equipo.
+  if (galletaDeGestionValida(galletas.get(GALLETA_DE_GESTION)?.value)) {
+    return { tipo: "agencia" };
+  }
+
+  const cliente = await clienteQueEntro(galletas);
+  return cliente ? { tipo: "cliente", raiz: cliente.id } : null;
 }
 
 /**

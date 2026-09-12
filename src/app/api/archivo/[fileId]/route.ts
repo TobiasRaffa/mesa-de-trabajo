@@ -11,11 +11,10 @@
 
 import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { clienteQueEntro } from "@/lib/acceso";
 
 import { abrirArchivo } from "@/lib/google";
 import { cabeceraDeDescarga } from "@/lib/descargas";
-import { archivoAutorizado } from "@/lib/permisos";
+import { archivoAutorizado, quienPide } from "@/lib/permisos";
 
 const sinDetalle = (mensaje: string, codigo: number) =>
   new Response(mensaje, { status: codigo, headers: { "Content-Type": "text/plain" } });
@@ -23,15 +22,16 @@ const sinDetalle = (mensaje: string, codigo: number) =>
 export async function GET(_req: NextRequest, ctx: RouteContext<"/api/archivo/[fileId]">) {
   const { fileId } = await ctx.params;
 
-  // **Quién pregunta, antes que qué pide.** Sin haber acertado la clave de un
-  // link, no se sirve un solo byte. Y lo que se sirve es lo que cuelga de la
-  // carpeta de ese cliente: la de otro es tan ajena como la de un desconocido.
-  const cliente = await clienteQueEntro(await cookies());
-  if (!cliente) return sinDetalle("No encontrado", 404);
+  // **Quién pregunta, antes que qué pide.** Sin haber entrado por alguna
+  // puerta —la del cliente o la de la agencia— no se sirve un solo byte. Y lo
+  // que se sirve depende de quién sea: el cliente ve lo suyo y nada más; la
+  // agencia ve todo lo que el robot ve.
+  const quien = await quienPide(await cookies());
+  if (!quien) return sinDetalle("No encontrado", 404);
 
   // Si el archivo no cuelga de su carpeta, se responde igual que si no
   // existiera: no confirmamos ni desmentimos que exista.
-  const archivo = await archivoAutorizado(fileId, cliente.id);
+  const archivo = await archivoAutorizado(fileId, quien);
   if (!archivo) return sinDetalle("No encontrado", 404);
 
   try {

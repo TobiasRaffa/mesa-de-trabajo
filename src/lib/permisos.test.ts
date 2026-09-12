@@ -28,6 +28,9 @@ import {
 const CLIENTE = "carpeta-del-cliente";
 const AJENA = "carpeta-que-no-administramos";
 const mock = vi.mocked(metadatosArchivo);
+
+/** Quien pregunta, en las pruebas: un cliente con su carpeta. */
+const comoCliente = (raiz: string) => ({ tipo: "cliente" as const, raiz });
 const clientes = vi.mocked(clientesHabilitados);
 
 const cliente = (id: string) => ({
@@ -92,7 +95,7 @@ describe("carpetasAdministradas", () => {
 describe("archivoAutorizado", () => {
   it("autoriza un archivo que cuelga directo de la carpeta del cliente", async () => {
     mock.mockResolvedValue(archivo([CLIENTE]));
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
   });
 
   it("autoriza un archivo que está una carpeta más abajo", async () => {
@@ -100,7 +103,7 @@ describe("archivoAutorizado", () => {
     // regla vieja —mirar solo la carpeta madre— todos los archivos de verdad
     // quedaban afuera y el portal se veía vacío.
     driveConArbol({ "archivo-1": ["subcarpeta"], subcarpeta: [CLIENTE] });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
   });
 
   it("autoriza aunque esté tres carpetas abajo", async () => {
@@ -109,31 +112,31 @@ describe("archivoAutorizado", () => {
       nietas: ["hijas"],
       hijas: [CLIENTE],
     });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
   });
 
   it("RECHAZA un archivo real de Drive que está fuera de ese árbol", async () => {
     // Este es el caso que importa. La cuenta de servicio puede verlo, pero
     // la aplicación no administra esa carpeta: no se sirve.
     driveConArbol({ "archivo-1": ["ajena-hija"], "ajena-hija": [AJENA] });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("autoriza si está en varias carpetas y una es administrada", async () => {
     // En Drive un archivo puede tener más de una carpeta madre.
     mock.mockResolvedValue(archivo([AJENA, CLIENTE]));
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
   });
 
   it("rechaza si el archivo no tiene carpeta madre", async () => {
     mock.mockResolvedValue(archivo(undefined));
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("rechaza sin saber de quién es el archivo", async () => {
     // Una configuración incompleta no puede volverse permiso para todo.
     mock.mockResolvedValue(archivo([CLIENTE]));
-    await expect(archivoAutorizado("archivo-1", "")).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(""))).resolves.toBeNull();
     expect(mock).not.toHaveBeenCalled();
   });
 
@@ -143,24 +146,24 @@ describe("archivoAutorizado", () => {
     // legítimo se bajaba los archivos de todos los demás.
     clientes.mockResolvedValue([cliente(CLIENTE), cliente(AJENA)]);
     mock.mockResolvedValue(archivo([AJENA]));
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("rechaza si Google falla, en vez de dejar pasar", async () => {
     // Ante la duda, no se sirve. Nunca al revés.
     mock.mockRejectedValue(new Error("Drive se cayó"));
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("no deja que un error de Google se propague a la pantalla", async () => {
     mock.mockRejectedValue(new Error("detalle interno que no debe verse"));
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("no se cuelga con un ciclo de carpetas", async () => {
     // Drive deja armar ciclos con atajos. Sin corte, esto sería infinito.
     driveConArbol({ "archivo-1": ["a"], a: ["b"], b: ["a"] });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("no sube indefinidamente: un árbol muy profundo se corta", async () => {
@@ -170,7 +173,7 @@ describe("archivoAutorizado", () => {
     for (let i = 0; i < 9; i++) arbol[`n${i}`] = [`n${i + 1}`];
     arbol.n9 = [CLIENTE];
     driveConArbol(arbol);
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("RECHAZA un archivo anidado de otro cliente habilitado", async () => {
@@ -181,7 +184,7 @@ describe("archivoAutorizado", () => {
     // encuentre después va a dudar de si arreglarlo rompe algo a propósito.
     clientes.mockResolvedValue([cliente(CLIENTE), cliente("otro-cliente")]);
     driveConArbol({ "archivo-1": ["sub"], sub: ["otro-cliente"] });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("RECHAZA un archivo de un cliente deshabilitado", async () => {
@@ -189,7 +192,7 @@ describe("archivoAutorizado", () => {
     // mismo, sin tocar Drive.
     clientes.mockResolvedValue([cliente(CLIENTE)]);
     driveConArbol({ "archivo-1": ["sub"], sub: ["cliente-apagado"] });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("no le pregunta dos veces a Google por la misma carpeta", async () => {
@@ -201,9 +204,9 @@ describe("archivoAutorizado", () => {
       subcarpeta: [CLIENTE],
     });
 
-    await archivoAutorizado("archivo-1", CLIENTE);
+    await archivoAutorizado("archivo-1", comoCliente(CLIENTE));
     const despuesDelPrimero = mock.mock.calls.length;
-    await archivoAutorizado("archivo-2", CLIENTE);
+    await archivoAutorizado("archivo-2", comoCliente(CLIENTE));
 
     // El segundo archivo cuesta una sola consulta: la del archivo en sí.
     expect(mock.mock.calls.length).toBe(despuesDelPrimero + 1);
@@ -224,13 +227,13 @@ describe("lo escondido no se sirve", () => {
   it("rechaza un archivo escondido, aunque su carpeta se muestre", async () => {
     ESCONDIDOS.add("archivo-1");
     mock.mockResolvedValue(archivo([CLIENTE]));
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("rechaza un archivo visible dentro de una carpeta escondida", async () => {
     ESCONDIDOS.add("logos");
     driveConArbol({ "archivo-1": ["logos"], logos: [CLIENTE] });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("rechaza si la escondida está más arriba, en el medio del camino", async () => {
@@ -242,7 +245,7 @@ describe("lo escondido no se sirve", () => {
       "semana-2": ["septiembre"],
       septiembre: [CLIENTE],
     });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("autoriza una subcarpeta hondas si nada del camino está escondido", async () => {
@@ -251,7 +254,7 @@ describe("lo escondido no se sirve", () => {
       "semana-2": ["septiembre"],
       septiembre: [CLIENTE],
     });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
   });
 
   it("autoriza si hay otro camino limpio hasta el cliente", async () => {
@@ -263,7 +266,7 @@ describe("lo escondido no se sirve", () => {
       borradores: [CLIENTE],
       logos: [CLIENTE],
     });
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
   });
 
   it("RECHAZA lo que está en «Facturas», sin que nadie lo esconda", async () => {
@@ -273,7 +276,7 @@ describe("lo escondido no se sirve", () => {
       mimeType: "application/vnd.google-apps.folder",
       parents: { "archivo-1": ["f"], f: [CLIENTE] }[id],
     }));
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 
   it("SÍ deja pasar «Entregas finales»: ahí va lo que el cliente aprobó", async () => {
@@ -283,7 +286,7 @@ describe("lo escondido no se sirve", () => {
       mimeType: "application/vnd.google-apps.folder",
       parents: { "archivo-1": ["ef"], ef: [CLIENTE] }[id],
     }));
-    await expect(archivoAutorizado("archivo-1", CLIENTE)).resolves.not.toBeNull();
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
   });
 });
 
@@ -340,5 +343,60 @@ describe("la cadena hasta el cliente", () => {
     driveConArbol(arbol);
 
     await expect(cadenaHasta("hondo", CLIENTE)).resolves.toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * La agencia ve todo lo que el robot ve.
+ *
+ * Cuando las rutas de archivo empezaron a pedir la galleta **del cliente**, la
+ * agencia se quedó sin ninguna: el calendario de gestión mostró las miniaturas
+ * rotas y no había forma de bajarse un archivo desde adentro de la aplicación.
+ * El arreglo fácil habría sido que esas pantallas no pidan permiso, y así es
+ * como se abre un agujero: la segunda pantalla que lo necesite lo copia.
+ */
+describe("la agencia mira con otra vara", () => {
+  const comoAgencia = { tipo: "agencia" as const };
+
+  beforeEach(() => {
+    clientes.mockResolvedValue([cliente(CLIENTE), cliente("otro-cliente")]);
+  });
+
+  it("ve el archivo de cualquier cliente", async () => {
+    driveConArbol({ "archivo-1": ["sub"], sub: ["otro-cliente"] });
+    await expect(archivoAutorizado("archivo-1", comoAgencia)).resolves.not.toBeNull();
+  });
+
+  it("ve lo que ella misma escondió", async () => {
+    // Si esconder algo también se lo sacara a la agencia, no habría dónde
+    // volver a prenderlo.
+    ESCONDIDOS.add("archivo-1");
+    ESCONDIDOS.add("logos");
+    driveConArbol({ "archivo-1": ["logos"], logos: [CLIENTE] });
+    await expect(archivoAutorizado("archivo-1", comoAgencia)).resolves.not.toBeNull();
+  });
+
+  it("ve las facturas, que el cliente no ve nunca", async () => {
+    mock.mockImplementation(async (id: string) => ({
+      id,
+      name: id === "f" ? "Facturas" : id,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: { "archivo-1": ["f"], f: [CLIENTE] }[id],
+    }));
+
+    await expect(archivoAutorizado("archivo-1", comoAgencia)).resolves.not.toBeNull();
+    await expect(
+      archivoAutorizado("archivo-1", comoCliente(CLIENTE)),
+      "Las facturas son de la agencia. Que las vea el equipo no las abre al cliente."
+    ).resolves.toBeNull();
+  });
+
+  it("NO ve lo que no cuelga de ningún cliente", async () => {
+    // Que vea todo lo de sus clientes no es que vea todo el Drive del robot:
+    // si mañana alguien le comparte otra carpeta, no entra por acá.
+    driveConArbol({ "archivo-1": ["ajena-hija"], "ajena-hija": [AJENA] });
+    await expect(archivoAutorizado("archivo-1", comoAgencia)).resolves.toBeNull();
   });
 });

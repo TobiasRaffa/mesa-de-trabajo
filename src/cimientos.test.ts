@@ -421,7 +421,12 @@ describe("las puertas", () => {
           .split("\n")
           .filter((linea) => !linea.trimStart().startsWith("import "))
           .join("\n");
-        return !cuerpo.includes("clienteQueEntro(") && !cuerpo.includes("entroAlCliente(");
+        // Las tres formas de preguntar quién está del otro lado. `quienPide`
+        // es la general —contesta «cliente», «agencia» o «nadie»—; las otras
+        // dos son de cuando solo puede haber un cliente mirando.
+        return !["quienPide(", "clienteQueEntro(", "entroAlCliente("].some((c) =>
+          cuerpo.includes(c)
+        );
       })
       .map(relativo);
 

@@ -10,11 +10,10 @@
 
 import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { clienteQueEntro } from "@/lib/acceso";
 
 import { bytesDeMiniatura } from "@/lib/google";
 import { tamanoPermitido } from "@/lib/miniaturas";
-import { archivoAutorizado } from "@/lib/permisos";
+import { archivoAutorizado, quienPide } from "@/lib/permisos";
 
 const sinDetalle = (mensaje: string, codigo: number) =>
   new Response(mensaje, { status: codigo, headers: { "Content-Type": "text/plain" } });
@@ -24,13 +23,14 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/miniatura/[f
 
   const px = tamanoPermitido(req.nextUrl.searchParams.get("px"));
 
-  // **Quién pregunta, antes que qué pide.** Sin haber acertado la clave de un
-  // link, no se sirve un solo byte. Y lo que se sirve es lo que cuelga de la
-  // carpeta de ese cliente: la de otro es tan ajena como la de un desconocido.
-  const cliente = await clienteQueEntro(await cookies());
-  if (!cliente) return sinDetalle("No encontrado", 404);
+  // **Quién pregunta, antes que qué pide.** Sin haber entrado por alguna
+  // puerta —la del cliente o la de la agencia— no se sirve un solo byte. Y lo
+  // que se sirve depende de quién sea: el cliente ve lo suyo y nada más; la
+  // agencia ve todo lo que el robot ve.
+  const quien = await quienPide(await cookies());
+  if (!quien) return sinDetalle("No encontrado", 404);
 
-  const archivo = await archivoAutorizado(fileId, cliente.id);
+  const archivo = await archivoAutorizado(fileId, quien);
   if (!archivo) return sinDetalle("No encontrado", 404);
 
   if (!archivo.thumbnailLink) return sinDetalle("El archivo no tiene miniatura", 415);

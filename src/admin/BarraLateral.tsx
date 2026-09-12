@@ -37,7 +37,10 @@ const SECCIONES = [
  * secciones de todos los días, ocupan el mismo peso visual que «Clientes» y
  * no lo valen. Abajo del todo están donde se las busca cuando se las busca.
  */
-const ABAJO = [{ href: "/gestion/admin", texto: "Admin" }] as const;
+const ABAJO = [
+  { href: "/gestion/facturas", texto: "Facturas" },
+  { href: "/gestion/admin", texto: "Admin" },
+] as const;
 
 /**
  * Si una sección es la que se está mirando.
