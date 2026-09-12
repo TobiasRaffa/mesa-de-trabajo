@@ -114,13 +114,16 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
             </button>
           </form>
         ) : (
-          <p className="flex flex-wrap items-center gap-2 text-normal">
+          <p className="flex flex-wrap items-baseline gap-2">
             <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
               La clave es
             </span>
-            <code className="bg-hueco px-2 py-1 font-mono font-bold">
+            {/* Con la misma letra que el resto. En letra de máquina de
+                escribir se lee como un código y no como lo que es: una palabra
+                que alguien va a decir en voz alta por teléfono. */}
+            <span className="bg-hueco px-2 py-1 text-guia font-bold tracking-tight">
               {revelada || "(todavía no tiene)"}
-            </code>
+            </span>
           </p>
         ))}
 

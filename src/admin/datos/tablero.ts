@@ -23,20 +23,6 @@ import { calcularVencimiento } from "@/lib/fechas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 
-/**
- * De quién es el próximo movimiento.
- *
- * Es la pregunta que la agencia se hace de verdad mirando el tablero: **¿esto
- * lo tengo que mover yo, o estoy esperando al cliente?** El estado de cada
- * pieza ya lo dice, pero repartido en cinco nombres; esto los junta en la
- * única distinción que cambia lo que alguien hace a continuación.
- *
- * Cuando hay de las dos, manda la agencia: si algo espera trabajo nuestro, la
- * carpeta está en nuestra cancha aunque además falte que el cliente mire otra
- * pieza.
- */
-export type Cancha = "agencia" | "cliente" | "listo";
-
 export type CarpetaEnElTablero = {
   clienteId: string;
   cliente: string;
@@ -53,8 +39,6 @@ export type CarpetaEnElTablero = {
   conCambios: number;
   /** Mensajes del cliente que nadie leyó. */
   sinLeer: number;
-  /** De quién es el próximo movimiento. */
-  cancha: Cancha;
   /** Piezas que esperan trabajo de la agencia. */
   enAgencia: number;
   /** De esas, las que solo esperan que alguien apriete «Entregar». */
@@ -122,8 +106,6 @@ export async function elTablero(): Promise<Tablero> {
             // lo que hay que hacer con esto es apretar un botón, no diseñar.
             const sinEntregar = piezas.filter((p) => p.estado === "en_curso").length;
 
-            const cancha: Cancha =
-              enAgencia > 0 ? "agencia" : sinRevisar > 0 ? "cliente" : "listo";
 
             // **El reloj arranca cuando se entrega, no cuando se sube.**
             // Salía de la fecha de modificación del archivo, con dos
@@ -158,7 +140,6 @@ export async function elTablero(): Promise<Tablero> {
             const persona = await personaPorId(quien ?? undefined);
 
             return {
-              cancha,
               enAgencia,
               sinEntregar,
               clienteId: cliente.id,

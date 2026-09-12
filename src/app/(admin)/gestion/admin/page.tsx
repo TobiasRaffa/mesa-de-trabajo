@@ -11,6 +11,7 @@
 
 import { todosLosClientes } from "@/lib/clientes";
 import { ClavesDeClientes } from "@/admin/ClavesDeClientes";
+import { Plegable } from "@/admin/Plegable";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { FilaDePersona, SumarPersona } from "@/admin/Equipo";
 import { correoConfigurado } from "@/lib/correo";
@@ -41,10 +42,12 @@ export default async function Admin() {
       </header>
 
       {/* ------------------------- Claves de los clientes ----------------- */}
-      <section className="mt-10">
-        <h2 className="text-guia font-extrabold tracking-tight">
-          Claves de los clientes
-        </h2>
+      <div className="mt-10 border-t border-linea pt-5">
+      <Plegable
+        titulo="Claves de los clientes"
+        recuerdo="admin-claves"
+        resumen={`${clientes.length} ${clientes.length === 1 ? "cliente" : "clientes"}`}
+      >
         <p className="mt-1 text-menudo text-apagado">
           Es la palabra que el cliente escribe después de abrir su link. Se la
           pasás por donde le escribís siempre, nunca dentro del mismo mensaje que
@@ -60,11 +63,16 @@ export default async function Admin() {
             tieneClave: Boolean(c.tag),
           }))}
         />
-      </section>
+      </Plegable>
+      </div>
 
       {/* -------------------------------- El equipo ----------------------- */}
-      <section className="mt-14">
-        <h2 className="text-guia font-extrabold tracking-tight">El equipo</h2>
+      <div className="mt-8 border-t border-linea pt-5">
+      <Plegable
+        titulo="El equipo"
+        recuerdo="admin-equipo"
+        resumen={`${gente.length} ${gente.length === 1 ? "persona" : "personas"}`}
+      >
         <p className="mt-1 text-menudo text-apagado">
           Un nombre para poder asignarle un trabajo y un correo para poder
           avisarle.
@@ -93,7 +101,8 @@ export default async function Admin() {
         )}
 
         <SumarPersona />
-      </section>
+      </Plegable>
+      </div>
     </main>
   );
 }
