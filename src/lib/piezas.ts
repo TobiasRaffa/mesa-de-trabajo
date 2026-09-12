@@ -22,6 +22,10 @@ export type Cambio = { id: string; texto: string };
 
 export type Hito =
   | "entregada"
+  | "reabierta_por_agencia"
+  | "extra_habilitada"
+  | "devuelta_a_su_carpeta"
+  | "no_se_pudo_devolver"
   | "aprobada"
   | "cambios_pedidos"
   | "cambios_descartados"
@@ -225,8 +229,12 @@ export const EN_PALABRAS: Record<Hito, string> = {
   cambios_descartados: "Descartó los cambios",
   revision_enviada: "Envió la revisión",
   reabierta: "Reabrió la pieza",
+  reabierta_por_agencia: "Reabrió la pieza para que el cliente la vuelva a mirar",
+  extra_habilitada: "Habilitó una revisión adicional",
   movida_a_finales: "Se movió a «Entregas finales»",
   no_se_pudo_mover: "No se pudo mover a «Entregas finales»",
+  devuelta_a_su_carpeta: "Volvió a su carpeta de trabajo",
+  no_se_pudo_devolver: "No se pudo sacar de «Entregas finales»",
 };
 
 // ---------------------------------------------------------------------------

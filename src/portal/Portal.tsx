@@ -658,6 +658,7 @@ function Revision({
           }}
           onCerrar={() => setAbierta(null)}
           onEvento={(evento) => mover(piezaAbierta.id, evento)}
+          rechazo={rechazo}
           onAgregarCambio={(texto) =>
             cambiosDe(piezaAbierta.id, [...piezaAbierta.cambios, { id: nuevoId(), texto }])
           }

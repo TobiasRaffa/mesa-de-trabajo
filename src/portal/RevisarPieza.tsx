@@ -53,6 +53,8 @@ export type PiezaAbierta = Pieza & {
   modificado?: string;
   /** El archivo en Drive, para abrirlo allá. */
   enlaceDrive?: string;
+  /** Si es un PDF: la miniatura solo muestra la primera página. */
+  esPdf: boolean;
   versiones: VersionDePieza[];
   publicaEl?: Date;
   /** Los puntos que el cliente pidió cambiar, en el orden en que los escribió. */
@@ -71,6 +73,8 @@ type Props = {
   onBorrarCambio: (id: string) => void;
   onEnviarEsta: () => void;
   onAmpliar: (laminas: Lamina[]) => void;
+  /** Lo que contestó el servidor cuando dijo que no. Se muestra acá adentro. */
+  rechazo?: string | null;
 };
 
 export function RevisarPieza({
@@ -84,6 +88,7 @@ export function RevisarPieza({
   onBorrarCambio,
   onEnviarEsta,
   onAmpliar,
+  rechazo,
 }: Props) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
   const [comparando, setComparando] = useState(false);
@@ -96,6 +101,10 @@ export function RevisarPieza({
   const [borrador, setBorrador] = useState("");
 
   const hayAnterior = pieza.versiones.length > 1;
+
+  // Las mismas cuentas que hace el dominio. Se repiten acá solo para decidir
+  // qué botón dibujar: quién puede hacer qué lo sigue decidiendo el servidor.
+  const quedanRondas = pieza.ronda < pieza.rondasIncluidas + pieza.rondasExtra;
   const pendiente =
     !pieza.enviada && (pieza.estado === "entregada" || pieza.estado === "en_revision");
   const pidiendoCambios = !pieza.enviada && pieza.estado === "cambios_marcados";
@@ -229,10 +238,27 @@ export function RevisarPieza({
               )}
 
               <div className="flex flex-wrap gap-2">
-                <Boton variante="contorno" tamano="chico" onClick={ampliarLoQueSeVe}>
+                {pieza.esPdf ? (
+                    /* Un PDF tiene más de una página y la miniatura muestra
+                       solo la primera. El archivo de verdad lo abre el visor
+                       del propio navegador, que las muestra todas: pasa por
+                       nuestra ruta, así que el cliente no necesita permiso de
+                       Drive para nada. */
+                    <BotonEnlace
+                      variante="fantasma"
+                      href={`/api/archivo/${pieza.driveFileId}?ver=1`}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      <IconoAmpliar />
+                      Ver el PDF entero
+                    </BotonEnlace>
+                  ) : (
+                    <Boton variante="contorno" tamano="chico" onClick={ampliarLoQueSeVe}>
                   <IconoAmpliar />
                   {comparando && hayAnterior ? "Agrandar las dos" : "Ver en grande"}
                 </Boton>
+                  )}
 
                 {/* El archivo en Drive: para quien quiera verlo con las
                     herramientas de Google, o bajarlo desde ahí. Solo abre para
@@ -391,6 +417,21 @@ export function RevisarPieza({
           </div>
         </div>
 
+        {/* Lo que dijo el servidor, adentro de la ventana.
+
+            Vivía en la página de atrás, y esta ventana la tapa entera: cada
+            mensaje de error que pasara con una pieza abierta era invisible. El
+            cliente tocaba un botón, el servidor contestaba que no, y en la
+            pantalla no pasaba absolutamente nada. */}
+        {rechazo && (
+          <p
+            role="alert"
+            className="border-t-2 border-alerta bg-alerta-tenue px-4 py-3 text-normal font-semibold text-alerta sm:px-6"
+          >
+            {rechazo}
+          </p>
+        )}
+
         <footer className="border-t-2 border-tinta bg-lienzo px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {pendiente && (
@@ -399,17 +440,36 @@ export function RevisarPieza({
                   Dejar esta para después
                 </Boton>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <Boton
-                    variante="contorno"
-                    onClick={() => {
-                      onEvento({ tipo: "pedir_cambios" });
-                      setEscribiendo("nuevo");
-                      setBorrador("");
-                    }}
-                  >
-                    <IconoEditar />
-                    Pedir cambios
-                  </Boton>
+                  {/*
+                    Sin rondas, «Pedir cambios» no lleva a ningún lado: el
+                    servidor lo rechaza. Y su mensaje se dibujaba **detrás** de
+                    esta ventana, así que desde donde el cliente miraba el botón
+                    estaba roto: lo tocaba y no pasaba nada.
+
+                    Ahora el botón dice lo que de verdad se puede hacer.
+                  */}
+                  {quedanRondas ? (
+                    <Boton
+                      variante="contorno"
+                      onClick={() => {
+                        onEvento({ tipo: "pedir_cambios" });
+                        setEscribiendo("nuevo");
+                        setBorrador("");
+                      }}
+                    >
+                      <IconoEditar />
+                      Pedir cambios
+                    </Boton>
+                  ) : (
+                    <Boton
+                      variante="contorno"
+                      onClick={() => onEvento({ tipo: "pedir_revision_extra" })}
+                      title="Se lo pedimos al equipo. Te avisamos cuando la habiliten."
+                    >
+                      <IconoEditar />
+                      Pedir una revisión adicional
+                    </Boton>
+                  )}
                   <Boton
                     variante="aprobar"
                     onClick={() => onEvento({ tipo: "aprobar", por: "cliente" })}

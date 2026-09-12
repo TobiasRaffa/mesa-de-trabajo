@@ -34,6 +34,7 @@ import {
 import { datosDeCarpeta } from "@/lib/google";
 import {
   habilitarCliente,
+  mostrarDriveA,
   ponerTag,
   renovarLink,
   todosLosClientes,
@@ -46,9 +47,12 @@ import {
 } from "@/lib/conversaciones";
 import { aplicar } from "@/dominio/pieza";
 import { avisar } from "@/lib/avisar";
+import { devolverDesdeFinales } from "@/lib/entregasFinales";
 import {
   anotar,
+  estadoDe,
   estadosDe,
+  guardarPieza,
   guardarPiezas,
   piezasDeLaCarpeta,
   type EstadoDePieza,
@@ -154,6 +158,26 @@ export async function cambiarCliente(_previo: unknown, formulario: FormData) {
   // Habilitar un cliente cambia qué carpetas se administran: lo recordado
   // quedó viejo.
   olvidarCarpetas();
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+/**
+ * Si a este cliente se le muestran los links a Drive en su portal.
+ *
+ * Lo decide la agencia porque es la única que lo sabe: compartirle la carpeta
+ * pasa en Drive, afuera de la aplicación. Apagado, los links **no se mandan**
+ * al navegador del cliente, así que no hay forma de que aparezcan por error.
+ */
+export async function cambiarVerEnDrive(_previo: unknown, formulario: FormData) {
+  const clienteId = String(formulario.get("clienteId") ?? "");
+  const ver = formulario.get("verEnDrive") === "si";
+
+  if (!(await esClienteReal(clienteId))) {
+    return { ok: false as const, motivo: "Ese cliente no existe." };
+  }
+
+  await mostrarDriveA(clienteId, ver);
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
@@ -429,6 +453,136 @@ export async function entregarCarpeta(
 
   revalidatePath("/gestion", "layout");
   return { ok: true, entregadas: cuantas };
+}
+
+// ---------------------------------------------------------------------------
+// Lo que solo puede hacer la agencia sobre una pieza
+
+/**
+ * Encuentra una pieza de una carpeta y dice con qué archivo se corresponde.
+ *
+ * Lo mismo que hace el portal, y por el mismo motivo: la pieza no es un
+ * archivo, así que su identificador no sirve para ir a buscarlo en Drive.
+ */
+async function laPieza(
+  carpetaId: string,
+  piezaId: string
+): Promise<{ estado: EstadoDePieza; archivoActual: string } | null> {
+  try {
+    const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+    for (const pieza of agrupadas) {
+      if (identidadDePieza(carpetaId, pieza.versiones[0].archivo.name) !== piezaId) {
+        continue;
+      }
+      return {
+        estado: await estadoDe(carpetaId, piezaId),
+        archivoActual: pieza.versiones[pieza.versiones.length - 1].archivo.id,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export type ResultadoDePieza =
+  | { ok: true; motivo: string }
+  | { ok: false; motivo: string };
+
+/**
+ * Reabre una pieza aprobada.
+ *
+ * **Aprobar es definitivo para el cliente, no para la agencia.** El dominio lo
+ * dice desde el principio —«solo una administradora puede reabrirla»— y esa
+ * administradora no existía: el día que un cliente aprobaba por error, no
+ * había salida.
+ *
+ * Además devuelve el archivo a su carpeta de trabajo. Sin eso quedaría
+ * reabierta en la aplicación y el archivo en el cajón de lo terminado, y en
+ * Drive es donde la agencia trabaja.
+ */
+export async function reabrirPieza(
+  carpetaId: string,
+  piezaId: string
+): Promise<ResultadoDePieza> {
+  const cual = await laPieza(carpetaId, piezaId);
+  if (!cual) return { ok: false, motivo: "No encontré esa pieza." };
+
+  const r = aplicar(
+    {
+      estado: cual.estado.estado,
+      ronda: cual.estado.ronda,
+      rondasIncluidas: RONDAS_INCLUIDAS,
+      rondasExtra: cual.estado.rondasExtra,
+    },
+    { tipo: "reabrir", por: "El equipo" }
+  );
+  if (!r.ok) return { ok: false, motivo: r.motivo };
+
+  let pieza = anotar(
+    { ...cual.estado, estado: r.pieza.estado },
+    "reabierta_por_agencia",
+    "El equipo"
+  );
+
+  // La vuelta del archivo es una consecuencia, no una condición: si Drive no
+  // contesta, la pieza queda reabierta igual y se anota que no se pudo mover.
+  const cliente = await clienteDeCarpeta(carpetaId);
+  if (pieza.mudada && cliente) {
+    const vuelta = await devolverDesdeFinales(
+      cliente.id,
+      pieza.archivoMudado ?? cual.archivoActual,
+      carpetaId
+    );
+    pieza = vuelta.movida
+      ? anotar(
+          { ...pieza, mudada: false, archivoMudado: undefined },
+          "devuelta_a_su_carpeta",
+          "La aplicación"
+        )
+      : anotar(pieza, "no_se_pudo_devolver", "La aplicación", vuelta.motivo);
+  }
+
+  await guardarPieza(piezaId, pieza);
+  revalidatePath("/gestion", "layout");
+  return { ok: true, motivo: "La pieza volvió a manos del cliente." };
+}
+
+/**
+ * Habilita la revisión adicional que pidió el cliente.
+ *
+ * Se agotaron las rondas incluidas, el cliente pidió una más, y el portal le
+ * dijo «te avisamos cuando la habiliten». No había dónde habilitarla: la pieza
+ * quedaba esperando para siempre.
+ */
+export async function habilitarExtraDePieza(
+  carpetaId: string,
+  piezaId: string
+): Promise<ResultadoDePieza> {
+  const cual = await laPieza(carpetaId, piezaId);
+  if (!cual) return { ok: false, motivo: "No encontré esa pieza." };
+
+  const r = aplicar(
+    {
+      estado: cual.estado.estado,
+      ronda: cual.estado.ronda,
+      rondasIncluidas: RONDAS_INCLUIDAS,
+      rondasExtra: cual.estado.rondasExtra,
+    },
+    { tipo: "habilitar_extra" }
+  );
+  if (!r.ok) return { ok: false, motivo: r.motivo };
+
+  await guardarPieza(
+    piezaId,
+    anotar(
+      { ...cual.estado, estado: r.pieza.estado, rondasExtra: r.pieza.rondasExtra },
+      "extra_habilitada",
+      "El equipo"
+    )
+  );
+  revalidatePath("/gestion", "layout");
+  return { ok: true, motivo: "El cliente ya puede pedir los cambios." };
 }
 
 // ---------------------------------------------------------------------------

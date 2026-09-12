@@ -18,6 +18,18 @@ vi.mock("@/lib/google", () => ({
   datosDeCarpeta: vi.fn(),
   subcarpetasDe: vi.fn(),
 }));
+// El cliente: acá solo interesa si tiene acceso a Drive, que decide si los
+// links se mandan al navegador o no.
+vi.mock("@/lib/clientes", () => ({
+  clientePorId: vi.fn(async () => ({
+    id: "cliente",
+    nombre: "Cafe Otono",
+    habilitado: true,
+    token: "t",
+    tag: "tag",
+    verEnDrive: false,
+  })),
+}));
 vi.mock("@/lib/piezas", () => ({
   piezasDeLaCarpeta: vi.fn(),
   estadosDe: vi.fn(),

@@ -19,7 +19,19 @@
  * saltos de línea. Metidos tal cual en una cabecera, permiten inyectar otras
  * cabeceras. Por eso el nombre se limpia antes, siempre.
  */
-export function cabeceraDeDescarga(nombre: string): string {
+export function cabeceraDeDescarga(
+  nombre: string,
+  /**
+   * `inline` lo abre en el navegador en vez de bajarlo.
+   *
+   * Es para los PDF de varias páginas: la miniatura solo muestra la primera,
+   * y el visor del propio navegador las muestra todas sin que tengamos que
+   * escribir uno. Solo se usa con tipos que el navegador sabe mostrar —un
+   * `inline` sobre cualquier cosa deja que el navegador decida qué hacer con
+   * ella, y eso no se le regala a un archivo que subió cualquiera—.
+   */
+  como: "attachment" | "inline" = "attachment"
+): string {
   const limpio = nombre
     // Saltos de línea y retornos: la vía de inyección de cabeceras.
     .replace(/[\r\n]/g, " ")
@@ -32,5 +44,5 @@ export function cabeceraDeDescarga(nombre: string): string {
   // Versión de repuesto: solo lo que cualquier navegador entiende sin dudar.
   const simple = seguro.replace(/[^\w.-]+/g, "_").slice(0, 120) || "archivo";
 
-  return `attachment; filename="${simple}"; filename*=UTF-8''${encodeURIComponent(seguro)}`;
+  return `${como}; filename="${simple}"; filename*=UTF-8''${encodeURIComponent(seguro)}`;
 }

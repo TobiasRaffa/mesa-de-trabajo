@@ -39,6 +39,7 @@ const cliente = (id: string) => ({
   habilitado: true,
   token: "t-" + id,
   tag: "tag-" + id,
+  verEnDrive: false,
 });
 
 const archivo = (parents: string[] | undefined) => ({

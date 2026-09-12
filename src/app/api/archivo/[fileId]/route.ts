@@ -19,7 +19,18 @@ import { archivoAutorizado, quienPide } from "@/lib/permisos";
 const sinDetalle = (mensaje: string, codigo: number) =>
   new Response(mensaje, { status: codigo, headers: { "Content-Type": "text/plain" } });
 
-export async function GET(_req: NextRequest, ctx: RouteContext<"/api/archivo/[fileId]">) {
+/**
+ * Los tipos que el navegador puede mostrar sin bajarlos, y que además son
+ * seguros de mostrar en nuestro propio dominio.
+ *
+ * Es una lista cerrada a propósito: dejar que el navegador decida qué hacer
+ * con un archivo servido desde acá es lo que convierte una subida en una
+ * página nuestra. Hoy alcanza con el PDF, que es el caso real —la miniatura
+ * muestra solo la primera página—.
+ */
+const SE_PUEDE_MIRAR = new Set(["application/pdf"]);
+
+export async function GET(req: NextRequest, ctx: RouteContext<"/api/archivo/[fileId]">) {
   const { fileId } = await ctx.params;
 
   // **Quién pregunta, antes que qué pide.** Sin haber entrado por alguna
@@ -39,7 +50,12 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/api/archivo/[fi
 
     const cabeceras = new Headers({
       "Content-Type": archivo.mimeType || "application/octet-stream",
-      "Content-Disposition": cabeceraDeDescarga(archivo.name),
+      "Content-Disposition": cabeceraDeDescarga(
+        archivo.name,
+        req.nextUrl.searchParams.has("ver") && SE_PUEDE_MIRAR.has(archivo.mimeType)
+          ? "inline"
+          : "attachment"
+      ),
       "X-Content-Type-Options": "nosniff",
       // Es contenido de un cliente: nunca en cachés compartidas. Y corto,
       // porque un archivo final que se reemplaza tiene que bajar el nuevo.

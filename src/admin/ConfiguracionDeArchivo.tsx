@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useTransition } from "react";
+
 // Lo que se configura de un archivo suelto.
 //
 // Existe para los casos que no entran en la regla de la carpeta: «esta la
@@ -10,6 +12,7 @@
 import { Visibilidad } from "@/admin/Visibilidad";
 import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import { Responsable } from "@/admin/Responsable";
+import { habilitarExtraDePieza, reabrirPieza } from "@/app/(admin)/gestion/acciones";
 import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
@@ -64,6 +67,9 @@ export function ConfiguracionDeArchivo({
         </div>
       </section>
 
+      {/* ------------------------ Lo que solo puede la agencia ----------- */}
+      <AccionesDeAgencia archivo={archivo} carpetaId={carpetaId} alGuardar={alGuardar} />
+
       {archivo.enlaceDrive && (
         <section>
           <h4 className={TITULO}>El archivo</h4>
@@ -79,5 +85,85 @@ export function ConfiguracionDeArchivo({
         </section>
       )}
     </div>
+  );
+}
+
+/**
+ * Reabrir y habilitar la revisión adicional.
+ *
+ * Son las dos cosas que el dominio reservó para la agencia desde el principio
+ * y que no tenían botón: aprobar era definitivo para todos —no había salida el
+ * día que un cliente aprobaba por error— y el cliente que pedía una revisión
+ * adicional esperaba para siempre.
+ *
+ * Cada una aparece solo cuando se puede hacer. Un botón que existe siempre y
+ * contesta «no se puede» la mitad de las veces enseña a no leerlo.
+ */
+function AccionesDeAgencia({
+  archivo,
+  carpetaId,
+  alGuardar,
+}: {
+  archivo: NodoArchivo;
+  carpetaId: string;
+  alGuardar: () => void;
+}) {
+  const [dicho, setDicho] = useState<string | null>(null);
+  const [yendo, empezar] = useTransition();
+
+  const puedeReabrir = archivo.estado === "final";
+  const esperaExtra = archivo.estado === "extra_pedida";
+  if (!puedeReabrir && !esperaExtra) return null;
+
+  const hacer = (que: () => Promise<{ ok: boolean; motivo: string }>) =>
+    empezar(async () => {
+      const r = await que();
+      setDicho(r.motivo);
+      if (r.ok) alGuardar();
+    });
+
+  return (
+    <section>
+      <h4 className={TITULO}>{esperaExtra ? "Revisión adicional" : "Aprobada"}</h4>
+
+      {esperaExtra ? (
+        <>
+          <p className="mt-1 text-menudo text-apagado">
+            El cliente se quedó sin rondas y pidió una más. Está esperando.
+          </p>
+          <button
+            type="button"
+            disabled={yendo}
+            onClick={() => hacer(() => habilitarExtraDePieza(carpetaId, archivo.id))}
+            className="mt-2 min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
+                       text-white transition-colors hover:bg-acento-hover disabled:opacity-40"
+          >
+            {yendo ? "…" : "Habilitar una revisión más"}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-menudo text-apagado">
+            Reabrirla se la devuelve al cliente para que la mire de nuevo, y saca
+            el archivo de «Entregas finales».
+          </p>
+          <button
+            type="button"
+            disabled={yendo}
+            onClick={() => hacer(() => reabrirPieza(carpetaId, archivo.id))}
+            className="mt-2 min-h-toque border-2 border-tinta px-4 text-normal font-bold
+                       tracking-tight text-tinta transition-colors hover:bg-hueco disabled:opacity-40"
+          >
+            {yendo ? "…" : "Reabrir"}
+          </button>
+        </>
+      )}
+
+      {dicho && (
+        <p aria-live="polite" className="mt-2 text-menudo font-semibold text-tinta-suave">
+          {dicho}
+        </p>
+      )}
+    </section>
   );
 }

@@ -33,6 +33,20 @@ export type AjustesDeCliente = {
    * Vacío significa que todavía no se le puso: el portal no deja entrar.
    */
   tag: string;
+  /**
+   * Si a este cliente se le muestran los links a Drive.
+   *
+   * **Apagado por omisión, y con razón.** El portal existe para que el cliente
+   * no necesite Drive: los archivos se ven y se bajan por nuestro servidor,
+   * con nuestro permiso. Un link a Drive solo funciona si la agencia además le
+   * compartió la carpeta desde Google, y si no lo hizo, el cliente toca el
+   * botón y aterriza en una pantalla de Google pidiéndole permiso que no tiene
+   * —que es peor que no tener el botón—.
+   *
+   * Se prende cuando la agencia sí le compartió la carpeta. Como eso pasa
+   * afuera de la aplicación, no hay forma de saberlo solo: hay que decirlo.
+   */
+  verEnDrive: boolean;
 };
 
 export type Cliente = AjustesDeCliente & {
@@ -68,6 +82,7 @@ async function leerGuardado(): Promise<Record<string, AjustesDeCliente>> {
       habilitado: typeof v.habilitado === "boolean" ? v.habilitado : true,
       token: v.token,
       tag: typeof v.tag === "string" ? v.tag : "",
+      verEnDrive: v.verEnDrive === true,
     };
   }
   return salida;
@@ -92,7 +107,7 @@ export async function todosLosClientes(): Promise<Cliente[]> {
     let ajustes = guardado[carpeta.id];
     if (!ajustes) {
       // Sin tag, el portal no deja entrar: es lo que hay que completar.
-      ajustes = { habilitado: true, token: nuevoToken(), tag: "" };
+      ajustes = { habilitado: true, token: nuevoToken(), tag: "", verEnDrive: false };
       guardado[carpeta.id] = ajustes;
       nuevos[carpeta.id] = ajustes;
     }
@@ -119,25 +134,42 @@ export async function clientePorId(id: string): Promise<Cliente | null> {
   return (await todosLosClientes()).find((c) => c.id === id) ?? null;
 }
 
-export async function habilitarCliente(id: string, habilitado: boolean): Promise<void> {
-  const guardado = await leerGuardado();
-  const actual = guardado[id];
+/**
+ * Cambia una cosa de un cliente y deja el resto como estaba.
+ *
+ * Antes cada función escribía el objeto entero, enumerando todos los campos.
+ * Eso significa que agregar un campo nuevo los rompe a todos a la vez, y de la
+ * peor manera: compilan, corren, y borran en silencio lo que no nombraron.
+ * Acá se lee lo que hay y se le pega el cambio encima.
+ */
+async function cambiar(id: string, parche: Partial<AjustesDeCliente>): Promise<void> {
+  const actual = (await leerGuardado())[id];
   await almacen.guardar(id, {
-    habilitado,
+    habilitado: actual?.habilitado ?? true,
     token: actual?.token ?? nuevoToken(),
     tag: actual?.tag ?? "",
+    verEnDrive: actual?.verEnDrive ?? false,
+    ...parche,
   });
+}
+
+export async function habilitarCliente(id: string, habilitado: boolean): Promise<void> {
+  await cambiar(id, { habilitado });
 }
 
 /** Le pone o le cambia el tag a un cliente. */
 export async function ponerTag(id: string, tag: string): Promise<void> {
-  const guardado = await leerGuardado();
-  const actual = guardado[id];
-  await almacen.guardar(id, {
-    habilitado: actual?.habilitado ?? true,
-    token: actual?.token ?? nuevoToken(),
-    tag: tag.trim().slice(0, 60),
-  });
+  await cambiar(id, { tag: tag.trim().slice(0, 60) });
+}
+
+/**
+ * Si a este cliente se le muestran los links a Drive.
+ *
+ * Lo decide la agencia porque es la única que lo sabe: compartir la carpeta
+ * pasa en Drive, afuera de la aplicación.
+ */
+export async function mostrarDriveA(id: string, verEnDrive: boolean): Promise<void> {
+  await cambiar(id, { verEnDrive });
 }
 
 /**
@@ -147,12 +179,7 @@ export async function ponerTag(id: string, tag: string): Promise<void> {
  * de la empresa del cliente, un link reenviado a quien no correspondía—.
  */
 export async function renovarLink(id: string): Promise<string> {
-  const guardado = await leerGuardado();
   const token = nuevoToken();
-  await almacen.guardar(id, {
-    habilitado: guardado[id]?.habilitado ?? true,
-    token,
-    tag: guardado[id]?.tag ?? "",
-  });
+  await cambiar(id, { token });
   return token;
 }

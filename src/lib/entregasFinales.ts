@@ -81,3 +81,45 @@ export async function mudarAFinales(
     };
   }
 }
+
+/**
+ * Devuelve un archivo desde «Entregas finales» a su carpeta de trabajo.
+ *
+ * Es lo que hace falta al reabrir una pieza aprobada: sin esto quedaría
+ * reabierta en la aplicación y el archivo seguiría en el cajón de lo
+ * terminado, que es la peor mezcla —lo que dice la pantalla y lo que hay en
+ * Drive dejarían de coincidir, y en Drive es donde la agencia trabaja—.
+ *
+ * Nunca lanza, por el mismo motivo que su gemela: quien llama está en medio de
+ * guardar una decisión y no puede quedarse a mitad de camino.
+ */
+export async function devolverDesdeFinales(
+  clienteId: string,
+  archivoId: string,
+  carpetaDeTrabajo: string
+): Promise<ResultadoDeMudanza> {
+  try {
+    const finales = await carpetaDeFinales(clienteId);
+    if (!finales) {
+      return { movida: false, motivo: "El cliente no tiene «Entregas finales»." };
+    }
+
+    const datos = await metadatosArchivo(archivoId);
+    const padres = datos.parents ?? [];
+
+    // Ya está donde tiene que estar: alguien lo movió a mano mientras tanto.
+    if (padres.includes(carpetaDeTrabajo)) return { movida: true };
+
+    if (!padres.includes(finales)) {
+      return { movida: false, motivo: "El archivo ya no está en «Entregas finales»." };
+    }
+
+    await moverArchivo(archivoId, finales, carpetaDeTrabajo);
+    return { movida: true };
+  } catch (error) {
+    return {
+      movida: false,
+      motivo: error instanceof Error ? error.message : "Drive no contestó.",
+    };
+  }
+}

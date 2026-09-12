@@ -26,6 +26,7 @@ import {
 import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
+import { clientePorId } from "@/lib/clientes";
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 
 /** Una vuelta anterior de la misma pieza. */
@@ -42,6 +43,14 @@ export type PiezaDeCarpeta = EstadoDePieza & {
   id: string;
   nombre: string;
   driveFileId: string;
+  /**
+   * Si es un PDF.
+   *
+   * La miniatura de un PDF es su primera página y nada más. Para verlo entero
+   * hay que abrir el archivo de verdad, y el visor del propio navegador las
+   * muestra todas: no hace falta que escribamos uno.
+   */
+  esPdf: boolean;
   modificado?: string;
   /** El archivo en Drive: el de la vuelta que se está mirando. */
   enlaceDrive?: string;
@@ -142,6 +151,21 @@ export async function portalDelCliente(
 ): Promise<PortalDeCliente> {
   const cliente = await datosDeCarpeta(raiz);
 
+  /**
+   * Si a este cliente se le muestran los links a Drive.
+   *
+   * **Apagado, los links no se mandan al navegador.** No alcanza con no
+   * dibujarlos: un link que lleva a una pantalla de Google pidiendo un permiso
+   * que el cliente no tiene es peor que no tener botón, y lo que no se manda
+   * no se puede dibujar por accidente.
+   *
+   * El portal existe justamente para que no haga falta Drive: ver y descargar
+   * pasan por nuestro servidor. Esto es para los clientes a los que la agencia
+   * además les compartió la carpeta, que es algo que pasa afuera de acá.
+   */
+  const conDrive = (await clientePorId(raiz))?.verEnDrive ?? false;
+  const siDrive = (url?: string) => (conDrive ? url : undefined);
+
   const todas = await carpetasVisiblesBajo(raiz, [], 0);
 
   // El link de una carpeta muestra esa y lo que tenga adentro, no el resto.
@@ -230,7 +254,7 @@ export async function portalDelCliente(
         // El camino completo, para no tener dos «Semana 1» idénticas en la
         // lista y no saber de cuál mes es cada una.
         nombre: carpeta.camino.length > 0 ? carpeta.camino.join(" / ") : carpeta.name,
-        enlaceDrive: carpeta.webViewLink,
+        enlaceDrive: siDrive(carpeta.webViewLink),
         vista,
         piezas: aLaVista.map(({ pieza, suya }) => {
           const versiones = pieza.versiones.map((v, i) => ({
@@ -239,7 +263,7 @@ export async function portalDelCliente(
             numero: i + 1,
             driveFileId: v.archivo.id,
             modificado: v.archivo.modifiedTime,
-            enlaceDrive: v.archivo.webViewLink,
+            enlaceDrive: siDrive(v.archivo.webViewLink),
             entregadaEl: v.archivo.modifiedTime
               ? new Date(v.archivo.modifiedTime)
               : new Date(),
@@ -251,6 +275,9 @@ export async function portalDelCliente(
           return {
             ...guardado,
             id: suya,
+            esPdf:
+              pieza.versiones[pieza.versiones.length - 1].archivo.mimeType ===
+              "application/pdf",
             nombre: pieza.titulo,
             driveFileId: ultima.driveFileId,
             modificado: ultima.modificado,
@@ -270,7 +297,7 @@ export async function portalDelCliente(
   );
 
   return {
-    cliente: { id: raiz, nombre: cliente.name, enlaceDrive: cliente.webViewLink },
+    cliente: { id: raiz, nombre: cliente.name, enlaceDrive: siDrive(cliente.webViewLink) },
     // Una carpeta vacía no se muestra: no hay nada que revisar adentro.
     //
     // «Entregas finales» va al final de la lista, siempre. Es lo terminado, y

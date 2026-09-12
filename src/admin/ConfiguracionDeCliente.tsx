@@ -8,7 +8,11 @@
 // tiene para revisar, si el portal está prendido—.
 
 import { useActionState, useEffect } from "react";
-import { cambiarCliente, renovarLinkDeCliente } from "@/app/(admin)/gestion/acciones";
+import {
+  cambiarCliente,
+  cambiarVerEnDrive,
+  renovarLinkDeCliente,
+} from "@/app/(admin)/gestion/acciones";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
 import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import { Responsable } from "@/admin/Responsable";
@@ -29,11 +33,12 @@ export function ConfiguracionDeCliente({
 }) {
   const [estado, guardar, esperando] = useActionState(cambiarCliente, null);
   const [estadoLink, renovar, renovando] = useActionState(renovarLinkDeCliente, null);
+  const [estadoDrive, verDrive, cambiandoDrive] = useActionState(cambiarVerEnDrive, null);
   const apagado = !cliente.habilitado;
 
   useEffect(() => {
-    if (estado?.ok || estadoLink?.ok) alGuardar();
-  }, [estado, estadoLink, alGuardar]);
+    if (estado?.ok || estadoLink?.ok || estadoDrive?.ok) alGuardar();
+  }, [estado, estadoLink, estadoDrive, alGuardar]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -94,6 +99,50 @@ export function ConfiguracionDeCliente({
         </div>
       </section>
 
+      {/* ---------------------------- Links a Drive ---------------------- */}
+      <section>
+        <h4 className={TITULO}>¿Le compartiste la carpeta en Drive?</h4>
+        <p className="mt-1 text-menudo text-apagado">
+          El portal no lo necesita: ve y descarga por nuestro servidor. Esto es
+          para mostrarle además los links a Drive, y solo sirve si le compartiste
+          la carpeta desde Google. Si no, el link lo lleva a una pantalla
+          pidiéndole un permiso que no tiene.
+        </p>
+        <form action={verDrive} className="mt-2 flex">
+          <input type="hidden" name="clienteId" value={cliente.id} />
+          <button
+            type="submit"
+            name="verEnDrive"
+            value="si"
+            disabled={cambiandoDrive}
+            aria-pressed={cliente.verEnDrive}
+            className={`h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
+                        transition-colors disabled:opacity-40 ${
+                          cliente.verEnDrive
+                            ? "bg-tinta text-lienzo"
+                            : "text-tinta hover:bg-hueco"
+                        }`}
+          >
+            Sí
+          </button>
+          <button
+            type="submit"
+            name="verEnDrive"
+            value="no"
+            disabled={cambiandoDrive}
+            aria-pressed={!cliente.verEnDrive}
+            className={`h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
+                        tracking-tight transition-colors disabled:opacity-40 ${
+                          cliente.verEnDrive
+                            ? "text-tinta hover:bg-hueco"
+                            : "bg-tinta text-lienzo"
+                        }`}
+          >
+            No
+          </button>
+        </form>
+      </section>
+
       {/* ------------------------------- El acceso ----------------------- */}
       <section>
         <h4 className={TITULO}>Acceso al portal</h4>
@@ -128,7 +177,7 @@ export function ConfiguracionDeCliente({
         </form>
       </section>
 
-      {[estado, estadoLink]
+      {[estado, estadoLink, estadoDrive]
         .filter((r) => r && !r.ok)
         .map((r, i) => (
           <p key={i} aria-live="polite" className="text-menudo font-semibold text-alerta">
