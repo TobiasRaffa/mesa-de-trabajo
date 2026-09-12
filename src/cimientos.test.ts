@@ -363,25 +363,28 @@ describe("las fronteras, revisadas a mano", () => {
 describe("las puertas", () => {
   const leer = (relativo: string) => readFileSync(path.join(RAIZ, relativo), "utf8");
 
-  it("el proxy cierra gestión entera y el diagnóstico", () => {
+  it("el proxy marca gestión entera y el diagnóstico", () => {
     // Va en src/ y no en la raíz: la documentación de Next pide que quede al
     // mismo nivel que `app`, y acá `app` vive dentro de `src`. Puesto en la
     // raíz el archivo se ignora en silencio -- ninguna pantalla se protege y
     // nada avisa. Pasó, y por eso esta prueba nombra la ruta exacta.
     const proxy = leer("src/proxy.ts");
 
-    // No alcanza con que el archivo exista: tiene que cubrir estas rutas.
+    // La puerta de gestión se sacó a pedido: adentro de la agencia era
+    // fastidio y nada más. Lo que quedó es una marca de «este navegador es el
+    // del equipo», y las rutas que sirven archivos la usan para saber quién
+    // pide. Sin ella, gestión se queda sin miniaturas.
     for (const ruta of ['"/gestion"', '"/gestion/:path*"', '"/diagnostico"']) {
       expect(
         proxy,
-        `El proxy no cubre ${ruta}. Sin eso esa pantalla abre sin contraseña.`
+        `El proxy no cubre ${ruta}, así que ahí no se marca el navegador del equipo.`
       ).toContain(ruta);
     }
 
     expect(
       proxy,
-      "El proxy tiene que comprobar la galleta firmada, no la contraseña cruda."
-    ).toContain("galletaDeGestionValida");
+      "La marca se firma con la clave del equipo, no se inventa."
+    ).toContain("valorDeGalletaDeGestion");
   });
 
   it("toda acción del portal pregunta quién entró", () => {

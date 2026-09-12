@@ -5,29 +5,30 @@
 // **Por qué viven acá y no en la ficha de cada cliente.** La clave no se toca
 // nunca: se pone una vez, al dar de alta, y después se mira el día que alguien
 // no puede entrar. Estaba arriba de todo en la configuración del cliente,
-// delante de lo que sí se usa todos los días —quién lo lleva, cuántos días
-// tiene para revisar, si el portal está prendido—, y lo empujaba hacia abajo.
+// delante de lo que sí se usa todos los días, y lo empujaba hacia abajo.
 //
-// Juntas también se leen mejor: cuando hace falta una clave, el que la busca
-// suele estar al teléfono con el cliente, y tenerlas todas en una lista es más
-// rápido que abrir la ficha del cliente y bajar.
+// Juntas también se buscan mejor: cuando hace falta una clave, el que la busca
+// suele estar al teléfono con el cliente.
 //
-// De cada cliente se muestra **solo el nombre de la carpeta**. Es lo único que
-// hace falta para saber cuál es.
+// **La clave no está escrita en la pantalla.** No es que esté tapada con
+// puntitos: el texto no sale del servidor hasta que alguien lo pide con la
+// contraseña del equipo. Lo que no se manda no queda en la pantalla para el
+// que pasa por atrás, ni en la memoria del navegador.
 //
-// **Se ven escritas, sin pedir nada.** Durante un tiempo había que volver a
-// escribir la contraseña del equipo para verlas: entrar a gestión ya la pide
-// una vez, y era la misma, así que lo único que agregaba era fastidio. Quién
-// puede ver una clave va a ser cuestión de roles, cuando existan los usuarios.
+// Son dos botones y no uno porque son dos cosas distintas: **ver** es para
+// leérsela por teléfono a alguien que no puede entrar, y **cambiar** es dejar
+// afuera a quien tenga la vieja. Un solo botón que hiciera las dos obligaría a
+// abrir un campo de edición cada vez que solo se quería mirar.
 
-import { useActionState } from "react";
-import { ponerTagDeCliente } from "@/app/(admin)/gestion/acciones";
+import { useActionState, useState } from "react";
+import { ponerTagDeCliente, verClaveDeCliente } from "@/app/(admin)/gestion/acciones";
 import { BOTON, CAMPO, ETIQUETA, TITULO } from "@/admin/estilos";
 
 export type ClienteConClave = {
   id: string;
   nombre: string;
-  clave: string;
+  /** Si tiene una puesta. El texto **no** viaja hasta que alguien lo pide. */
+  tieneClave: boolean;
 };
 
 export function ClavesDeClientes({ clientes }: { clientes: ClienteConClave[] }) {
@@ -49,44 +50,117 @@ export function ClavesDeClientes({ clientes }: { clientes: ClienteConClave[] }) 
   );
 }
 
+type Modo = null | "ver" | "cambiar";
+
 function UnaClave({ cliente }: { cliente: ClienteConClave }) {
-  const [estado, guardar, guardando] = useActionState(ponerTagDeCliente, null);
+  const [modo, setModo] = useState<Modo>(null);
+  const [estadoVer, verClave, viendo] = useActionState(verClaveDeCliente, null);
+  const [estadoTag, guardarTag, guardando] = useActionState(ponerTagDeCliente, null);
+
+  const revelada = estadoVer?.ok ? estadoVer.clave : null;
+  const fallo = [estadoVer, estadoTag].find((r) => r && !r.ok);
+
+  function cerrar() {
+    setModo(null);
+  }
 
   return (
     <li className="flex flex-col gap-2 border-b border-linea py-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className={TITULO}>{cliente.nombre}</h3>
-        {!cliente.clave && <span className={ETIQUETA}>falta</span>}
-        {estado?.ok && (
+        <h3 className={`${TITULO} min-w-0 flex-1`}>{cliente.nombre}</h3>
+
+        {!cliente.tieneClave && <span className={ETIQUETA}>falta</span>}
+
+        {estadoTag?.ok && (
           <span className="text-micro font-extrabold uppercase tracking-wider text-acento">
             guardada
           </span>
         )}
+
+        {modo === null && (
+          <>
+            <button type="button" onClick={() => setModo("ver")} className={BOTON}>
+              Ver
+            </button>
+            <button type="button" onClick={() => setModo("cambiar")} className={BOTON}>
+              Cambiar
+            </button>
+          </>
+        )}
+
+        {modo !== null && (
+          <button type="button" onClick={cerrar} className={BOTON}>
+            Cerrar
+          </button>
+        )}
       </div>
 
-      <form action={guardar} className="flex flex-wrap items-center gap-2">
-        <input type="hidden" name="clienteId" value={cliente.id} />
-        <input
-          name="tag"
-          type="text"
-          // `key` con la clave guardada: si no, después de cambiarla React
-          // reusa el campo y sigue mostrando lo que había escrito antes.
-          key={cliente.clave}
-          defaultValue={cliente.clave}
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="todavía no tiene"
-          aria-label={`Clave de ${cliente.nombre}`}
-          className={`${CAMPO} min-w-48 flex-1`}
-        />
-        <button type="submit" disabled={guardando} className={BOTON}>
-          {guardando ? "…" : "Guardar"}
-        </button>
-      </form>
+      {/* ------------------------------- Ver ----------------------------- */}
+      {modo === "ver" &&
+        (revelada === null ? (
+          <form action={verClave} className="flex flex-wrap items-center gap-2">
+            <input type="hidden" name="clienteId" value={cliente.id} />
+            <input
+              name="contrasena"
+              type="password"
+              autoFocus
+              autoComplete="off"
+              placeholder="contraseña del equipo"
+              aria-label={`Contraseña para ver la clave de ${cliente.nombre}`}
+              className={`${CAMPO} w-56`}
+            />
+            <button type="submit" disabled={viendo} className={BOTON}>
+              {viendo ? "…" : "Mostrar"}
+            </button>
+          </form>
+        ) : (
+          <p className="flex flex-wrap items-center gap-2 text-normal">
+            <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
+              La clave es
+            </span>
+            <code className="bg-hueco px-2 py-1 font-mono font-bold">
+              {revelada || "(todavía no tiene)"}
+            </code>
+          </p>
+        ))}
 
-      {estado && !estado.ok && (
+      {/* ----------------------------- Cambiar --------------------------- */}
+      {modo === "cambiar" && (
+        <form action={guardarTag} className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="clienteId" value={cliente.id} />
+          <input
+            name="tag"
+            type="text"
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="la clave nueva"
+            aria-label={`Clave nueva de ${cliente.nombre}`}
+            className={`${CAMPO} min-w-44 flex-1`}
+          />
+          <input
+            name="contrasena"
+            type="password"
+            autoComplete="off"
+            placeholder="contraseña del equipo"
+            aria-label="Contraseña del equipo"
+            className={`${CAMPO} w-48`}
+          />
+          <button type="submit" disabled={guardando} className={BOTON}>
+            {guardando ? "…" : "Guardar"}
+          </button>
+        </form>
+      )}
+
+      {modo === "cambiar" && (
+        <p className="text-menudo text-apagado">
+          Quien tenga la clave vieja deja de entrar. Avisale al cliente antes.
+        </p>
+      )}
+
+      {fallo && !fallo.ok && (
         <p aria-live="polite" className="text-menudo font-semibold text-alerta">
-          {estado.motivo}
+          {fallo.motivo}
         </p>
       )}
     </li>

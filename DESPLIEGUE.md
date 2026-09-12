@@ -9,6 +9,25 @@ mitad de camino que faltaba un paso.
 
 ---
 
+## ANTES QUE NADA: volver a poner la puerta de gestión
+
+**Hoy `/gestion` abre sin pedir nada.** Se sacó la contraseña a pedido, porque
+adentro de la agencia escribirla todos los días en cada máquina era fastidio y
+nada más: quien llega a la computadora ya está adentro de la oficina.
+
+En internet eso no vale. Con la dirección alcanza para entrar, y adentro está
+el árbol de todos los clientes, sus chats, sus links de acceso y el tablero.
+
+Lo que hay que hacer, cuando llegue el momento: volver a poner en `src/proxy.ts`
+la puerta que redirige a una pantalla de contraseña. Está en el historial —
+commit «Una puerta por mundo, y nada que pueda esquivarla»— y se puede
+recuperar tal cual estaba.
+
+**Esto es bloqueante.** No es «conviene»: sin esto, subir la aplicación es
+publicar los datos de todos los clientes.
+
+---
+
 ## Lo primero, porque no es opcional
 
 **En internet la aplicación no puede guardar en archivos.** Hoy, en esta
@@ -111,9 +130,10 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
       dice archivos, algo está mal y hay que parar acá.
 - [ ] Abrir `/` a secas: no tiene que llevar a ningún lado. Es la dirección que
       queda cuando alguien borra el final del link.
-- [ ] Abrir `/gestion`. Tiene que llevarte a `/gestion/entrar` y pedir la
-      contraseña del equipo. Probá también `/gestion/chats` y `/diagnostico`
-      directo: las dos tienen que mandarte a la misma puerta.
+- [ ] Abrir `/gestion`. **Tiene que pedir la contraseña del equipo.** Si abre
+      derecho, la puerta no se volvió a poner: parar acá y leer lo primero de
+      este documento. Probá también `/gestion/chats` y `/diagnostico` directo:
+      las dos tienen que mandarte a la misma puerta.
 - [ ] Crear un cliente de prueba con una carpeta de Drive de prueba, ponerle un
       tag, abrir su link en una ventana de incógnito. Tiene que pedir el tag, y
       con el tag mal no tiene que dejar pasar.
@@ -129,9 +149,11 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
 
 ## Lo que todavía no está
 
-- **Nadie entra con usuario y contraseña propios.** Gestión tiene una sola
-  clave compartida para toda la agencia, y hay una puerta real que la pide
-  antes de mostrar nada. Lo que no hay es un usuario por persona: no se sabe
+- **Gestión no tiene puerta.** Ver lo primero de este documento: es lo que hay
+  que hacer antes de subirla. Lo único que pide contraseña hoy es ver o cambiar
+  la clave de un cliente.
+- **Nadie entra con usuario y contraseña propios.** Cuando se vuelva a poner la
+  puerta va a ser una sola clave compartida para toda la agencia. No se sabe
   quién de las tres hizo cada cosa. Se decidió así por ahora.
 - **El freno de intentos vive en memoria.** Sirve en una computadora. En
   Netlify, donde cada pedido puede caer en una máquina distinta, no frena nada:

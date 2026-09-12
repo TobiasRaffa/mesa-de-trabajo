@@ -14,10 +14,12 @@
 // aplicación ya sabe: si abriste la lista, las viste. Cerrada muestra cuántas
 // hay sin leer, que es lo único que hace falta saber de un vistazo.
 //
-// Lo que estaba sin leer **al abrir la pantalla** se sigue marcando en la lista
-// aunque ya se hayan dado por leídas. Si no, abrir la bandeja las volvería
-// todas iguales en el mismo instante y no habría forma de ver cuáles eran las
-// nuevas, que es justamente para lo que se abrió.
+// Lo que estaba sin leer **al abrir la pantalla** queda arriba, separado y
+// marcado, aunque ya se haya dado por leído. Si no, abrir la bandeja las
+// volvería todas iguales en el mismo instante y no habría forma de ver cuáles
+// eran las nuevas, que es justamente para lo que se abrió. La próxima vez que
+// se entre ya bajan al montón, que es lo que corresponde: dejaron de ser
+// nuevas cuando se las miró.
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
@@ -49,18 +51,12 @@ function aQuienes(aviso: Aviso): string[] {
 export function Bandeja({
   avisos,
   correoConfigurado,
-  plegable = true,
+  titulo,
 }: {
   avisos: Aviso[];
   correoConfigurado: boolean;
-  /**
-   * Si se puede cerrar.
-   *
-   * Se pliega cuando comparte pantalla con otra cosa. En su propia sección no:
-   * ahí la lista **es** la pantalla, y un título que repite el de arriba con
-   * una flecha al lado es una puerta que no lleva a ningún lado.
-   */
-  plegable?: boolean;
+  /** Cómo se llama. Es el título de la pantalla: no hay otro arriba. */
+  titulo: string;
 }) {
   const sinVer = avisos.filter((a) => !a.visto).length;
 
@@ -75,7 +71,10 @@ export function Bandeja({
 
   // Arranca abierta cuando hay algo nuevo. Si está todo leído, la novedad es
   // que no hay novedades, y para eso alcanza el título.
-  const [abierta, setAbierta] = useState(!plegable || sinVer > 0);
+  const nuevas = avisos.filter((a) => eranNuevas.has(a.id));
+  const viejas = avisos.filter((a) => !eranNuevas.has(a.id));
+
+  const [abierta, setAbierta] = useState(sinVer > 0);
   const [, marcar] = useTransition();
 
   useEffect(() => {
@@ -83,9 +82,8 @@ export function Bandeja({
   }, [abierta, sinVer]);
 
   return (
-    <section className={plegable ? "mt-10" : ""}>
-      {plegable && (
-      <h2 className="text-titulo font-extrabold tracking-tight">
+    <section>
+      <h1 className="text-grande font-extrabold tracking-tight">
         <button
           type="button"
           onClick={() => setAbierta((a) => !a)}
@@ -99,7 +97,7 @@ export function Bandeja({
           >
             <IconoFlecha />
           </span>
-          Novedades
+          {titulo}
           {sinVer > 0 && (
             <span className="bg-acento px-2 py-0.5 text-micro font-extrabold text-white">
               {sinVer} {sinVer === 1 ? "nueva" : "nuevas"}
@@ -111,8 +109,7 @@ export function Bandeja({
             </span>
           )}
         </button>
-      </h2>
-      )}
+      </h1>
 
       {!abierta ? null : (
         <>
@@ -125,57 +122,92 @@ export function Bandeja({
           {avisos.length === 0 ? (
             <p className="mt-4 text-normal text-apagado">Todavía no pasó nada.</p>
           ) : (
-            <ul className="mt-4 border-t border-linea">
-              {avisos.map((aviso) => {
-                const salida = COMO_SALIO[aviso.correo];
-                const nueva = eranNuevas.has(aviso.id);
-                const quienes = aQuienes(aviso);
-
-                return (
-                  <li
-                    key={aviso.id}
-                    className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-linea px-4 py-3 ${
-                      nueva ? "bg-acento-tenue/30" : ""
-                    }`}
-                  >
-                    {nueva && (
-                      <span
-                        aria-label="Nueva"
-                        className="h-2 w-2 shrink-0 self-center bg-acento"
-                      />
-                    )}
-                    <span className="cifras shrink-0 text-menudo text-apagado">
-                      {cuando.format(new Date(aviso.cuando))}
-                    </span>
-                    {/* Un mensaje se lee en Conversaciones; lo demás, en su carpeta. */}
-                    <Link
-                      href={
-                        aviso.clase === "escribio"
-                          ? "/gestion/chats"
-                          : `/gestion/cliente/${aviso.clienteId}/carpeta/${aviso.carpetaId}`
-                      }
-                      className="min-w-0 flex-1 text-normal underline-offset-4 hover:underline"
-                    >
-                      {aviso.texto}
-                    </Link>
-                    {quienes.length > 0 && (
-                      <span className="shrink-0 text-micro text-apagado">
-                        para {quienes.join(", ")}
-                      </span>
-                    )}
-                    {salida && (
-                      <span className={`shrink-0 text-micro ${salida.estilo}`}>
-                        {salida.texto}
-                        {aviso.detalleDelCorreo && ` · ${aviso.detalleDelCorreo}`}
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              {/* Las nuevas arriba y aparte. Mezcladas con el resto hay que
+                  leer renglón por renglón para encontrar cuáles eran, que es
+                  justamente lo que se vino a hacer al abrir. */}
+              {nuevas.length > 0 && (
+                <Grupo titulo={`Nuevas · ${nuevas.length}`} avisos={nuevas} nuevas />
+              )}
+              {viejas.length > 0 && (
+                <Grupo
+                  titulo={nuevas.length > 0 ? "Ya leídas" : "Todo lo anotado"}
+                  avisos={viejas}
+                />
+              )}
+            </>
           )}
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Un montón de avisos con su rótulo.
+ *
+ * Existe para que las nuevas y las viejas se dibujen con el mismo renglón. Dos
+ * listas escritas aparte se separan con el tiempo, y la que se toca menos
+ * termina mostrando una cosa distinta.
+ */
+function Grupo({
+  titulo,
+  avisos,
+  nuevas = false,
+}: {
+  titulo: string;
+  avisos: Aviso[];
+  nuevas?: boolean;
+}) {
+  return (
+    <div className="mt-5">
+      <h3 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+        {titulo}
+      </h3>
+      <ul className="mt-2 border-t border-linea">
+        {avisos.map((aviso) => {
+          const salida = COMO_SALIO[aviso.correo];
+          const quienes = aQuienes(aviso);
+
+          return (
+            <li
+              key={aviso.id}
+              className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-linea px-4 py-3 ${
+                nuevas ? "bg-acento-tenue/30" : ""
+              }`}
+            >
+              {nuevas && (
+                <span aria-label="Nueva" className="h-2 w-2 shrink-0 self-center bg-acento" />
+              )}
+              <span className="cifras shrink-0 text-menudo text-apagado">
+                {cuando.format(new Date(aviso.cuando))}
+              </span>
+              {/* Un mensaje se lee en Conversaciones; lo demás, en su carpeta. */}
+              <Link
+                href={
+                  aviso.clase === "escribio"
+                    ? "/gestion/chats"
+                    : `/gestion/cliente/${aviso.clienteId}/carpeta/${aviso.carpetaId}`
+                }
+                className="min-w-0 flex-1 text-normal underline-offset-4 hover:underline"
+              >
+                {aviso.texto}
+              </Link>
+              {quienes.length > 0 && (
+                <span className="shrink-0 text-micro text-apagado">
+                  para {quienes.join(", ")}
+                </span>
+              )}
+              {salida && (
+                <span className={`shrink-0 text-micro ${salida.estilo}`}>
+                  {salida.texto}
+                  {aviso.detalleDelCorreo && ` · ${aviso.detalleDelCorreo}`}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

@@ -25,6 +25,7 @@ import {
   type Vista,
   mostrarUOcultar,
 } from "@/lib/ajustes";
+import { clientePorId } from "@/lib/clientes";
 import {
   clienteDeCarpeta,
   esCarpetaDelCliente,
@@ -67,6 +68,7 @@ import {
 const RONDAS_INCLUIDAS = 2;
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
+import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
 import { correoValido } from "@/lib/equipo";
 import {
   contenidoDe,
@@ -208,16 +210,24 @@ export async function renovarLinkDeCliente(_previo: unknown, formulario: FormDat
  * pasar a nadie —ni con el link correcto—, que es el estado seguro mientras
  * alguien no decidió cuál va.
  *
- * **Ya no pide la contraseña de nuevo.** La pedía para que la clave no
- * estuviera escrita en pantalla para el que pasa por atrás, pero entrar a
- * gestión ya la pide una vez, y era la misma: escribirla dos veces no agregaba
- * nada más que fastidio. Quién puede ver una clave va a ser cuestión de roles,
- * cuando existan los usuarios.
+ * **Pide la contraseña del equipo.** Es lo único que la pide: gestión abre sin
+ * nada, pero la clave de un cliente es con lo que alguien entra a su portal, y
+ * no tiene por qué estar a mano de quien se sienta en la computadora un rato.
  */
 export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) {
   const clienteId = String(formulario.get("clienteId") ?? "");
   const tag = String(formulario.get("tag") ?? "").trim();
+  const contrasena = String(formulario.get("contrasena") ?? "");
 
+  if (!hayContrasena()) {
+    return {
+      ok: false as const,
+      motivo: "Falta configurar CLAVE_DE_ADMIN en .env.local.",
+    };
+  }
+  if (!contrasenaCorrecta(contrasena)) {
+    return { ok: false as const, motivo: "Esa contraseña no es." };
+  }
   if (!(await esClienteReal(clienteId))) {
     return { ok: false as const, motivo: "Ese cliente no existe." };
   }
@@ -228,6 +238,33 @@ export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) 
   await ponerTag(clienteId, tag);
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
+}
+
+/**
+ * Muestra la clave de un cliente, con la contraseña del equipo.
+ *
+ * **La clave no viaja al navegador hasta acá.** La pantalla solo sabe si el
+ * cliente tiene una o no; el texto llega recién cuando alguien lo pide y
+ * escribe la contraseña. Lo que no se manda no queda escrito en pantalla para
+ * el que pasa por atrás, ni en la memoria del navegador.
+ */
+export async function verClaveDeCliente(
+  _previo: unknown,
+  formulario: FormData
+): Promise<{ ok: true; clave: string } | { ok: false; motivo: string }> {
+  const clienteId = String(formulario.get("clienteId") ?? "");
+  const contrasena = String(formulario.get("contrasena") ?? "");
+
+  if (!hayContrasena()) {
+    return { ok: false, motivo: "Falta configurar CLAVE_DE_ADMIN en .env.local." };
+  }
+  if (!contrasenaCorrecta(contrasena)) {
+    return { ok: false, motivo: "Esa contraseña no es." };
+  }
+
+  const cliente = await clientePorId(clienteId);
+  if (!cliente) return { ok: false, motivo: "Ese cliente no existe." };
+  return { ok: true, clave: cliente.tag };
 }
 
 export async function pedirLinkDeCarpeta(carpetaId: string): Promise<

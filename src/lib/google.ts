@@ -54,6 +54,50 @@ async function tokenDeGoogle(): Promise<string> {
   return data.access_token;
 }
 
+/**
+ * Memoria corta de lo que Drive contestó.
+ *
+ * **Es lo que hace que la aplicación no se sienta lenta.** Cada listado es un
+ * viaje a Google de dos o tres décimas, y las pantallas repiten las mismas
+ * preguntas todo el tiempo: pasar de Clientes al Tablero y volver le
+ * preguntaba a Google exactamente lo mismo tres veces. Con esto, la segunda
+ * vez es instantánea.
+ *
+ * **Medio minuto, y por qué ese número.** Es el equilibrio entre dos cosas que
+ * se contradicen: que moverse por la aplicación sea inmediato, y que un
+ * archivo recién subido a Drive aparezca sin tener que esperar. Medio minuto
+ * cubre el ir y venir entre pantallas —que es lo que pasa todo el tiempo— y no
+ * llega a ser una espera cuando alguien sube algo y va a buscarlo.
+ *
+ * Lo que la aplicación misma cambia en Drive no espera: `moverArchivo` borra
+ * esta memoria. Lo único que puede tardar hasta medio minuto es lo que se hizo
+ * **afuera**, en Drive, que es donde no podemos enterarnos.
+ */
+const RECUERDO_MS = 30 * 1000;
+
+const recordado = new Map<string, { valor: unknown; vence: number }>();
+
+async function conMemoria<T>(clave: string, traer: () => Promise<T>): Promise<T> {
+  const ahora = Date.now();
+  const guardado = recordado.get(clave);
+  if (guardado && guardado.vence > ahora) return guardado.valor as T;
+
+  const valor = await traer();
+  recordado.set(clave, { valor, vence: ahora + RECUERDO_MS });
+  return valor;
+}
+
+/**
+ * Olvida lo recordado de Drive.
+ *
+ * Se llama cuando la aplicación misma movió algo: esperar medio minuto para
+ * ver el efecto de algo que uno acaba de hacer es peor que el viaje que se
+ * ahorra.
+ */
+export function olvidarDrive(): void {
+  recordado.clear();
+}
+
 export type ArchivoDrive = {
   id: string;
   name: string;
@@ -68,6 +112,10 @@ export type ArchivoDrive = {
 // Lista los archivos de una carpeta, ordenados por nombre.
 // Las miniaturas vienen con la respuesta y caducan en horas: no se guardan.
 export async function listarCarpeta(folderId: string): Promise<ArchivoDrive[]> {
+  return conMemoria(`listar:${folderId}`, () => pedirListado(folderId));
+}
+
+async function pedirListado(folderId: string): Promise<ArchivoDrive[]> {
   const token = await tokenDeGoogle();
   const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
   const fields = encodeURIComponent(
@@ -99,6 +147,10 @@ export type CarpetaDrive = {
  * Google y no acá: traer los archivos para descartarlos sería pedir de más.
  */
 export async function subcarpetasDe(folderId: string): Promise<CarpetaDrive[]> {
+  return conMemoria(`sub:${folderId}`, () => pedirSubcarpetas(folderId));
+}
+
+async function pedirSubcarpetas(folderId: string): Promise<CarpetaDrive[]> {
   const token = await tokenDeGoogle();
   const q = encodeURIComponent(
     `'${folderId}' in parents and mimeType = '${CARPETA}' and trashed=false`
@@ -120,6 +172,10 @@ export async function subcarpetasDe(folderId: string): Promise<CarpetaDrive[]> {
  * archivo suelto compartido por error no es un cliente—.
  */
 export async function carpetasCompartidas(): Promise<CarpetaDrive[]> {
+  return conMemoria("compartidas", pedirCompartidas);
+}
+
+async function pedirCompartidas(): Promise<CarpetaDrive[]> {
   const token = await tokenDeGoogle();
   const q = encodeURIComponent(
     `sharedWithMe and mimeType = '${CARPETA}' and trashed=false`
@@ -141,6 +197,10 @@ export async function archivosDe(folderId: string): Promise<ArchivoDrive[]> {
 
 /** Nombre y link de una carpeta puntual. */
 export async function datosDeCarpeta(folderId: string): Promise<CarpetaDrive> {
+  return conMemoria(`carpeta:${folderId}`, () => pedirDatosDeCarpeta(folderId));
+}
+
+async function pedirDatosDeCarpeta(folderId: string): Promise<CarpetaDrive> {
   const token = await tokenDeGoogle();
   const fields = encodeURIComponent("id,name,webViewLink,modifiedTime");
   const url = `${DRIVE}/files/${encodeURIComponent(folderId)}?fields=${fields}&supportsAllDrives=true`;
@@ -153,6 +213,8 @@ export async function datosDeCarpeta(folderId: string): Promise<CarpetaDrive> {
 
 // Mueve un archivo de una carpeta a otra. Es lo único que escribimos en Drive.
 export async function moverArchivo(fileId: string, desde: string, hacia: string) {
+  // Lo recordado quedó viejo en el momento en que esto cambia algo.
+  olvidarDrive();
   const token = await tokenDeGoogle();
   const url = `${DRIVE}/files/${fileId}?addParents=${hacia}&removeParents=${desde}&fields=id,name,parents&supportsAllDrives=true`;
   const r = await fetch(url, {
@@ -178,6 +240,10 @@ export type MetadatosArchivo = {
 // Datos de un archivo puntual, incluidas las carpetas que lo contienen.
 // Los `parents` son lo que permite verificar que el pedido sea legítimo.
 export async function metadatosArchivo(fileId: string): Promise<MetadatosArchivo> {
+  return conMemoria(`archivo:${fileId}`, () => pedirMetadatos(fileId));
+}
+
+async function pedirMetadatos(fileId: string): Promise<MetadatosArchivo> {
   const token = await tokenDeGoogle();
   const fields = encodeURIComponent(
     "id,name,mimeType,parents,thumbnailLink,modifiedTime,webViewLink"

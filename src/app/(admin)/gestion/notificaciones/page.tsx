@@ -4,6 +4,10 @@
 // peleando por la misma pantalla: una lista de lo que pasó —que se lee una vez
 // y se archiva— y el estado de los trabajos —que se mira para decidir qué
 // hacer—. Separadas, cada una puede ser lo que es.
+//
+// El título de la pantalla **es** el desplegable, y no hay otro arriba: dos
+// títulos con el mismo nombre, uno encima del otro, es lo que pasa cuando algo
+// se muda de lugar y nadie saca lo que quedó.
 
 import { losAvisos } from "@/lib/avisos";
 import { correoConfigurado } from "@/lib/correo";
@@ -16,17 +20,14 @@ export default async function Notificaciones() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
-      <header className="border-b-2 border-tinta pb-6">
-        <h1 className="text-grande font-extrabold tracking-tight">Notificaciones</h1>
-        <p className="mt-1 text-menudo text-apagado">
-          Todo lo que hizo el cliente queda acá, haya salido por correo o no.
-        </p>
-      </header>
-
-      {/* Sin plegar: esta pantalla **es** la lista. Plegarla dejaría un título
-          con una flecha y nada debajo, que es lo que se ve al entrar cuando
-          está todo leído. */}
-      <Bandeja avisos={avisos} correoConfigurado={correoConfigurado()} plegable={false} />
+      <Bandeja
+        titulo="Notificaciones"
+        avisos={avisos}
+        correoConfigurado={correoConfigurado()}
+      />
+      <p className="mt-3 text-menudo text-apagado">
+        Todo lo que hizo el cliente queda acá, haya salido por correo o no.
+      </p>
     </main>
   );
 }

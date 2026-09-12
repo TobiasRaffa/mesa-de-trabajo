@@ -49,11 +49,16 @@ export default async function Admin() {
           Es la palabra que el cliente escribe después de abrir su link. Se la
           pasás por donde le escribís siempre, nunca dentro del mismo mensaje que
           el link: si van juntos, alcanza con que ese mensaje se reenvíe.
+          Para verla o cambiarla hace falta la contraseña del equipo.
         </p>
-        {/* La clave viaja a esta pantalla y a ninguna otra: el árbol de
-            clientes no la necesita, y lo que no se manda no se puede filtrar. */}
+        {/* Solo se manda **si tiene** clave, no cuál. El texto lo pide la
+            pantalla aparte, con la contraseña del equipo. */}
         <ClavesDeClientes
-          clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre, clave: c.tag }))}
+          clientes={clientes.map((c) => ({
+            id: c.id,
+            nombre: c.nombre,
+            tieneClave: Boolean(c.tag),
+          }))}
         />
       </section>
 
