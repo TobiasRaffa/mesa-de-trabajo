@@ -57,6 +57,8 @@ export type CarpetaEnElTablero = {
   cancha: Cancha;
   /** Piezas que esperan trabajo de la agencia. */
   enAgencia: number;
+  /** De esas, las que solo esperan que alguien apriete «Entregar». */
+  sinEntregar: number;
 };
 
 export type Tablero = {
@@ -115,21 +117,31 @@ export async function elTablero(): Promise<Tablero> {
                 (p.estado === "cambios_marcados" && p.enviada)
             ).length;
 
+            // Lo que está en Drive y todavía no se entregó. Es un subconjunto
+            // de lo anterior —también es nuestro— pero se cuenta aparte porque
+            // lo que hay que hacer con esto es apretar un botón, no diseñar.
+            const sinEntregar = piezas.filter((p) => p.estado === "en_curso").length;
+
             const cancha: Cancha =
               enAgencia > 0 ? "agencia" : sinRevisar > 0 ? "cliente" : "listo";
 
-            // Cada pieza vence el día que se subió más sus días. La carpeta
-            // vence cuando vence la primera: es la fecha que hay que mirar.
-            const fechas = agrupadas
-              .map((pieza, i) => {
-                const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
-                if (!ultima.modifiedTime) return null;
+            // **El reloj arranca cuando se entrega, no cuando se sube.**
+            // Salía de la fecha de modificación del archivo, con dos
+            // consecuencias: subías el jueves y avisabas el lunes, y al
+            // cliente ya se le habían ido cuatro de sus tres días; y volver a
+            // guardar el archivo en Drive corría el vencimiento solo.
+            //
+            // Una pieza sin entregar no vence: todavía no empezó a correr.
+            const fechas = identidades
+              .map((suya) => {
+                const entregada = estados[suya]?.entregadaEl;
+                if (!entregada) return null;
                 const dias = plazoQueCorre(
-                  propios[identidades[i]],
+                  propios[suya],
                   diasDeLaCarpeta,
                   diasDelCliente
                 );
-                return calcularVencimiento(new Date(ultima.modifiedTime), dias);
+                return calcularVencimiento(new Date(entregada), dias);
               })
               .filter((f): f is Date => f !== null);
 
@@ -148,6 +160,7 @@ export async function elTablero(): Promise<Tablero> {
             return {
               cancha,
               enAgencia,
+              sinEntregar,
               clienteId: cliente.id,
               cliente: cliente.nombre,
               carpetaId: carpeta.id,

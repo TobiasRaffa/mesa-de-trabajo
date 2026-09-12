@@ -36,6 +36,7 @@ import type { Persona } from "@/lib/equipo";
 import { ConfiguracionDeCliente } from "@/admin/ConfiguracionDeCliente";
 import { ConfiguracionDeCarpeta } from "@/admin/ConfiguracionDeCarpeta";
 import { ConfiguracionDeArchivo } from "@/admin/ConfiguracionDeArchivo";
+import { Entregar } from "@/admin/Entregar";
 import { Estado } from "@/ui/Estado";
 import { IconoConfig, IconoDrive, IconoFlecha } from "@/ui/Icono";
 
@@ -568,7 +569,14 @@ function FilaCarpeta({
                   {carpeta.subcarpetas === 1 ? "carpeta" : "carpetas"} ·{" "}
                 </>
               )}
-              {carpeta.piezas} {carpeta.piezas === 1 ? "pieza" : "piezas"} ·{" "}
+              {carpeta.piezas} {carpeta.piezas === 1 ? "pieza" : "piezas"}
+              {carpeta.sinEntregar > 0 && (
+                <span className="font-bold text-acento">
+                  {" · "}
+                  {carpeta.sinEntregar} sin entregar
+                </span>
+              )}
+              {" · "}
               {carpeta.sinRevisar} sin revisar · {carpeta.diasQueCorren}{" "}
               {carpeta.diasQueCorren === 1 ? "día" : "días"} para revisar
               {carpeta.responsableA ? ` · ${carpeta.responsableA}` : " · sin asignar"}
@@ -594,6 +602,22 @@ function FilaCarpeta({
 
       {abierta && (
         <div className="border-t border-linea-tenue">
+          {/* Arriba de todo: lo que hay que hacer con esta carpeta va antes
+              que lo que hay adentro. */}
+          {!carpeta.reservada && carpeta.sinEntregar > 0 && (
+            <div
+              className="border-b border-linea-tenue py-3 pr-4"
+              style={{ paddingLeft: nivel * SANGRIA + 44 }}
+            >
+              <Entregar
+                carpetaId={carpeta.id}
+                carpeta={carpeta.nombre}
+                cuantas={carpeta.sinEntregar}
+                alEntregar={alGuardar}
+              />
+            </div>
+          )}
+
           {error && (
             <p className="px-4 py-2 text-menudo font-semibold text-alerta">{error}</p>
           )}

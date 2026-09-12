@@ -52,6 +52,16 @@ export type EstadoDePieza = {
   /** Se movió a «Entregas finales» y ya no está en la carpeta de trabajo. */
   mudada: boolean;
   /**
+   * Cuándo se entregó, si se entregó.
+   *
+   * **Acá arranca el plazo**, y no cuando el archivo se subió a Drive. Antes
+   * el reloj salía de la fecha de modificación del archivo, con dos
+   * consecuencias: subías el jueves y avisabas el lunes, y al cliente ya se le
+   * habían ido cuatro de sus tres días; y volver a guardar el archivo en Drive
+   * por cualquier motivo corría el vencimiento solo, sin que nadie lo decidiera.
+   */
+  entregadaEl?: string;
+  /**
    * El archivo de Drive que se mudó a «Entregas finales», si se mudó.
    *
    * Hace falta porque el identificador de la pieza ya no es el de un archivo:
@@ -73,10 +83,22 @@ const ESTADOS: Estado[] = [
 ];
 
 /** Lo que se asume de una pieza que nadie tocó todavía. */
+/**
+ * Una pieza de la que no hay nada anotado.
+ *
+ * **Está `en_curso`, no `entregada`.** Un archivo que aparece en Drive es
+ * trabajo en marcha: el JPG a medio hacer, la prueba de color, el que se
+ * guardó en la carpeta equivocada. Antes nacía entregada, y eso significaba
+ * que el cliente lo veía —y lo podía aprobar— en el instante en que tocaba
+ * Drive, sin que nadie lo hubiera decidido.
+ *
+ * Entregar es un acto de la agencia y tiene su evento en el dominio. Lo que
+ * faltaba era que alguien lo llamara.
+ */
 function sinTocar(carpetaId: string): EstadoDePieza {
   return {
     carpetaId,
-    estado: "entregada",
+    estado: "en_curso",
     ronda: 0,
     rondasExtra: 0,
     cambios: [],
@@ -124,6 +146,7 @@ function normalizar(v: EstadoDePieza): EstadoDePieza {
     cambios: Array.isArray(crudo.cambios) ? crudo.cambios.filter(esCambio) : [],
     enviada: crudo.enviada === true,
     mudada: crudo.mudada === true,
+    entregadaEl: typeof crudo.entregadaEl === "string" ? crudo.entregadaEl : undefined,
     archivoMudado:
       typeof crudo.archivoMudado === "string" ? crudo.archivoMudado : undefined,
     historia: Array.isArray(crudo.historia) ? crudo.historia.filter(esHito) : [],

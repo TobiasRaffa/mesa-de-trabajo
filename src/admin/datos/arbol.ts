@@ -53,6 +53,8 @@ export type NodoCarpeta = {
   diasQueCorren: number;
   piezas: number;
   sinRevisar: number;
+  /** Están en Drive y el cliente todavía no las ve. */
+  sinEntregar: number;
   /** Cuántas carpetas tiene adentro. Una carpeta puede no tener archivos. */
   subcarpetas: number;
   /** `Entregas finales` no es un trabajo: no se configura. */
@@ -167,7 +169,13 @@ async function subcarpetasDeCarpeta(
 
       // De una carpeta reservada no se cuenta nada: no se revisa.
       if (reservada) {
-        return { ...base, piezas: 0, sinRevisar: 0, subcarpetas: adentro.length };
+        return {
+          ...base,
+          piezas: 0,
+          sinRevisar: 0,
+          sinEntregar: 0,
+          subcarpetas: adentro.length,
+        };
       }
 
       const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpeta.id));
@@ -182,6 +190,7 @@ async function subcarpetasDeCarpeta(
         sinRevisar: Object.values(estados).filter(
           (p) => p.estado === "entregada" || p.estado === "en_revision"
         ).length,
+        sinEntregar: Object.values(estados).filter((p) => p.estado === "en_curso").length,
         subcarpetas: adentro.length,
       };
     })
@@ -243,8 +252,9 @@ async function archivosDeCarpeta(
       publicaEl: dias[suya],
       dias: propios[suya],
       diasQueCorren: corren,
-      vence: ultima.modifiedTime
-        ? diaDe(calcularVencimiento(new Date(ultima.modifiedTime), corren))
+      // Sin entregar no hay vencimiento: el reloj todavía no arrancó.
+      vence: estado.entregadaEl
+        ? diaDe(calcularVencimiento(new Date(estado.entregadaEl), corren))
         : undefined,
       responsable: propio,
       responsableQueCorre: quien,

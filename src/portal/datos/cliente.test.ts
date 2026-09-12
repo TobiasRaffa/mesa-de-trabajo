@@ -43,7 +43,7 @@ vi.mock("@/lib/ajustes", async (original) => ({
 }));
 
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
-import { estadosDe, piezasDeLaCarpeta } from "@/lib/piezas";
+import { estadosDe, piezasDeLaCarpeta, type EstadoDePieza } from "@/lib/piezas";
 import { portalDelCliente } from "@/portal/datos/cliente";
 
 /** Lo que la agencia apagó, en esta prueba. */
@@ -253,7 +253,10 @@ describe("subir una vuelta nueva no borra lo anotado", () => {
             id,
             {
               carpetaId: carpeta,
-              estado: "en_curso" as const,
+              // Entregada y abierta: es el estado en que el cliente la ve.
+              // `en_curso` ya no llega al portal —es trabajo sin entregar— y
+              // esta prueba es sobre la identidad, no sobre la entrega.
+              estado: "en_revision" as const,
               ronda: 1,
               rondasExtra: 0,
               cambios: id === "logos::9304.jpeg" ? LOQUEPIDIO : [],
@@ -357,5 +360,89 @@ describe("entregas finales", () => {
     );
 
     expect(await portalDelCliente(RAIZ).then((p) => p.carpetas)).toEqual([]);
+  });
+});
+
+describe("el cliente ve lo entregado y nada más", () => {
+  /** Arma un Drive y fija en qué estado está cada pieza. */
+  function conEstados(estados: Record<string, Partial<EstadoDePieza>>) {
+    vi.mocked(estadosDe).mockImplementation(async (carpeta: string, ids: string[]) =>
+      Object.fromEntries(
+        ids.map((id) => [
+          id,
+          {
+            carpetaId: carpeta,
+            estado: "en_curso" as const,
+            ronda: 0,
+            rondasExtra: 0,
+            cambios: [],
+            enviada: false,
+            mudada: false,
+            historia: [],
+            ...estados[id],
+          },
+        ])
+      )
+    );
+  }
+
+  /**
+   * **Este es el caso que faltaba.** Un archivo que aparecía en Drive nacía
+   * entregado, así que el cliente lo veía —y lo podía aprobar— en el instante
+   * en que se subía: el JPG a medio hacer, la prueba de color, el que se
+   * guardó en la carpeta equivocada.
+   */
+  it("no muestra lo que todavía no se entregó", async () => {
+    driveCon(
+      { [RAIZ]: [{ id: "logos", name: "Logos" }] },
+      { logos: ["a-medias.jpeg", "listo.jpeg"] }
+    );
+    conEstados({ "logos::listo.jpeg": { estado: "entregada" } });
+
+    const portal = await portalDelCliente(RAIZ);
+    expect(portal.carpetas[0].piezas.map((p) => p.nombre)).toEqual(["listo"]);
+  });
+
+  it("una carpeta con todo sin entregar no aparece", async () => {
+    driveCon({ [RAIZ]: [{ id: "logos", name: "Logos" }] }, { logos: ["a-medias.jpeg"] });
+    conEstados({});
+
+    expect(await portalDelCliente(RAIZ).then((p) => p.carpetas)).toEqual([]);
+  });
+
+  it("lo aprobado sale de su carpeta: queda en «Entregas finales»", async () => {
+    // Se decidió así: la carpeta de trabajo muestra lo que falta. Repetirlo en
+    // las dos dejaba la misma pieza dos veces en la misma pantalla.
+    driveCon(
+      { [RAIZ]: [{ id: "logos", name: "Logos" }] },
+      { logos: ["aprobada.jpeg", "pendiente.jpeg"] }
+    );
+    conEstados({
+      "logos::aprobada.jpeg": { estado: "final", mudada: true },
+      "logos::pendiente.jpeg": { estado: "entregada" },
+    });
+
+    const portal = await portalDelCliente(RAIZ);
+    expect(portal.carpetas[0].piezas.map((p) => p.nombre)).toEqual(["pendiente"]);
+  });
+
+  it("una aprobada que NO se pudo mudar sigue en su carpeta", async () => {
+    // Si Drive no contestó, el archivo sigue ahí. Sacarlo de la vista lo haría
+    // desaparecer de los dos lados: no estaría en el cajón ni en su carpeta.
+    driveCon({ [RAIZ]: [{ id: "logos", name: "Logos" }] }, { logos: ["aprobada.jpeg"] });
+    conEstados({ "logos::aprobada.jpeg": { estado: "final", mudada: false } });
+
+    const portal = await portalDelCliente(RAIZ);
+    expect(portal.carpetas[0].piezas.map((p) => p.nombre)).toEqual(["aprobada"]);
+  });
+
+  it("en «Entregas finales» se muestra todo lo que hay", async () => {
+    driveCon(
+      { [RAIZ]: [{ id: "finales", name: "Entregas finales" }] },
+      { finales: ["listo.jpeg"] }
+    );
+    conEstados({});
+
+    expect(await portalDelCliente(RAIZ).then((p) => p.carpetas[0].piezas)).toHaveLength(1);
   });
 });

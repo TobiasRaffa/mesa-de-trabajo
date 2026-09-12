@@ -16,6 +16,8 @@ import { randomUUID } from "node:crypto";
 import { coleccion } from "@/lib/almacen";
 
 export type ClaseDeAviso =
+  /** La agencia entregó una tanda. Es el único que va hacia el cliente. */
+  | "entregamos"
   | "aprobo"
   | "pidio_cambios"
   | "envio_revision"

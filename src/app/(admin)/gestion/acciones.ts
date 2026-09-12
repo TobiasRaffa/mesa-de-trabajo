@@ -25,7 +25,13 @@ import {
   type Vista,
   mostrarUOcultar,
 } from "@/lib/ajustes";
-import { esCarpetaDelCliente, idsDeCarpetasReales, olvidarCarpetas } from "@/lib/carpetas";
+import {
+  clienteDeCarpeta,
+  esCarpetaDelCliente,
+  idsDeCarpetasReales,
+  olvidarCarpetas,
+} from "@/lib/carpetas";
+import { datosDeCarpeta } from "@/lib/google";
 import {
   habilitarCliente,
   ponerTag,
@@ -38,7 +44,23 @@ import {
   LARGO_MAXIMO,
   type Mensaje,
 } from "@/lib/conversaciones";
-import { piezasDeLaCarpeta } from "@/lib/piezas";
+import { aplicar } from "@/dominio/pieza";
+import { avisar } from "@/lib/avisar";
+import {
+  anotar,
+  estadosDe,
+  guardarPiezas,
+  piezasDeLaCarpeta,
+  type EstadoDePieza,
+} from "@/lib/piezas";
+
+/**
+ * Cuántas rondas entran en el presupuesto.
+ *
+ * Escrito a mano y en un solo lugar hasta que se pueda poner por cliente, que
+ * es donde se negocia de verdad.
+ */
+const RONDAS_INCLUIDAS = 2;
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
 import { correoValido } from "@/lib/equipo";
@@ -317,6 +339,96 @@ export async function escribirComoAgencia(
   } catch {
     return { ok: false, motivo: "No pudimos guardar el mensaje. Probá de nuevo." };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Entregar
+
+/**
+ * Entrega lo que haya sin entregar en una carpeta.
+ *
+ * **Es el acto que faltaba.** El dominio tenía el evento `entregar` desde el
+ * principio y no lo llamaba nadie: un archivo que aparecía en Drive nacía
+ * entregado, así que el cliente lo veía —y lo podía aprobar— en el instante en
+ * que se subía. El JPG a medio hacer, la prueba de color, el que se guardó en
+ * la carpeta equivocada.
+ *
+ * Entrega **la carpeta entera y no pieza por pieza** porque así se trabaja: se
+ * arma una tanda y se manda. Un botón por archivo sería el trámite que el
+ * portal vino a sacar del medio.
+ *
+ * Acá arranca el plazo, y de acá sale el aviso al cliente.
+ */
+export async function entregarCarpeta(
+  carpetaId: string
+): Promise<{ ok: true; entregadas: number } | { ok: false; motivo: string }> {
+  if (!(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no existe." };
+  }
+
+  let agrupadas;
+  try {
+    agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+  } catch {
+    return { ok: false, motivo: "No pude leer la carpeta en Drive." };
+  }
+
+  const identidades = agrupadas.map((p) =>
+    identidadDePieza(carpetaId, p.versiones[0].archivo.name)
+  );
+  const estados = await estadosDe(carpetaId, identidades);
+
+  const ahora = new Date().toISOString();
+  const cambios: Record<string, EstadoDePieza> = {};
+
+  for (const [id, guardada] of Object.entries(estados)) {
+    // Las reglas de qué se puede entregar **no están acá**: salen de
+    // `aplicar()`, la misma función que corre en el navegador.
+    const r = aplicar(
+      {
+        estado: guardada.estado,
+        ronda: guardada.ronda,
+        rondasIncluidas: RONDAS_INCLUIDAS,
+        rondasExtra: guardada.rondasExtra,
+      },
+      { tipo: "entregar" }
+    );
+    // Una pieza que ya estaba entregada no es un error: se saltea y se sigue.
+    if (!r.ok) continue;
+
+    cambios[id] = anotar(
+      { ...guardada, estado: r.pieza.estado, entregadaEl: ahora },
+      "entregada",
+      "El equipo"
+    );
+  }
+
+  const cuantas = Object.keys(cambios).length;
+  if (cuantas === 0) {
+    return { ok: false, motivo: "No hay nada sin entregar en esta carpeta." };
+  }
+
+  await guardarPiezas(cambios);
+
+  // El aviso va después de guardar: si el correo falla, la entrega vale igual.
+  const cliente = await clienteDeCarpeta(carpetaId);
+  if (cliente) {
+    let nombre = "una carpeta";
+    try {
+      nombre = (await datosDeCarpeta(carpetaId)).name;
+    } catch {}
+    await avisar({
+      clase: "entregamos",
+      clienteId: cliente.id,
+      cliente: cliente.nombre,
+      carpetaId,
+      carpeta: nombre,
+      detalle: `${cuantas} ${cuantas === 1 ? "pieza" : "piezas"}`,
+    });
+  }
+
+  revalidatePath("/gestion", "layout");
+  return { ok: true, entregadas: cuantas };
 }
 
 // ---------------------------------------------------------------------------

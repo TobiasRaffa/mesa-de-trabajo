@@ -205,6 +205,25 @@ export async function portalDelCliente(
           )
         : guardados;
 
+      // **Lo que el cliente ve de una carpeta de trabajo.** Dos filtros, y los
+      // dos son decisiones tomadas:
+      //
+      //   - `en_curso` no se muestra: todavía no se entregó. Antes un archivo
+      //     se veía en el instante en que tocaba Drive, así que el JPG a medio
+      //     hacer y la prueba de color le llegaban al cliente sin que nadie lo
+      //     decidiera.
+      //   - Lo ya mudado a «Entregas finales» tampoco: está en el cajón de lo
+      //     terminado, y repetirlo acá dejaba la misma pieza dos veces en la
+      //     pantalla. La carpeta de trabajo muestra lo que falta.
+      //
+      // En «Entregas finales» no se filtra nada: lo que está ahí, está.
+      const seMuestra = (p: EstadoDePieza) =>
+        entregas || (p.estado !== "en_curso" && !p.mudada);
+
+      const aLaVista = agrupadas
+        .map((pieza, i) => ({ pieza, suya: identidades[i] }))
+        .filter(({ suya }) => seMuestra(estados[suya]));
+
       return {
         id: carpeta.id,
         clase: entregas ? ("entregas" as const) : ("trabajo" as const),
@@ -213,7 +232,7 @@ export async function portalDelCliente(
         nombre: carpeta.camino.length > 0 ? carpeta.camino.join(" / ") : carpeta.name,
         enlaceDrive: carpeta.webViewLink,
         vista,
-        piezas: agrupadas.map((pieza, i) => {
+        piezas: aLaVista.map(({ pieza, suya }) => {
           const versiones = pieza.versiones.map((v, i) => ({
             // Se renumeran de corrido: si alguien salteó la V2, el cliente no
             // tiene por qué ver un hueco.
@@ -227,7 +246,6 @@ export async function portalDelCliente(
           }));
           const ultima = versiones[versiones.length - 1];
 
-          const suya = identidades[i];
           const guardado = estados[suya];
 
           return {

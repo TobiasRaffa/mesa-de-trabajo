@@ -32,6 +32,8 @@ import { responsablesDe } from "@/lib/responsables";
 /** Cómo se cuenta cada cosa, en una línea. */
 function comoSeCuenta(clase: ClaseDeAviso, carpeta: string, detalle?: string): string {
   switch (clase) {
+    case "entregamos":
+      return `Se le entregó ${detalle ?? "trabajo"} en ${carpeta}.`;
     case "aprobo":
       return `Aprobó ${detalle ?? "una pieza"} en ${carpeta}.`;
     case "pidio_cambios":
