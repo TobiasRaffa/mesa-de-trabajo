@@ -10,13 +10,20 @@
 // agencia. Que se parezcan no confunde, porque el cliente nunca ve esta.
 
 import { BarraLateral } from "@/admin/BarraLateral";
+import { QuienSoy } from "@/admin/QuienSoy";
+import { elEquipo } from "@/lib/equipo";
+import { quienSoy } from "@/lib/sesion";
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  // Quién está usando esto. Se lee acá y no en la barra porque la barra corre
+  // en el navegador, y la sesión vive en una galleta que solo ve el servidor.
+  const [equipo, yo] = await Promise.all([elEquipo(), quienSoy()]);
+
   return (
     // `min-h-screen` en el contenedor y no en la barra: así el fondo claro
     // llega abajo aunque la pantalla tenga poco contenido.
     <div className="flex min-h-screen flex-col bg-papel lg:flex-row">
-      <BarraLateral />
+      <BarraLateral abajo={<QuienSoy equipo={equipo} yo={yo} />} />
       {/* `min-w-0` para que una tabla o un nombre largo no empujen la columna
           y saquen la página de ancho. Ya pasó en el portal. */}
       <div className="min-w-0 flex-1">{children}</div>

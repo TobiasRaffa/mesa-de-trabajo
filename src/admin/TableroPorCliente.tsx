@@ -2,19 +2,18 @@
 
 // El tablero: cómo viene todo, sin tener que leer.
 //
-// **Por cliente, y adentro por carpeta.** Estuvo un tiempo armado en tres
-// columnas por cancha —lo nuestro, lo del cliente, lo terminado— y eso contesta
-// bien «qué tengo que mover yo», pero obliga a recorrer las tres columnas para
-// contestar «cómo viene Café Otoño», que es la otra pregunta que se hace todo
-// el tiempo. Cerrado por cliente contesta las dos: el renglón de cada uno dice
-// cuánto hay de cada lado, y se abre solo el que interesa.
+// **Cerrado, cada cliente es un renglón: el nombre y cuántos trabajos.** Nada
+// más. Estuvo un tiempo armado en tres columnas por cancha —lo nuestro, lo del
+// cliente, lo terminado—, y después con el reparto escrito en cada renglón; las
+// dos veces la pantalla terminaba pidiendo que se la lea. Un resumen que hay
+// que leer no es un resumen.
 //
-// La cancha no se perdió: es el color de cada número. Verde es nuestro, ámbar
-// es del cliente, gris es cerrado. Los mismos tres en el renglón del cliente,
-// en el de cada carpeta y en la barra, así se aprenden una vez.
+// Lo urgente no depende de abrir nada: lo vencido tiene su lugar arriba de
+// todo, fuera de estos plegables.
 //
-// Arranca todo cerrado a propósito. Una pantalla con todo desplegado obliga a
-// leer para encontrar, y lo que se busca casi siempre es una cosa.
+// Adentro de cada cliente están sus carpetas, y ahí sí con todo: la barra de
+// cómo está repartido el trabajo, quién lo lleva, cuándo vence. Verde es
+// nuestro, ámbar es del cliente, gris es cerrado.
 
 import Link from "next/link";
 import { Plegable } from "@/admin/Plegable";
@@ -43,9 +42,6 @@ function porCliente(carpetas: CarpetaEnElTablero[]): PorCliente[] {
   }
   return salida;
 }
-
-const suma = (carpetas: CarpetaEnElTablero[], que: (c: CarpetaEnElTablero) => number) =>
-  carpetas.reduce((total, c) => total + que(c), 0);
 
 export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[] }) {
   const clientes = porCliente(carpetas);
@@ -89,41 +85,17 @@ export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[]
 }
 
 /**
- * Cuánto hay de cada lado, en tres números.
+ * Lo que se ve sin abrir: el nombre y cuántos trabajos.
  *
- * Es lo que evita tener que abrir: si dice «2 para hacer» ya se sabe que ahí
- * hay trabajo, y si no dice nada es porque no hay nada que mover.
+ * **Nada más, a propósito.** Estuvo un rato mostrando también cuánto había de
+ * cada lado, y con eso el renglón cerrado ya era media pantalla: si hay que
+ * leerlo, deja de ser un resumen. Lo urgente —lo vencido— tiene su lugar
+ * arriba de todo y fuera de acá; el resto se ve abriendo, que es un clic.
  */
 function Cuentas({ carpetas }: { carpetas: CarpetaEnElTablero[] }) {
-  const paraHacer = suma(carpetas, (c) => c.enAgencia);
-  const sinEntregar = suma(carpetas, (c) => c.sinEntregar);
-  const conElCliente = suma(carpetas, (c) => c.sinRevisar);
-  const vencidas = carpetas.filter((c) => c.vencida).length;
-  const sinLeer = suma(carpetas, (c) => c.sinLeer);
-
   return (
     <>
       {carpetas.length} {carpetas.length === 1 ? "trabajo" : "trabajos"}
-      {paraHacer > 0 && (
-        <span className="ml-2 font-bold text-acento">
-          {paraHacer} para hacer
-          {sinEntregar > 0 && ` (${sinEntregar} sin entregar)`}
-        </span>
-      )}
-      {conElCliente > 0 && (
-        <span className="ml-2 font-bold text-espera">{conElCliente} con el cliente</span>
-      )}
-      {paraHacer === 0 && conElCliente === 0 && (
-        <span className="ml-2 text-apagado">al día</span>
-      )}
-      {vencidas > 0 && (
-        <span className="ml-2 font-extrabold text-alerta">
-          {vencidas} {vencidas === 1 ? "vencido" : "vencidos"}
-        </span>
-      )}
-      {sinLeer > 0 && (
-        <span className="ml-2 font-bold text-acento">{sinLeer} sin leer</span>
-      )}
     </>
   );
 }

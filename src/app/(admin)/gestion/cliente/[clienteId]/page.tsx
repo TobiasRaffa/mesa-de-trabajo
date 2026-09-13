@@ -12,6 +12,7 @@ import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { MensajesListos } from "@/admin/MensajesListos";
 import { ChatDeCliente } from "@/admin/ChatDeCliente";
 import { elEquipo } from "@/lib/equipo";
+import { firmaDeAgencia } from "@/lib/sesion";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +99,7 @@ export default async function UnCliente({
             clienteId={cliente.id}
             nombre={cliente.nombre}
             sinLeer={cliente.sinLeer}
-            equipo={equipo.map((p) => p.nombre)}
+            firma={await firmaDeAgencia()}
           />
         }
       />

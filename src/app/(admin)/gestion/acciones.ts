@@ -17,6 +17,7 @@
 // está en internet. Antes de subirla, esto necesita login.
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import {
   ajustesDe,
   esCarpetaReservada,
@@ -69,7 +70,8 @@ const RONDAS_INCLUIDAS = 2;
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
 import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
-import { correoValido } from "@/lib/equipo";
+import { correoValido, personaPorId } from "@/lib/equipo";
+import { DURACION_DE_SESION, firmaDeAgencia, GALLETA_DE_QUIEN } from "@/lib/sesion";
 import {
   contenidoDe,
   heredadoDelCliente,
@@ -370,9 +372,7 @@ export type RespuestaDeChat =
  */
 export async function escribirComoAgencia(
   clienteId: string,
-  texto: string,
-  /** Quién firma. Se valida contra el equipo: no se le cree al navegador. */
-  quien?: string
+  texto: string
 ): Promise<RespuestaDeChat> {
   if (!(await esClienteReal(clienteId))) {
     return { ok: false, motivo: "Ese cliente no existe." };
@@ -385,14 +385,17 @@ export async function escribirComoAgencia(
   }
 
   try {
-    // **La firma se valida contra el equipo.** Llega del navegador, así que
-    // creerle dejaría que un pedido armado a mano firmara con cualquier
-    // nombre —el de otro cliente, por ejemplo— en una conversación que el
-    // cliente lee. Si no es alguien del equipo, firma la agencia.
-    const nombres = (await elEquipo()).map((p) => p.nombre);
-    const firma = quien && nombres.includes(quien) ? quien : "El equipo";
-
-    const mensajes = await agregarMensaje(clienteId, "agencia", firma, limpio);
+    // **Quién firma sale de la sesión, no del navegador.** Antes venía como
+    // parámetro y había que elegirlo en un desplegable cada vez: hay que
+    // acordarse de mirarlo, y el día que se firma mal no hay a quién
+    // preguntarle. Ahora es quien dijo ser al entrar, y si no dijo nadie,
+    // firma la agencia.
+    const mensajes = await agregarMensaje(
+      clienteId,
+      "agencia",
+      await firmaDeAgencia(),
+      limpio
+    );
     // La agencia leyó lo que había cuando contestó.
     await marcarLeido("agencia", clienteId);
     revalidatePath("/gestion", "layout");
@@ -490,6 +493,38 @@ export async function entregarCarpeta(
 
   revalidatePath("/gestion", "layout");
   return { ok: true, entregadas: cuantas };
+}
+
+// ---------------------------------------------------------------------------
+// Quién está usando esto
+
+/**
+ * Deja anotado quién está usando la aplicación en este navegador.
+ *
+ * Con el identificador vacío se olvida: es cómo alguien deja de ser quien era
+ * —una computadora compartida, alguien que se sentó un rato—.
+ */
+export async function decirQuienSoy(personaId: string): Promise<{ ok: boolean }> {
+  const galletas = await cookies();
+
+  if (!personaId) {
+    galletas.delete(GALLETA_DE_QUIEN);
+    revalidatePath("/gestion", "layout");
+    return { ok: true };
+  }
+
+  // Que sea alguien del equipo de verdad. No protege contra nadie —gestión
+  // abre sin contraseña— pero evita que un identificador inventado firme.
+  if (!(await personaPorId(personaId))) return { ok: false };
+
+  galletas.set(GALLETA_DE_QUIEN, personaId, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: DURACION_DE_SESION,
+  });
+  revalidatePath("/gestion", "layout");
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

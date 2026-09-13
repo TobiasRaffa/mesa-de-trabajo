@@ -6,7 +6,7 @@
 import { todasLasConversaciones } from "@/admin/datos/chats";
 import { ChatDeCliente } from "@/admin/ChatDeCliente";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
-import { elEquipo } from "@/lib/equipo";
+import { firmaDeAgencia } from "@/lib/sesion";
 
 export const dynamic = "force-dynamic";
 
@@ -26,14 +26,9 @@ function enPalabras(iso: string | undefined): string {
 
 export default async function Chats() {
   let chats;
-  let nombresDelEquipo: string[] = [];
+  const firma = await firmaDeAgencia();
   try {
-    const [conversaciones, equipo] = await Promise.all([
-      todasLasConversaciones(),
-      elEquipo(),
-    ]);
-    chats = conversaciones;
-    nombresDelEquipo = equipo.map((p) => p.nombre);
+    chats = await todasLasConversaciones();
   } catch (error) {
     return <ErrorDeDrive error={error} />;
   }
@@ -88,7 +83,7 @@ export default async function Chats() {
                 clienteId={chat.clienteId}
                 nombre={chat.cliente}
                 sinLeer={chat.sinLeer}
-                equipo={nombresDelEquipo}
+                firma={firma}
               />
             </li>
           ))}
