@@ -453,3 +453,51 @@ describe("las puertas", () => {
     ).toContain("clienteQueEntro(galletas)");
   });
 });
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Quién hizo cada cosa sale de un solo lugar.
+ *
+ * Todavía no hay login, así que hoy todo queda firmado «El equipo». Lo que
+ * importa es que **pase por `firmaDeAgencia()`**: el día que exista el login se
+ * cambia esa función y todo queda firmado con el nombre de quien lo hizo, sin
+ * tocar ninguna acción.
+ *
+ * Una acción que escriba el nombre a mano no se va a enterar de ese día. Y no
+ * se nota mirando la pantalla: sigue diciendo «El equipo», que es exactamente
+ * lo que decía antes.
+ */
+describe("quién hizo cada cosa", () => {
+  it("ninguna acción escribe el autor a mano", () => {
+    const culpables = SIN_PRUEBAS.filter((f) => {
+      if (relativo(f) === "src/lib/sesion.ts") return false;
+      const texto = readFileSync(f, "utf8");
+
+      // Solo los archivos que **anotan** un autor. La primera versión miraba
+      // todos, y atrapó el título «El equipo» de una pantalla: un guardián que
+      // atrapa lo que no es enseña a ignorarlo.
+      if (!/\banotar\(|\bagregarMensaje\(/.test(texto)) return false;
+
+      // Las líneas de código, no los comentarios: el nombre aparece escrito en
+      // varias explicaciones y ahí no hace daño.
+      return texto
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"))
+        .some((l) => /["'`]El equipo["'`]/.test(l));
+    }).map(relativo);
+
+    expect(
+      culpables,
+      "Estos archivos escriben el nombre del autor a mano. Tiene que salir de " +
+        "firmaDeAgencia() en @/lib/sesion: es el único lugar que cambia el día " +
+        "que exista el login, y lo que no pase por ahí va a quedar firmado mal."
+    ).toEqual([]);
+  });
+
+  it("la sesión sigue siendo el único lugar que sabe quién es quién", () => {
+    const sesion = readFileSync(path.join(FUENTE, "lib", "sesion.ts"), "utf8");
+    expect(sesion).toContain("export async function quienSoy");
+    expect(sesion).toContain("export async function firmaDeAgencia");
+  });
+});

@@ -152,9 +152,23 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
 - **Gestión no tiene puerta.** Ver lo primero de este documento: es lo que hay
   que hacer antes de subirla. Lo único que pide contraseña hoy es ver o cambiar
   la clave de un cliente.
-- **Nadie entra con usuario y contraseña propios.** Cuando se vuelva a poner la
-  puerta va a ser una sola clave compartida para toda la agencia. No se sabe
-  quién de las tres hizo cada cosa. Se decidió así por ahora.
+- **Nadie entra con usuario y contraseña propios**, así que no se sabe quién de
+  las tres hizo cada cosa: todo queda firmado «El equipo».
+
+  Está preparado para que eso cambie sin tocar nada de lo que ya funciona.
+  Todo lo que queda anotado —los mensajes al cliente, las entregas, las
+  reaperturas— pasa por `firmaDeAgencia()` en `src/lib/sesion.ts`, y hay una
+  prueba que falla si alguien escribe el nombre a mano en otro lado. Lo que
+  falta es:
+
+  1. Una pantalla de entrada que pida correo y contraseña. **El correo ya
+     existe**: es el de cada persona en Admin → El equipo. Esa lista es la
+     lista de usuarios; no hay que inventar otra.
+  2. Guardar la contraseña de cada persona, cifrada, junto a su ficha.
+  3. Al entrar, dejar una galleta **firmada** con su identificador.
+  4. Que `quienSoy()` lea esa galleta. Es lo único que toca el código de hoy.
+
+  Va junto con Supabase, que es donde van a vivir las contraseñas.
 - **El freno de intentos vive en memoria.** Sirve en una computadora. En
   Netlify, donde cada pedido puede caer en una máquina distinta, no frena nada:
   hay que moverlo al almacén antes de mandarle el primer link a un cliente

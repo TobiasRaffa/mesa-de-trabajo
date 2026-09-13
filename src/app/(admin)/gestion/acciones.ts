@@ -17,7 +17,6 @@
 // está en internet. Antes de subirla, esto necesita login.
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import {
   ajustesDe,
   esCarpetaReservada,
@@ -70,8 +69,8 @@ const RONDAS_INCLUIDAS = 2;
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
 import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
-import { correoValido, personaPorId } from "@/lib/equipo";
-import { DURACION_DE_SESION, firmaDeAgencia, GALLETA_DE_QUIEN } from "@/lib/sesion";
+import { correoValido } from "@/lib/equipo";
+import { firmaDeAgencia } from "@/lib/sesion";
 import {
   contenidoDe,
   heredadoDelCliente,
@@ -443,6 +442,9 @@ export async function entregarCarpeta(
   const estados = await estadosDe(carpetaId, identidades);
 
   const ahora = new Date().toISOString();
+  // Quién lo hizo. Hoy dice «El equipo»; el día que haya login dirá el nombre
+  // de quien apretó el botón, sin tocar nada de acá.
+  const firma = await firmaDeAgencia();
   const cambios: Record<string, EstadoDePieza> = {};
 
   for (const [id, guardada] of Object.entries(estados)) {
@@ -463,7 +465,7 @@ export async function entregarCarpeta(
     cambios[id] = anotar(
       { ...guardada, estado: r.pieza.estado, entregadaEl: ahora },
       "entregada",
-      "El equipo"
+      firma
     );
   }
 
@@ -493,38 +495,6 @@ export async function entregarCarpeta(
 
   revalidatePath("/gestion", "layout");
   return { ok: true, entregadas: cuantas };
-}
-
-// ---------------------------------------------------------------------------
-// Quién está usando esto
-
-/**
- * Deja anotado quién está usando la aplicación en este navegador.
- *
- * Con el identificador vacío se olvida: es cómo alguien deja de ser quien era
- * —una computadora compartida, alguien que se sentó un rato—.
- */
-export async function decirQuienSoy(personaId: string): Promise<{ ok: boolean }> {
-  const galletas = await cookies();
-
-  if (!personaId) {
-    galletas.delete(GALLETA_DE_QUIEN);
-    revalidatePath("/gestion", "layout");
-    return { ok: true };
-  }
-
-  // Que sea alguien del equipo de verdad. No protege contra nadie —gestión
-  // abre sin contraseña— pero evita que un identificador inventado firme.
-  if (!(await personaPorId(personaId))) return { ok: false };
-
-  galletas.set(GALLETA_DE_QUIEN, personaId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: DURACION_DE_SESION,
-  });
-  revalidatePath("/gestion", "layout");
-  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -580,6 +550,7 @@ export async function reabrirPieza(
   const cual = await laPieza(carpetaId, piezaId);
   if (!cual) return { ok: false, motivo: "No encontré esa pieza." };
 
+  const firma = await firmaDeAgencia();
   const r = aplicar(
     {
       estado: cual.estado.estado,
@@ -587,14 +558,14 @@ export async function reabrirPieza(
       rondasIncluidas: RONDAS_INCLUIDAS,
       rondasExtra: cual.estado.rondasExtra,
     },
-    { tipo: "reabrir", por: "El equipo" }
+    { tipo: "reabrir", por: firma }
   );
   if (!r.ok) return { ok: false, motivo: r.motivo };
 
   let pieza = anotar(
     { ...cual.estado, estado: r.pieza.estado },
     "reabierta_por_agencia",
-    "El equipo"
+    firma
   );
 
   // La vuelta del archivo es una consecuencia, no una condición: si Drive no
@@ -650,7 +621,7 @@ export async function habilitarExtraDePieza(
     anotar(
       { ...cual.estado, estado: r.pieza.estado, rondasExtra: r.pieza.rondasExtra },
       "extra_habilitada",
-      "El equipo"
+      await firmaDeAgencia()
     )
   );
   revalidatePath("/gestion", "layout");

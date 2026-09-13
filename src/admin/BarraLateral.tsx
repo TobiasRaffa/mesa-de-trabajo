@@ -57,7 +57,7 @@ function esLaActual(ruta: string, seccion: Seccion): boolean {
   return ruta === seccion.href || ruta.startsWith(`${seccion.href}/`);
 }
 
-export function BarraLateral({ abajo }: { abajo?: React.ReactNode }) {
+export function BarraLateral() {
   const ruta = usePathname();
 
   // En la puerta no hay a dónde ir todavía. Mostrar el menú de secciones a
@@ -85,9 +85,6 @@ export function BarraLateral({ abajo }: { abajo?: React.ReactNode }) {
           lo separa para que se lea como otro grupo. */}
       <div className="mt-2 border-t border-lienzo/15 pt-2 lg:mt-auto lg:pt-4">
         <Secciones cuales={ABAJO} ruta={ruta} etiqueta="Administración" />
-        {/* Quién está usando esto. Lo arma el layout, que puede leer la
-            sesión; esta barra corre en el navegador y no puede. */}
-        {abajo && <div className="mt-4">{abajo}</div>}
       </div>
     </aside>
   );

@@ -3,13 +3,12 @@
 // Es la primera pantalla del día, y reemplaza el «¿alguien sabe cómo viene lo
 // de Café Otoño?» de los lunes.
 //
-// **Cerrado por cliente, y adentro por carpeta.** Estuvo un tiempo en tres
-// columnas por cancha —lo nuestro, lo del cliente, lo terminado—, que contesta
-// bien «qué tengo que mover yo» pero obliga a recorrer las tres para contestar
-// «cómo viene Café Otoño». Cerrado por cliente contesta las dos: el renglón de
-// cada uno dice cuánto hay de cada lado, y se abre solo el que interesa.
+// **Tres canchas, y adentro los clientes cerrados.** Las columnas contestan la
+// pregunta de la mañana —de quién es el próximo movimiento— y los clientes
+// cerrados evitan que una cuenta con tres trabajos llene la columna entera: lo
+// que se ve de un vistazo deja de verse cuando hay que recorrerlo.
 //
-// Lo vencido va arriba de todo y fuera de los plegables: es lo único que hay
+// Lo vencido va arriba de todo y fuera de las columnas: es lo único que hay
 // que ver aunque no se abra nada.
 //
 // Las notificaciones se fueron a su propia sección. Eran dos cosas distintas
@@ -37,7 +36,7 @@ export default async function TableroPagina() {
   const paraHacer = tablero.carpetas.reduce((t, c) => t + c.enAgencia, 0);
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
+    <main className="mx-auto max-w-6xl px-6 py-10">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-tinta pb-6">
         <h1 className="text-grande font-extrabold tracking-tight">Tablero</h1>
         <p className="text-menudo text-apagado">

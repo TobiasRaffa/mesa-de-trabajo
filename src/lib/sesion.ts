@@ -1,57 +1,63 @@
 // Quién de la agencia está usando la aplicación.
 //
-// **Es identificación, no login.** No hay contraseña por persona: se elige el
-// nombre de una lista y queda anotado en ese navegador. Quien se sienta en esa
-// computadora ya está adentro de la oficina; lo que faltaba no era una puerta,
-// era que la aplicación supiera **quién**.
+// **Hoy no lo sabe nadie, y eso está bien: todavía no hay login.** Esta es la
+// única función de toda la aplicación que contesta esa pregunta, y contesta
+// «no sé». Todo lo que queda anotado —quién mandó un mensaje, quién entregó,
+// quién reabrió— pasa por acá, así que el día que exista el login **se cambia
+// esto y nada más**.
 //
-// Por qué importa: los mensajes de la agencia salían todos firmados «El
-// equipo», y el cliente no sabía con quién estaba hablando. La primera versión
-// puso un desplegable en el chat para elegir quién firma, y eso está mal por
-// dos razones: hay que acordarse de mirarlo cada vez, y el día que se firme
-// mal no hay a quién preguntarle.
+// Hubo por un rato un desplegable al pie de la barra para elegir quién sos, y
+// se sacó: elegirse a uno mismo de una lista no es una sesión. Si alguien se
+// olvida de cambiarlo, lo que queda anotado es mentira, y una anotación que a
+// veces miente es peor que no tenerla. Mejor decir «El equipo» hasta que se
+// pueda decir la verdad.
 //
-// **Vive en una galleta y no en `localStorage`** porque el servidor la
-// necesita: es él quien escribe el mensaje, y tiene que saber de quién es sin
-// que el navegador se lo diga en cada pedido.
+// ---
 //
-// **No está firmada, y eso es correcto acá.** Una firma protegería contra
-// alguien que se hace pasar por otro, y hoy no hay nada que proteger: gestión
-// abre sin contraseña, así que quien quisiera hacerse pasar por otro puede
-// simplemente elegirlo de la lista. Firmarla daría una sensación de seguridad
-// que no existe. Lo que sí se hace es comprobar que sea alguien del equipo de
-// verdad: un identificador inventado no firma nada.
+// **Qué falta para terminarlo**, cuando llegue el momento —va junto con
+// Supabase, que es donde van a vivir las contraseñas—:
 //
-// Cuando exista el login —con Supabase, con un correo y una contraseña por
-// persona— esto es lo único que cambia: de dónde sale el identificador. Todo
-// lo que lo usa se queda igual.
+//   1. Una pantalla de entrada que pida correo y contraseña. El correo ya
+//      existe: es el de cada persona del equipo, que la agencia carga en
+//      Admin → El equipo. Esa lista **es** la lista de usuarios; no hace falta
+//      inventar otra.
+//   2. Guardar la contraseña de cada persona —cifrada, nunca el texto— junto
+//      a su ficha en el equipo.
+//   3. Al entrar, dejar una galleta **firmada** con el identificador de esa
+//      persona. Firmada, a diferencia de la de antes: cuando haya una puerta,
+//      hacerse pasar por otro tiene que ser imposible, no solo incómodo.
+//   4. Que `quienSoy()` lea esa galleta y devuelva la persona.
+//
+// El paso 4 es el único que toca este archivo, y los otros tres no tocan nada
+// de lo que ya está escrito. Ese es el punto de que esto exista vacío.
 
-import { cookies } from "next/headers";
-import { personaPorId, type Persona } from "@/lib/equipo";
+import type { Persona } from "@/lib/equipo";
 
-export const GALLETA_DE_QUIEN = "mdt_quien";
-
-/** Un mes. Se elige una vez y no se vuelve a pensar. */
-export const DURACION_DE_SESION = 60 * 60 * 24 * 30;
-
-/**
- * Quién está usando esto, o `null` si todavía no lo dijo.
- *
- * Devuelve la persona entera y no su identificador: quien pregunta casi
- * siempre quiere el nombre o el correo, y hacerle buscar la persona después
- * sería repartir la misma búsqueda por toda la aplicación.
- */
-export async function quienSoy(): Promise<Persona | null> {
-  const id = (await cookies()).get(GALLETA_DE_QUIEN)?.value;
-  if (!id) return null;
-  // Se comprueba contra el equipo: alguien que ya no está deja de firmar.
-  return personaPorId(id);
-}
-
-/** Cómo se firma lo que no lo manda una persona en particular. */
+/** Cómo se firma lo que no lo manda una persona identificada. */
 export const LA_AGENCIA = "El equipo";
 
-/** El nombre con el que firmar, con el de la agencia como respaldo. */
+/**
+ * Quién está usando esto, o `null` si no se sabe.
+ *
+ * Hoy devuelve siempre `null` porque no hay login. Devuelve la persona entera
+ * y no su identificador: quien pregunta casi siempre quiere el nombre o el
+ * correo, y hacerle buscar la persona después sería repartir la misma búsqueda
+ * por toda la aplicación.
+ */
+export async function quienSoy(): Promise<Persona | null> {
+  // Cuando exista el login, acá se lee la galleta firmada y se devuelve la
+  // persona con `personaPorId` de `@/lib/equipo`. Son dos líneas.
+  return null;
+}
+
+/**
+ * El nombre con el que queda firmado lo que se hace.
+ *
+ * **Todo lo que la agencia hace y queda anotado pasa por acá**: los mensajes
+ * al cliente, las entregas, las reaperturas, las revisiones adicionales. Hoy
+ * todas dicen «El equipo»; el día que haya login, todas dicen el nombre de
+ * quien lo hizo, sin tocar ninguna de ellas.
+ */
 export async function firmaDeAgencia(): Promise<string> {
   return (await quienSoy())?.nombre ?? LA_AGENCIA;
 }

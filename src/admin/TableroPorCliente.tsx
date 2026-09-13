@@ -1,25 +1,51 @@
 "use client";
 
-// El tablero: cómo viene todo, sin tener que leer.
+// El tablero: tres canchas, y adentro los clientes.
 //
-// **Cerrado, cada cliente es un renglón: el nombre y cuántos trabajos.** Nada
-// más. Estuvo un tiempo armado en tres columnas por cancha —lo nuestro, lo del
-// cliente, lo terminado—, y después con el reparto escrito en cada renglón; las
-// dos veces la pantalla terminaba pidiendo que se la lea. Un resumen que hay
-// que leer no es un resumen.
+// **Tres columnas, porque la pregunta de la mañana es de quién es el próximo
+// movimiento.** Lo que está en nuestra cancha es lo único sobre lo que se puede
+// hacer algo ahora; lo que está en la del cliente es normal y no es un
+// problema; lo terminado está para saber que existe. Ordenado de cualquier otra
+// manera, eso hay que deducirlo leyendo.
 //
-// Lo urgente no depende de abrir nada: lo vencido tiene su lugar arriba de
-// todo, fuera de estos plegables.
+// **Adentro de cada columna, los clientes cerrados.** Un cliente con tres
+// trabajos ocupaba tres fichas y la columna se volvía una lista larga: lo que
+// se ve de un vistazo deja de verse. Cerrado es un renglón con el nombre y
+// cuántos trabajos tiene **en esa cancha**; se abre el que interesa.
 //
-// Adentro de cada cliente están sus carpetas, y ahí sí con todo: la barra de
-// cómo está repartido el trabajo, quién lo lleva, cuándo vence. Verde es
-// nuestro, ámbar es del cliente, gris es cerrado.
+// Un cliente puede aparecer en dos columnas a la vez, y eso es información, no
+// un error: quiere decir que tiene algo esperando trabajo nuestro y algo
+// esperando su decisión.
+//
+// Los colores son los mismos en todos lados —verde es nuestro, ámbar es del
+// cliente, gris es cerrado—, así se aprenden una vez.
 
 import Link from "next/link";
 import { Plegable } from "@/admin/Plegable";
-import type { CarpetaEnElTablero } from "@/admin/datos/tablero";
+import type { Cancha, CarpetaEnElTablero } from "@/admin/datos/tablero";
 
 const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
+
+const CANCHAS: Record<Cancha, { titulo: string; explica: string; filo: string }> = {
+  agencia: {
+    titulo: "Lo tenemos nosotros",
+    explica: "El cliente ya habló. Falta hacerlo.",
+    filo: "border-acento",
+  },
+  cliente: {
+    titulo: "Lo tiene el cliente",
+    explica: "Se lo entregamos y todavía no decidió.",
+    filo: "border-espera-borde",
+  },
+  listo: {
+    titulo: "Terminado",
+    explica: "No queda nada esperando de ningún lado.",
+    filo: "border-linea",
+  },
+};
+
+/** El orden es el de la urgencia: primero lo único que se puede mover hoy. */
+const ORDEN: Cancha[] = ["agencia", "cliente", "listo"];
 
 type PorCliente = {
   clienteId: string;
@@ -27,7 +53,7 @@ type PorCliente = {
   carpetas: CarpetaEnElTablero[];
 };
 
-/** Agrupa las carpetas por cliente, conservando el orden en que llegaron. */
+/** Agrupa por cliente, conservando el orden en que llegaron las carpetas. */
 function porCliente(carpetas: CarpetaEnElTablero[]): PorCliente[] {
   const salida: PorCliente[] = [];
   for (const carpeta of carpetas) {
@@ -44,9 +70,7 @@ function porCliente(carpetas: CarpetaEnElTablero[]): PorCliente[] {
 }
 
 export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[] }) {
-  const clientes = porCliente(carpetas);
-
-  if (clientes.length === 0) {
+  if (carpetas.length === 0) {
     return (
       <p className="mt-8 border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-normal text-espera">
         No hay carpetas de trabajo en ningún cliente habilitado.
@@ -55,57 +79,71 @@ export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[]
   }
 
   return (
-    <ul className="mt-8 flex flex-col gap-1">
-      {clientes.map((c) => (
-        <li key={c.clienteId} className="border-b border-linea pb-3">
-          <Plegable
-            recuerdo={`tablero-${c.clienteId}`}
-            titulo={c.cliente}
-            resumen={<Cuentas carpetas={c.carpetas} />}
-            alLado={
-              <Link
-                href={`/gestion/cliente/${c.clienteId}`}
-                className="shrink-0 text-micro font-extrabold uppercase tracking-wider
-                           text-apagado transition-colors hover:text-tinta"
-              >
-                Abrir
-              </Link>
-            }
-          >
-            <ul className="mt-2 flex flex-col gap-2 pl-8">
-              {c.carpetas.map((carpeta) => (
-                <Carpeta key={carpeta.carpetaId} carpeta={carpeta} />
-              ))}
-            </ul>
-          </Plegable>
-        </li>
+    <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      {ORDEN.map((cual) => (
+        <Columna
+          key={cual}
+          cual={cual}
+          carpetas={carpetas.filter((c) => c.cancha === cual)}
+        />
       ))}
-    </ul>
+    </div>
   );
 }
 
-/**
- * Lo que se ve sin abrir: el nombre y cuántos trabajos.
- *
- * **Nada más, a propósito.** Estuvo un rato mostrando también cuánto había de
- * cada lado, y con eso el renglón cerrado ya era media pantalla: si hay que
- * leerlo, deja de ser un resumen. Lo urgente —lo vencido— tiene su lugar
- * arriba de todo y fuera de acá; el resto se ve abriendo, que es un clic.
- */
-function Cuentas({ carpetas }: { carpetas: CarpetaEnElTablero[] }) {
+function Columna({ cual, carpetas }: { cual: Cancha; carpetas: CarpetaEnElTablero[] }) {
+  const { titulo, explica, filo } = CANCHAS[cual];
+  const clientes = porCliente(carpetas);
+
   return (
-    <>
-      {carpetas.length} {carpetas.length === 1 ? "trabajo" : "trabajos"}
-    </>
+    // `min-w-0` para que un nombre largo no ensanche la columna y saque la
+    // página de ancho. Ya pasó en el portal.
+    <section className={`min-w-0 border-t-4 pt-4 ${filo}`}>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-guia font-extrabold tracking-tight">{titulo}</h2>
+        <span className="cifras text-titulo font-extrabold leading-none tracking-tighter text-apagado">
+          {carpetas.length}
+        </span>
+      </div>
+      <p className="mt-0.5 text-micro text-apagado">{explica}</p>
+
+      {clientes.length === 0 ? (
+        <p className="mt-4 text-menudo text-apagado">Nada por acá.</p>
+      ) : (
+        <ul className="mt-4 flex flex-col gap-2">
+          {clientes.map((c) => (
+            <li key={c.clienteId} className="border border-linea bg-lienzo px-3 py-2">
+              <Plegable
+                // El recuerdo lleva la cancha: el mismo cliente puede estar en
+                // dos columnas, y abrir una no tiene por qué abrir la otra.
+                recuerdo={`tablero-${cual}-${c.clienteId}`}
+                titulo={<span className="text-normal">{c.cliente}</span>}
+                resumen={`${c.carpetas.length} ${
+                  c.carpetas.length === 1 ? "trabajo" : "trabajos"
+                }`}
+              >
+                <ul className="mt-2 flex flex-col gap-2">
+                  {c.carpetas.map((carpeta) => (
+                    <Ficha key={carpeta.carpetaId} carpeta={carpeta} />
+                  ))}
+                </ul>
+              </Plegable>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
-function Carpeta({ carpeta: c }: { carpeta: CarpetaEnElTablero }) {
+function Ficha({ carpeta: c }: { carpeta: CarpetaEnElTablero }) {
+  // Lo cerrado es el resto: así los tres pedazos suman el total y la barra no
+  // miente.
   const cerradas = Math.max(0, c.piezas - c.enAgencia - c.sinRevisar);
 
   return (
-    <li className="border border-linea bg-lienzo px-4 py-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <li className="border-t border-linea-tenue pt-2">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <Link
           href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
           className="min-w-0 font-bold tracking-tight underline-offset-4 hover:underline"
@@ -121,9 +159,8 @@ function Carpeta({ carpeta: c }: { carpeta: CarpetaEnElTablero }) {
         </span>
       </div>
 
-      {/* La barra dice de un vistazo cómo está repartido el trabajo. Los
-          colores son los mismos que los números de arriba: no hay leyenda que
-          aprender. */}
+      {/* Cómo está repartido el trabajo, sin leer. Los colores son los de las
+          columnas: no hay leyenda que aprender. */}
       {c.piezas > 0 && (
         <div
           className="mt-2 flex h-2 overflow-hidden bg-hueco"
@@ -156,7 +193,6 @@ function Carpeta({ carpeta: c }: { carpeta: CarpetaEnElTablero }) {
         {c.sinEntregar > 0 && (
           <span className="font-bold text-acento"> · {c.sinEntregar} sin entregar</span>
         )}
-        {c.enAgencia > c.sinEntregar && ` · ${c.enAgencia - c.sinEntregar} para trabajar`}
         {c.sinRevisar > 0 && ` · ${c.sinRevisar} sin revisar`}
         {c.vence && (
           <span className={c.vencida ? "font-extrabold text-alerta" : ""}>
@@ -165,6 +201,15 @@ function Carpeta({ carpeta: c }: { carpeta: CarpetaEnElTablero }) {
           </span>
         )}
       </p>
+
+      {c.sinLeer > 0 && (
+        <Link
+          href="/gestion/chats"
+          className="mt-1 inline-block text-micro font-extrabold text-acento underline underline-offset-4"
+        >
+          {c.sinLeer} sin leer
+        </Link>
+      )}
     </li>
   );
 }
