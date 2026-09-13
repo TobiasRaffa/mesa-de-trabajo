@@ -55,8 +55,8 @@ echo.
 echo   ----------------------------------------------------------
 echo.
 
-rem Abrir el navegador unos segundos despues, cuando el servidor este listo.
-start "" /b cmd /c "timeout /t 6 >nul & start http://localhost:3000%PAGINA%"
+rem Abrir el navegador cuando el servidor CONTESTE, no a los tantos segundos.
+start "" /b cmd /c ""%~dp0abrir-cuando-este.bat" "%PAGINA%""
 
 call npm run dev
 

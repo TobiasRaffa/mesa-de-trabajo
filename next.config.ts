@@ -67,6 +67,36 @@ const nextConfig: NextConfig = {
   // Next anuncia su presencia en cada respuesta. No hace falta.
   poweredByHeader: false,
 
+  /**
+   * Direcciones que se mudaron.
+   *
+   * **Un link que alguien guardó no se puede morir en silencio.** Las dos de
+   * acá existieron durante días, así que hay accesos directos, marcadores y
+   * pestañas abiertas apuntando ahí: el día que se movieron, quien las tenía
+   * guardadas se encontró con un «no existe» y no con el lugar nuevo.
+   *
+   * **Temporales y no permanentes**, a propósito. Un redirección permanente
+   * la recuerda el navegador para siempre, y `/gestion/entrar` va a volver a
+   * existir cuando se ponga la puerta antes de subir esto a internet: si el
+   * navegador se la aprendió, no habría forma de llegar a la puerta nueva.
+   */
+  async redirects() {
+    return [
+      {
+        // Era la pantalla de contraseña. Se sacó la puerta de gestión.
+        source: "/gestion/entrar",
+        destination: "/gestion",
+        permanent: false,
+      },
+      {
+        // El equipo se mudó a Admin, junto con las claves de los clientes.
+        source: "/gestion/equipo",
+        destination: "/gestion/admin",
+        permanent: false,
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
