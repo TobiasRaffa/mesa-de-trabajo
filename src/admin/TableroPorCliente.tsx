@@ -2,11 +2,14 @@
 
 // El tablero: tres canchas, y en cada una los clientes cerrados.
 //
-// **Cada cliente está en una sola columna**, la de lo más urgente que tenga.
-// Estuvo un rato repartido —el mismo cliente aparecía en dos columnas, una por
-// cada clase de trabajo que tuviera— y era información de más: para saber cómo
-// venía alguien había que buscarlo en tres lados y sumar. Lo que importa de un
-// cliente es lo más urgente que tiene; el resto se ve abriéndolo.
+// **La columna la decide el trabajo, no el cliente.** Un trabajo aprobado va a
+// «Terminado» aunque el mismo cliente tenga otro esperando: lo que se mira es
+// el estado del trabajo, y mandarlo a otra columna porque su cliente tiene algo
+// más urgente sería esconderlo donde nadie lo busca. Ningún trabajo está en dos
+// columnas.
+//
+// El nombre del cliente sí puede aparecer en dos, como rótulo del grupo: quiere
+// decir que tiene cosas de las dos clases.
 //
 // Y abriéndolo se ven **los trabajos por su nombre**, cada uno con su propio
 // estado. Así se sabe que hay dos, cuáles son, y en qué anda cada uno sin
@@ -55,20 +58,30 @@ const CANCHAS: Record<
   },
 };
 
-/** De más urgente a menos. Un cliente va a la cancha de lo peor que tenga. */
+/** De más urgente a menos: primero lo que se puede hacer algo hoy. */
 const ORDEN: Cancha[] = ["agencia", "cliente", "listo"];
 
 type PorCliente = {
   clienteId: string;
   cliente: string;
   carpetas: CarpetaEnElTablero[];
-  /** Dónde se muestra: la cancha más urgente de sus trabajos. */
-  cancha: Cancha;
 };
 
+/**
+ * Agrupa por cliente **adentro de una columna**.
+ *
+ * **La columna la decide el trabajo, no el cliente.** Un trabajo aprobado va a
+ * «Terminado» aunque el mismo cliente tenga otro esperando: lo que se está
+ * mirando es el estado del trabajo, y mandarlo a otra columna porque su cliente
+ * tiene algo más urgente sería esconderlo donde nadie lo busca.
+ *
+ * El nombre del cliente puede aparecer en dos columnas, y eso no es lo mismo
+ * que un trabajo repetido: **ningún trabajo está dos veces**. El nombre es el
+ * rótulo del grupo, y decir «Café Otoño» en dos columnas es decir que tiene
+ * cosas de las dos clases.
+ */
 function porCliente(carpetas: CarpetaEnElTablero[]): PorCliente[] {
   const salida: PorCliente[] = [];
-
   for (const carpeta of carpetas) {
     const suyo = salida.find((c) => c.clienteId === carpeta.clienteId);
     if (suyo) suyo.carpetas.push(carpeta);
@@ -77,21 +90,8 @@ function porCliente(carpetas: CarpetaEnElTablero[]): PorCliente[] {
         clienteId: carpeta.clienteId,
         cliente: carpeta.cliente,
         carpetas: [carpeta],
-        cancha: "listo",
       });
   }
-
-  for (const cliente of salida) {
-    // La peor de las que tenga: el índice más chico de ORDEN.
-    cliente.cancha = ORDEN[
-      Math.min(...cliente.carpetas.map((c) => ORDEN.indexOf(c.cancha)))
-    ];
-    // Y adentro, primero lo más urgente también.
-    cliente.carpetas.sort(
-      (a, b) => ORDEN.indexOf(a.cancha) - ORDEN.indexOf(b.cancha)
-    );
-  }
-
   return salida;
 }
 
@@ -108,8 +108,6 @@ export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[]
     );
   }
 
-  const clientes = porCliente(carpetas);
-
   return (
     <>
       <div className="mt-8 grid gap-6 lg:grid-cols-3">
@@ -117,7 +115,8 @@ export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[]
           <Columna
             key={cual}
             cual={cual}
-            clientes={clientes.filter((c) => c.cancha === cual)}
+            clientes={porCliente(carpetas.filter((c) => c.cancha === cual))}
+            hayVentana={mirando !== null}
             onMirar={setMirando}
           />
         ))}
@@ -133,10 +132,12 @@ export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[]
 function Columna({
   cual,
   clientes,
+  hayVentana,
   onMirar,
 }: {
   cual: Cancha;
   clientes: PorCliente[];
+  hayVentana: boolean;
   onMirar: (c: CarpetaEnElTablero) => void;
 }) {
   const { titulo, explica, filo } = CANCHAS[cual];
@@ -160,7 +161,7 @@ function Columna({
           {clientes.map((c) => (
             <li key={c.clienteId} className="border border-linea bg-lienzo px-3 py-2">
               <Plegable
-                recuerdo={`tablero-${c.clienteId}`}
+                recuerdo={`tablero-${cual}-${c.clienteId}`}
                 titulo={<span className="text-normal">{c.cliente}</span>}
                 resumen={`${c.carpetas.length} ${
                   c.carpetas.length === 1 ? "trabajo" : "trabajos"
@@ -168,7 +169,12 @@ function Columna({
               >
                 <ul className="mt-2 flex flex-col">
                   {c.carpetas.map((carpeta) => (
-                    <Trabajo key={carpeta.carpetaId} carpeta={carpeta} onMirar={onMirar} />
+                    <Trabajo
+                      key={carpeta.carpetaId}
+                      carpeta={carpeta}
+                      hayVentana={hayVentana}
+                      onMirar={onMirar}
+                    />
                   ))}
                 </ul>
               </Plegable>
@@ -193,20 +199,39 @@ function Columna({
  */
 function Trabajo({
   carpeta: c,
+  hayVentana,
   onMirar,
 }: {
   carpeta: CarpetaEnElTablero;
+  /** Si hay una ventana abierta encima, de este trabajo o de cualquier otro. */
+  hayVentana: boolean;
   onMirar: (c: CarpetaEnElTablero) => void;
 }) {
   const cancha = CANCHAS[c.cancha];
   const cerradas = Math.max(0, c.piezas - c.enAgencia - c.sinRevisar);
 
+  // **Este renglón abrió la ventana.** Mientras siga siendo cierto, la vista
+  // rápida no se muestra por el foco: al cerrar la ventana el foco vuelve acá
+  // —tiene que volver, es lo correcto para quien usa teclado— y sin esto la
+  // vista quedaba abierta encima del renglón de abajo, que era justo el que se
+  // estaba mirando. Se apaga solo cuando el foco se va a otro lado.
+  const [abrioLaVentana, setAbrioLaVentana] = useState(false);
+
   return (
     <li className="group relative border-t border-linea-tenue">
       <button
         type="button"
-        onClick={() => onMirar(c)}
-        className="flex w-full items-center gap-2 py-2 text-left transition-colors
+        onClick={() => {
+          setAbrioLaVentana(true);
+          onMirar(c);
+        }}
+        // El foco se va dos veces: primero a la ventana que se acaba de abrir
+        // —y ahí hay que seguir callado— y después, cuando alguien sigue
+        // recorriendo la pantalla. La segunda es la que apaga la marca.
+        onBlur={() => {
+          if (!hayVentana) setAbrioLaVentana(false);
+        }}
+        className="peer flex w-full items-center gap-2 py-2 text-left transition-colors
                    hover:text-acento focus-visible:outline-2 focus-visible:outline-acento"
       >
         <span
@@ -227,12 +252,36 @@ function Trabajo({
         La vista rápida. Aparece al apoyar el mouse o al llegar con el teclado,
         y no se puede tocar: es para mirar, no para usar. Por eso
         `pointer-events-none`, que además evita que tape el renglón de abajo.
+
+        **`focus-visible` y no `focus-within`.** Con `focus-within` la vista
+        quedaba trabada: al tocar un trabajo se abre la ventana, y al cerrarla
+        el foco vuelve al botón —tiene que volver, es lo correcto para quien
+        usa teclado—, así que el botón seguía con foco y la vista seguía
+        abierta aunque el mouse estuviera tres renglones más abajo, tapando la
+        del renglón que sí se estaba mirando.
+
+        `focus-visible` es exactamente la diferencia que hace falta: el
+        navegador lo enciende cuando se llegó con el teclado y no cuando se
+        llegó con el mouse. Quien tabula sigue viendo la vista rápida; quien
+        hace clic ve la ventana, que dice todo eso y más.
+
+        Y va como `peer-` del botón, no como `group-` del renglón: `group-`
+        pregunta si **el renglón** tiene el foco, y un renglón no puede
+        tenerlo, así que no se encendía nunca. `peer-` pregunta por el botón,
+        que es el que lo tiene y el hermano de acá al lado.
+
+        `focus-visible` solo no alcanzaba: si se abre con el mouse y se cierra
+        con Escape, el navegador considera —con razón— que ahora se está
+        usando el teclado, y la vista volvía a quedarse. Por eso además está
+        `abrioLaVentana`, que es la pregunta que de verdad importa: ¿este
+        renglón acaba de mandar a alguien a la ventana grande? Entonces no
+        tiene nada nuevo que mostrar.
       */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-4 right-0 top-full z-20 hidden
-                   border-2 border-tinta bg-lienzo px-3 py-2 shadow-lg
-                   group-hover:block group-focus-within:block"
+        className={`pointer-events-none absolute left-4 right-0 top-full z-20 hidden
+                    border-2 border-tinta bg-lienzo px-3 py-2 shadow-lg
+                    group-hover:block ${abrioLaVentana ? "" : "peer-focus-visible:block"}`}
       >
         <p className="flex flex-wrap items-baseline gap-x-2 text-micro">
           <span className="font-extrabold uppercase tracking-widest text-apagado">
