@@ -161,7 +161,11 @@ function Columna({
           {clientes.map((c) => (
             <li key={c.clienteId} className="border border-linea bg-lienzo px-3 py-2">
               <Plegable
-                recuerdo={`tablero-${cual}-${c.clienteId}`}
+                // **Sin recuerdo, a propósito.** En Admin conviene que una
+                // sección quede abierta: se entra a hacer una cosa puntual.
+                // Acá no: el tablero se mira para ver cómo viene todo, y
+                // heredar lo que quedó abierto hace tres días lo devuelve al
+                // párrafo del que se lo sacó. Siempre arranca cerrado.
                 titulo={<span className="text-normal">{c.cliente}</span>}
                 resumen={`${c.carpetas.length} ${
                   c.carpetas.length === 1 ? "trabajo" : "trabajos"

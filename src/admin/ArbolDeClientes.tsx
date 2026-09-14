@@ -37,6 +37,7 @@ import { ConfiguracionDeCliente } from "@/admin/ConfiguracionDeCliente";
 import { ConfiguracionDeCarpeta } from "@/admin/ConfiguracionDeCarpeta";
 import { ConfiguracionDeArchivo } from "@/admin/ConfiguracionDeArchivo";
 import { Entregar } from "@/admin/Entregar";
+import { Visibilidad } from "@/admin/Visibilidad";
 import { Estado } from "@/ui/Estado";
 import { IconoConfig, IconoDrive, IconoFlecha } from "@/ui/Icono";
 
@@ -480,7 +481,10 @@ function FilaCarpeta({
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const oculta = !carpeta.visible && !carpeta.reservada;
+  // «Facturas» no se le muestra al cliente nunca y no tiene interruptor, así
+  // que decir «oculta» ahí sería ruido. «Entregas finales» sí: se puede
+  // apagar como cualquier otra cosa, y si está apagada hay que verlo.
+  const oculta = !carpeta.visible && !carpeta.deFacturas;
 
   const traer = useCallback(async () => {
     setCargando(true);
@@ -588,7 +592,7 @@ function FilaCarpeta({
       {config && (
         <Panel nivel={nivel} de={carpeta.id}>
           {carpeta.reservada ? (
-            <ConfiguracionDeReservada carpeta={carpeta} />
+            <ConfiguracionDeReservada carpeta={carpeta} alGuardar={alGuardar} />
           ) : (
             <ConfiguracionDeCarpeta
               carpeta={carpeta}
@@ -654,13 +658,33 @@ function FilaCarpeta({
 /**
  * La configuración de una carpeta reservada.
  *
- * No se configura nada —no es un trabajo— pero el engranaje está igual, porque
- * una columna donde algunos botones faltan se lee como rota. Adentro va lo
- * único que hay: el link a Drive y por qué no hay nada más.
+ * No se configura como un trabajo —no lo es— pero **«Entregas finales» sí se
+ * muestra o se esconde**, como cualquier otra cosa del cliente. Faltaba, y era
+ * un agujero raro: la carpeta donde termina todo lo aprobado era lo único del
+ * portal que la agencia no podía apagar.
+ *
+ * «Facturas» no lleva interruptor porque no tiene opción: es de la agencia y
+ * al cliente no se le muestra nunca. Un botón que no puede cambiar nada es
+ * peor que no tenerlo.
  */
-function ConfiguracionDeReservada({ carpeta }: { carpeta: NodoCarpeta }) {
+function ConfiguracionDeReservada({
+  carpeta,
+  alGuardar,
+}: {
+  carpeta: NodoCarpeta;
+  alGuardar: () => void;
+}) {
   return (
-    <div>
+    <div className="flex flex-col gap-4">
+      {!carpeta.deFacturas && (
+        <Visibilidad
+          ids={[carpeta.id]}
+          visible={carpeta.visible}
+          que="carpeta"
+          alGuardar={alGuardar}
+        />
+      )}
+
       <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
         Carpeta con nombre reservado
       </h4>

@@ -19,7 +19,12 @@
 // escalón: cada nivel recibe lo que corre arriba y le pasa a sus hijos lo que
 // corre en él. Así la regla es la misma a cualquier profundidad.
 
-import { ajustesDe, esCarpetaReservada, escondidosEntre } from "@/lib/ajustes";
+import {
+  ajustesDe,
+  esCarpetaDeFacturas,
+  esCarpetaReservada,
+  escondidosEntre,
+} from "@/lib/ajustes";
 import { personaPorId } from "@/lib/equipo";
 import { subcarpetasDe } from "@/lib/google";
 import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
@@ -57,8 +62,21 @@ export type NodoCarpeta = {
   sinEntregar: number;
   /** Cuántas carpetas tiene adentro. Una carpeta puede no tener archivos. */
   subcarpetas: number;
-  /** `Entregas finales` no es un trabajo: no se configura. */
+  /** `Entregas finales` y `Facturas`: no son trabajos, no se revisan. */
   reservada: boolean;
+  /**
+   * De las dos reservadas, esta es «Facturas».
+   *
+   * Hace falta distinguirlas porque se tratan distinto: «Entregas finales» es
+   * del cliente y se puede mostrar o esconder como cualquier otra cosa;
+   * «Facturas» es de la agencia y no se le muestra nunca, así que no tiene
+   * sentido ofrecer un interruptor que no hace nada.
+   *
+   * Viene del servidor y no se calcula acá porque quién es «Facturas» lo
+   * decide `lib/ajustes`, y es lo único que sabe comparar el nombre igual que
+   * lo hacen los permisos.
+   */
+  deFacturas: boolean;
 };
 
 export type NodoArchivo = {
@@ -160,6 +178,7 @@ async function subcarpetasDeCarpeta(
         dias: propios[carpeta.id],
         diasQueCorren: plazoQueCorre(propios[carpeta.id], heredado.dias, undefined),
         reservada,
+        deFacturas: esCarpetaDeFacturas(carpeta.name),
       };
 
       // Cuántas carpetas tiene adentro se pregunta siempre: una carpeta sin
