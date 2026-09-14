@@ -17,8 +17,24 @@
 // otra cosa lo encuentra cerrado. Sin el recuerdo, «cerrado por omisión» se
 // vuelve un clic de peaje.
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { IconoFlecha } from "@/ui/Icono";
+
+/**
+ * Nadie cambia lo guardado por afuera: lo escribe este mismo componente al
+ * abrir o cerrar, y ahí ya vuelve a dibujarse por su cuenta. La suscripción
+ * existe porque la función la pide, y no hace nada.
+ */
+const nadieLoCambia = () => () => {};
+
+function leer(recuerdo: string): string | null {
+  try {
+    return localStorage.getItem(`mdt_abierto_${recuerdo}`);
+  } catch {
+    // Un navegador que no deja guardar nada no es motivo para no abrir.
+    return null;
+  }
+}
 
 export function Plegable({
   titulo,
@@ -44,20 +60,33 @@ export function Plegable({
   abiertoDeEntrada?: boolean;
   children: React.ReactNode;
 }) {
-  const [abierto, setAbierto] = useState(() => {
-    if (!recuerdo) return abiertoDeEntrada;
-    try {
-      const guardado = localStorage.getItem(`mdt_abierto_${recuerdo}`);
-      return guardado === null ? abiertoDeEntrada : guardado === "si";
-    } catch {
-      // Un navegador que no deja guardar nada no es motivo para no abrir.
-      return abiertoDeEntrada;
-    }
-  });
+  // **Lo guardado se lee con `useSyncExternalStore` y no en un `useState`.**
+  //
+  // Leerlo al armar el estado rompía la aplicación de una manera fea: el
+  // servidor dibuja la página primero, y ahí `localStorage` no existe, así que
+  // dibujaba «cerrado»; el navegador leía lo guardado y dibujaba «abierto». Los
+  // dos dibujos no coincidían y React cortaba la hidratación con «Hydration
+  // failed» —el cartel de error que aparecía en la esquina—.
+  //
+  // Esta función existe para exactamente esto: se le da un valor para el
+  // servidor —«no sé»— y otro para el navegador, y React hidrata con el
+  // primero y vuelve a dibujar con el segundo, sin quejarse.
+  const guardado = useSyncExternalStore(
+    nadieLoCambia,
+    () => (recuerdo ? leer(recuerdo) : null),
+    // En el servidor no hay nada guardado, y decirlo es la clave de todo esto.
+    () => null
+  );
+
+  // Lo que decidió quien está mirando, si decidió algo. `null` es «todavía no
+  // tocó nada», que no es lo mismo que «lo cerró».
+  const [tocado, setTocado] = useState<boolean | null>(null);
+
+  const abierto = tocado ?? (guardado === null ? abiertoDeEntrada : guardado === "si");
 
   function alternar() {
     const nuevo = !abierto;
-    setAbierto(nuevo);
+    setTocado(nuevo);
     if (!recuerdo) return;
     try {
       localStorage.setItem(`mdt_abierto_${recuerdo}`, nuevo ? "si" : "no");

@@ -59,6 +59,8 @@ export type CarpetaEnElTablero = {
   sinEntregar: number;
   /** De quién es el próximo movimiento. */
   cancha: Cancha;
+  /** Los días de revisión que corren acá, ya heredados. */
+  diasQueCorren: number;
 };
 
 export type Tablero = {
@@ -160,6 +162,7 @@ export async function elTablero(): Promise<Tablero> {
 
             return {
               cancha,
+              diasQueCorren: plazoQueCorre(undefined, diasDeLaCarpeta, diasDelCliente),
               enAgencia,
               sinEntregar,
               clienteId: cliente.id,
