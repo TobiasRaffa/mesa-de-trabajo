@@ -5,6 +5,7 @@ import {
   estaBloqueada,
   piezaNueva,
   quedanRondas,
+  sigueEnJuego,
   type Estado,
   type Evento,
   type Pieza,
@@ -392,5 +393,29 @@ describe("aplicar nunca modifica la pieza que recibe", () => {
     const copia = { ...antes };
     aplicar(antes, APROBAR);
     expect(antes).toEqual(copia);
+  });
+});
+
+describe("sigue en juego", () => {
+  // Lo que cuenta el tablero como trabajo pendiente. Una aprobada no cuenta:
+  // ya está en «Entregas finales» y no espera a nadie.
+  const casos: [Estado, boolean][] = [
+    ["en_curso", true],
+    ["entregada", true],
+    ["en_revision", true],
+    ["cambios_marcados", true],
+    ["extra_pedida", true],
+    ["final", false],
+    ["cancelada", false],
+  ];
+
+  it.each(casos)("«%s» %s", (estado, esperado) => {
+    expect(sigueEnJuego(estado)).toBe(esperado);
+  });
+
+  it("cubre todos los estados que existen", () => {
+    // Un estado nuevo que nadie clasifique se contaría como pendiente sin que
+    // nadie lo haya decidido, y el tablero pediría trabajo que no existe.
+    expect(casos).toHaveLength(7);
   });
 });

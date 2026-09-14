@@ -22,6 +22,7 @@ import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { calcularVencimiento } from "@/lib/fechas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
+import { sigueEnJuego } from "@/dominio/pieza";
 
 /**
  * De quién es el próximo movimiento.
@@ -47,10 +48,21 @@ export type CarpetaEnElTablero = {
   vence: Date | null;
   /** Está vencida y todavía falta que el cliente decida. */
   vencida: boolean;
+  /** Cuántas hay en total, terminadas incluidas. */
   piezas: number;
+  /**
+   * Las que todavía están en juego.
+   *
+   * **Lo aprobado o no es de cada pieza, no del trabajo.** Un trabajo con dos
+   * piezas —una aprobada y otra esperando— no tiene «2 piezas» pendientes:
+   * tiene una. Contarlas juntas hacía que una pieza terminada siguiera pesando
+   * en un trabajo que figura como «lo tiene el cliente», y eso es justo lo que
+   * el tablero no tiene que hacer: hablar de trabajo que ya no existe.
+   */
+  enJuego: number;
   sinRevisar: number;
-  aprobadas: number;
-  conCambios: number;
+  /** Ya no están en juego: aprobadas —en «Entregas finales»— o canceladas. */
+  terminadas: number;
   /** Mensajes del cliente que nadie leyó. */
   sinLeer: number;
   /** Piezas que esperan trabajo de la agencia. */
@@ -124,6 +136,10 @@ export async function elTablero(): Promise<Tablero> {
             // lo que hay que hacer con esto es apretar un botón, no diseñar.
             const sinEntregar = piezas.filter((p) => p.estado === "en_curso").length;
 
+            // Lo que ya no está en juego. Sigue existiendo —nada se borra— pero
+            // no es trabajo pendiente de nadie.
+            const terminadas = piezas.filter((p) => !sigueEnJuego(p.estado)).length;
+
             const cancha: Cancha =
               enAgencia > 0 ? "agencia" : sinRevisar > 0 ? "cliente" : "listo";
 
@@ -175,9 +191,9 @@ export async function elTablero(): Promise<Tablero> {
               // una carpeta terminada con fecha vieja no es un problema.
               vencida: Boolean(vence && vence < hoyALaMedianoche() && sinRevisar > 0),
               piezas: piezas.length,
+              enJuego: piezas.length - terminadas,
               sinRevisar,
-              aprobadas: piezas.filter((p) => p.estado === "final").length,
-              conCambios: piezas.filter((p) => p.estado === "cambios_marcados").length,
+              terminadas,
               sinLeer: sinLeer[cliente.id] ?? 0,
             };
           })

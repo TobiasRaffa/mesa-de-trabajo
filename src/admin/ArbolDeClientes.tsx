@@ -573,15 +573,39 @@ function FilaCarpeta({
                   {carpeta.subcarpetas === 1 ? "carpeta" : "carpetas"} ·{" "}
                 </>
               )}
-              {carpeta.piezas} {carpeta.piezas === 1 ? "pieza" : "piezas"}
-              {carpeta.sinEntregar > 0 && (
-                <span className="font-bold text-acento">
+              {/* En juego, no el total: una pieza aprobada ya no espera a
+                  nadie, y contarla acá hacía que una carpeta con una sola cosa
+                  pendiente dijera «2 piezas». Cuando no queda nada en juego se
+                  dice así y no «0 piezas en juego», que es la misma frase
+                  puesta al revés y se lee peor. */}
+              {carpeta.enJuego === 0 ? (
+                carpeta.piezas === 0 ? (
+                  "sin piezas"
+                ) : (
+                  <>
+                    todo terminado · {carpeta.piezas}{" "}
+                    {carpeta.piezas === 1 ? "pieza" : "piezas"}
+                  </>
+                )
+              ) : (
+                <>
+                  {carpeta.enJuego} {carpeta.enJuego === 1 ? "pieza" : "piezas"} en juego
+                  {carpeta.sinEntregar > 0 && (
+                    <span className="font-bold text-acento">
+                      {" · "}
+                      {carpeta.sinEntregar} sin entregar
+                    </span>
+                  )}
                   {" · "}
-                  {carpeta.sinEntregar} sin entregar
-                </span>
+                  {carpeta.sinRevisar} sin revisar
+                  {carpeta.terminadas > 0 &&
+                    ` · ${carpeta.terminadas} terminada${
+                      carpeta.terminadas === 1 ? "" : "s"
+                    }`}
+                </>
               )}
               {" · "}
-              {carpeta.sinRevisar} sin revisar · {carpeta.diasQueCorren}{" "}
+              {carpeta.diasQueCorren}{" "}
               {carpeta.diasQueCorren === 1 ? "día" : "días"} para revisar
               {carpeta.responsableA ? ` · ${carpeta.responsableA}` : " · sin asignar"}
             </>

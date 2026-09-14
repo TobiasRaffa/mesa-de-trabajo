@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { abrirCarpeta } from "@/app/(admin)/gestion/acciones";
 import { Estado } from "@/ui/Estado";
+import { sigueEnJuego } from "@/dominio/pieza";
 import { IconoCerrar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import type { NodoArchivo } from "@/admin/datos/arbol";
@@ -57,6 +58,11 @@ export function ResumenDeTrabajo({
     };
   }, [c.carpetaId, c.diasQueCorren]);
 
+  // Lo que ya no está en juego, aparte. El estado es de cada pieza: un trabajo
+  // no está «aprobado», lo están algunas de sus piezas.
+  const terminadas = (piezas ?? []).filter((p) => !sigueEnJuego(p.estado));
+  const enJuego = (piezas ?? []).filter((p) => sigueEnJuego(p.estado));
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-tinta/50 sm:items-center sm:p-6"
@@ -95,7 +101,10 @@ export function ResumenDeTrabajo({
         <div className="border-b-2 border-tinta px-5 py-4">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <Dato que="Quién lo lleva" es={c.asignadaA ?? "sin asignar"} />
-            <Dato que="Piezas" es={String(c.piezas)} />
+            {/* En juego y terminadas van separadas porque son dos cosas
+                distintas: una pide algo, la otra ya no. */}
+            <Dato que="En juego" es={String(c.enJuego)} />
+            {c.terminadas > 0 && <Dato que="Terminadas" es={String(c.terminadas)} />}
             {c.sinEntregar > 0 && <Dato que="Sin entregar" es={String(c.sinEntregar)} alerta />}
             {c.sinRevisar > 0 && <Dato que="Sin revisar" es={String(c.sinRevisar)} />}
             {c.vence && (
@@ -139,31 +148,55 @@ export function ResumenDeTrabajo({
           )}
 
           {piezas && piezas.length > 0 && (
-            <ul className="border-t border-linea">
-              {piezas.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-linea py-3"
-                >
-                  <span className="min-w-0 flex-1 font-bold tracking-tight">{p.nombre}</span>
-                  {p.vueltas > 1 && (
-                    <span className="shrink-0 text-micro text-apagado">
-                      {p.vueltas} vueltas
-                    </span>
+            <>
+              {enJuego.length > 0 && <Lista piezas={enJuego} />}
+
+              {/*
+                **Lo terminado va abajo y bajo su propio título.** Mezclado
+                arriba, una pieza aprobada se lee como una más de las que hay
+                que mirar, que es justo lo contrario de lo que es. Y no se
+                esconde: sigue estando, con su estado, porque acá nada
+                desaparece.
+              */}
+              {terminadas.length > 0 && (
+                <>
+                  {enJuego.length > 0 && (
+                    <h3 className="mt-5 text-micro font-extrabold uppercase tracking-widest text-apagado">
+                      Ya está · en «Entregas finales»
+                    </h3>
                   )}
-                  {p.publicaEl && (
-                    <span className="cifras shrink-0 text-micro text-apagado">
-                      sale el {comoFecha(p.publicaEl)}
-                    </span>
-                  )}
-                  <Estado estado={p.estado} />
-                </li>
-              ))}
-            </ul>
+                  <Lista piezas={terminadas} />
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function Lista({ piezas }: { piezas: NodoArchivo[] }) {
+  return (
+    <ul className="mt-2 border-t border-linea">
+      {piezas.map((p) => (
+        <li
+          key={p.id}
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-linea py-3"
+        >
+          <span className="min-w-0 flex-1 font-bold tracking-tight">{p.nombre}</span>
+          {p.vueltas > 1 && (
+            <span className="shrink-0 text-micro text-apagado">{p.vueltas} vueltas</span>
+          )}
+          {p.publicaEl && (
+            <span className="cifras shrink-0 text-micro text-apagado">
+              sale el {comoFecha(p.publicaEl)}
+            </span>
+          )}
+          <Estado estado={p.estado} />
+        </li>
+      ))}
+    </ul>
   );
 }
 

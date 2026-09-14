@@ -87,6 +87,35 @@ export const quedanRondas = (p: Pieza) => p.ronda < rondasDisponibles(p);
 /** Una pieza aprobada está cerrada con llave: no admite comentarios ni versiones. */
 export const estaBloqueada = (p: Pieza) => p.estado === "final";
 
+/**
+ * ¿Sigue en juego?
+ *
+ * **El estado es de cada pieza, no del trabajo.** Un trabajo con dos piezas
+ * —una aprobada y otra esperando— tiene una sola cosa pendiente, y las
+ * pantallas que cuentan «2 piezas» hacen que lo terminado siga pesando donde
+ * ya no tiene nada que hacer.
+ *
+ * Vive acá y no en cada pantalla porque la misma pregunta se hace en tres
+ * lugares —el tablero, la ventana de un trabajo y el árbol de un cliente— y
+ * escrita tres veces se separa: alguien agrega un estado nuevo y lo cuenta
+ * distinto en cada una. Acá el compilador obliga a decidir qué es.
+ */
+export function sigueEnJuego(estado: Estado): boolean {
+  switch (estado) {
+    case "en_curso":
+    case "entregada":
+    case "en_revision":
+    case "cambios_marcados":
+    case "extra_pedida":
+      return true;
+    // Aprobada —ya está en «Entregas finales»— o caída. Sigue existiendo,
+    // porque acá no se borra nada, pero no espera a nadie.
+    case "final":
+    case "cancelada":
+      return false;
+  }
+}
+
 /** ¿De quién se está esperando algo? Es la pregunta que contesta el tablero. */
 export function deQuienEsLaPelota(p: Pieza): "agencia" | "cliente" | "nadie" {
   switch (p.estado) {

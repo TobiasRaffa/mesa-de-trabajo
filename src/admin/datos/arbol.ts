@@ -37,7 +37,7 @@ import {
 import { diaDe, publicacionesDe } from "@/lib/publicaciones";
 import { calcularVencimiento } from "@/lib/fechas";
 import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
-import type { Estado } from "@/dominio/pieza";
+import { sigueEnJuego, type Estado } from "@/dominio/pieza";
 
 export type NodoCarpeta = {
   id: string;
@@ -56,8 +56,18 @@ export type NodoCarpeta = {
   dias?: number;
   /** Los que de verdad corren acá, ya heredados. */
   diasQueCorren: number;
+  /** Cuántas hay en total, terminadas incluidas. */
   piezas: number;
+  /**
+   * Las que todavía están en juego.
+   *
+   * **El estado es de cada pieza, no de la carpeta.** Una carpeta con una
+   * pieza aprobada y otra esperando no tiene dos cosas pendientes: tiene una.
+   */
+  enJuego: number;
   sinRevisar: number;
+  /** Aprobadas —ya en «Entregas finales»— o canceladas. */
+  terminadas: number;
   /** Están en Drive y el cliente todavía no las ve. */
   sinEntregar: number;
   /** Cuántas carpetas tiene adentro. Una carpeta puede no tener archivos. */
@@ -191,7 +201,9 @@ async function subcarpetasDeCarpeta(
         return {
           ...base,
           piezas: 0,
+          enJuego: 0,
           sinRevisar: 0,
+          terminadas: 0,
           sinEntregar: 0,
           subcarpetas: adentro.length,
         };
@@ -203,13 +215,18 @@ async function subcarpetasDeCarpeta(
       );
       const estados = await estadosDe(carpeta.id, identidades);
 
+      const suyas = Object.values(estados);
+      const terminadas = suyas.filter((p) => !sigueEnJuego(p.estado)).length;
+
       return {
         ...base,
         piezas: agrupadas.length,
-        sinRevisar: Object.values(estados).filter(
+        enJuego: agrupadas.length - terminadas,
+        sinRevisar: suyas.filter(
           (p) => p.estado === "entregada" || p.estado === "en_revision"
         ).length,
-        sinEntregar: Object.values(estados).filter((p) => p.estado === "en_curso").length,
+        terminadas,
+        sinEntregar: suyas.filter((p) => p.estado === "en_curso").length,
         subcarpetas: adentro.length,
       };
     })

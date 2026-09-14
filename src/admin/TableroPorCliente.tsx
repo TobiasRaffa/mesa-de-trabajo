@@ -213,6 +213,7 @@ function Trabajo({
 }) {
   const cancha = CANCHAS[c.cancha];
   const cerradas = Math.max(0, c.piezas - c.enAgencia - c.sinRevisar);
+  const unaPieza = c.enJuego === 1;
 
   // **Este renglón abrió la ventana.** Mientras siga siendo cierto, la vista
   // rápida no se muestra por el foco: al cerrar la ventana el foco vuelve acá
@@ -325,12 +326,34 @@ function Trabajo({
           </div>
         )}
 
+        {/*
+          **Lo que se cuenta es lo que está en juego.** Una pieza aprobada ya
+          no es trabajo de nadie: sumarla acá hacía que un trabajo con una sola
+          cosa pendiente dijera «2 piezas», y que lo terminado siguiera pesando
+          en la columna del que todavía espera. Las terminadas se dicen aparte
+          y en voz baja, que es lo que son: algo que ya pasó.
+        */}
         <p className="mt-1.5 text-micro text-apagado">
-          {c.piezas} {c.piezas === 1 ? "pieza" : "piezas"}
-          {c.sinEntregar > 0 && (
-            <span className="font-bold text-acento"> · {c.sinEntregar} sin entregar</span>
+          {c.enJuego === 0 ? (
+            c.piezas === 0 ? (
+              "Sin piezas"
+            ) : (
+              `Todo terminado · ${c.piezas} ${c.piezas === 1 ? "pieza" : "piezas"}`
+            )
+          ) : (
+            <>
+              {c.enJuego} {unaPieza ? "pieza" : "piezas"} en juego
+              {c.sinEntregar > 0 && (
+                <span className="font-bold text-acento">
+                  {" · "}
+                  {c.sinEntregar} sin entregar
+                </span>
+              )}
+              {c.sinRevisar > 0 && ` · ${c.sinRevisar} sin revisar`}
+              {c.terminadas > 0 &&
+                ` · ${c.terminadas} terminada${c.terminadas === 1 ? "" : "s"}`}
+            </>
           )}
-          {c.sinRevisar > 0 && ` · ${c.sinRevisar} sin revisar`}
           {c.sinLeer > 0 && (
             <span className="font-bold text-acento"> · {c.sinLeer} sin leer</span>
           )}
