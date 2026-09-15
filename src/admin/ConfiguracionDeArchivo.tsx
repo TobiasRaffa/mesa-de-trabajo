@@ -9,6 +9,7 @@ import { useState, useTransition } from "react";
 // aunque el resto sea de Nari». Es el último escalón de la herencia, y lo que
 // se pone acá gana sobre todo lo de arriba.
 
+import { Entregar } from "@/admin/Entregar";
 import { Visibilidad } from "@/admin/Visibilidad";
 import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import { Responsable } from "@/admin/Responsable";
@@ -31,6 +32,24 @@ export function ConfiguracionDeArchivo({
 }) {
   return (
     <div className="flex flex-col gap-4">
+      {/*
+        **Entregar de a una, además de la carpeta entera.**
+        Entregar la tanda es lo habitual —se arma y se manda—, pero no siempre:
+        el banner sale hoy y el resto de la campaña la semana que viene.
+        Faltaba, y sin esto la única salida era entregar todo o no entregar
+        nada.
+      */}
+      {archivo.estado === "en_curso" && (
+        <Entregar
+          carpetaId={carpetaId}
+          carpeta={archivo.nombre}
+          cuantas={1}
+          piezaId={archivo.id}
+          sangria={0}
+          alEntregar={alGuardar}
+        />
+      )}
+
       <Visibilidad
         ids={archivo.archivos}
         visible={archivo.visible}

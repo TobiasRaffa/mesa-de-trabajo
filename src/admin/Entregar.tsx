@@ -26,6 +26,7 @@ export function Entregar({
   carpetaId,
   carpeta,
   cuantas,
+  piezaId,
   sangria,
   alEntregar,
 }: {
@@ -33,6 +34,14 @@ export function Entregar({
   carpeta: string;
   /** Cuántas piezas están sin entregar. Si no hay ninguna, no se muestra. */
   cuantas: number;
+  /**
+   * Una sola pieza, cuando se entrega de a una desde su ficha.
+   *
+   * Sin esto se entrega la carpeta entera, que es lo habitual: se arma una
+   * tanda y se manda. Con esto se manda solo esa, que es el caso del banner
+   * que sale hoy y el resto de la campaña la semana que viene.
+   */
+  piezaId?: string;
   /**
    * Cuánto se corre desde la izquierda, según qué tan hondo está en el árbol.
    *
@@ -61,7 +70,7 @@ export function Entregar({
   function entregar() {
     setError(null);
     empezar(async () => {
-      const r = await entregarCarpeta(carpetaId);
+      const r = await entregarCarpeta(carpetaId, piezaId);
       if (r.ok) {
         setConfirmando(false);
         if (r.avisar) setRecienEntregado({ avisar: r.avisar, cuantas: r.entregadas });
@@ -87,12 +96,12 @@ export function Entregar({
           className="min-h-toque shrink-0 bg-acento px-4 text-normal font-bold tracking-tight
                      text-white transition-colors hover:bg-acento-hover"
         >
-          Entregar {cuantas}
+          {piezaId ? "Entregar esta" : `Entregar ${cuantas}`}
         </button>
       ) : (
         <Confirmacion
           carpeta={carpeta}
-          cuantas={cuantas}
+          cuantas={piezaId ? 0 : cuantas}
           yendo={yendo}
           error={error}
           onSi={entregar}
@@ -121,9 +130,14 @@ function Confirmacion({
   return (
     <div className="flex flex-col gap-2 border-2 border-acento bg-acento-tenue p-3">
       <p className="text-menudo font-semibold text-acento">
-        {cuantas === 1
-          ? `Se le entrega 1 pieza de ${carpeta}. La va a ver ahora`
-          : `Se le entregan ${cuantas} piezas de ${carpeta}. Las va a ver ahora`}
+        {/* Con 0 se está entregando una sola pieza y `carpeta` es su nombre:
+            decir «1 pieza de stickers» sería hablar de una pieza adentro de
+            otra. */}
+        {cuantas === 0
+          ? `Se le entrega «${carpeta}». La va a ver ahora`
+          : cuantas === 1
+            ? `Se le entrega 1 pieza de ${carpeta}. La va a ver ahora`
+            : `Se le entregan ${cuantas} piezas de ${carpeta}. Las va a ver ahora`}
         , le arranca el plazo y le sale el aviso.
       </p>
       <div className="flex flex-wrap gap-2">

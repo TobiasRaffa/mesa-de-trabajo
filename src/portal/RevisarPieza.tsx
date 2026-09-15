@@ -262,22 +262,6 @@ export function RevisarPieza({
                 </Boton>
                   )}
 
-                {/* El archivo en Drive: para quien quiera verlo con las
-                    herramientas de Google, o bajarlo desde ahí. Solo abre para
-                    quien ya tenga acceso a esa carpeta. */}
-                {pieza.enlaceDrive && (
-                  <BotonEnlace
-                    href={pieza.enlaceDrive}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    variante="contorno"
-                    tamano="chico"
-                  >
-                    <IconoDrive />
-                    Ver en Drive
-                  </BotonEnlace>
-                )}
-
                 {hayAnterior && (
                   <Boton
                     variante={comparando ? "principal" : "contorno"}
@@ -442,6 +426,30 @@ export function RevisarPieza({
                   Dejar esta para después
                 </Boton>
                 <div className="flex flex-col gap-2 sm:flex-row">
+                  {/*
+                    **Drive va acá, con las decisiones, y no arriba con las
+                    formas de mirar.** Estaba al lado de «Ver en grande», que es
+                    donde parecía corresponder —las dos muestran la pieza—, pero
+                    no es para eso que se abre: se abre para comentar encima del
+                    archivo, con las herramientas de Google, y comentar es
+                    decidir. Al lado de «Pedir cambios» es donde alguien lo va a
+                    buscar.
+
+                    Solo aparece si la agencia además le compartió la carpeta
+                    desde Drive; si no, el link lleva a una pantalla de Google
+                    pidiendo un permiso que el cliente no tiene.
+                  */}
+                  {pieza.enlaceDrive && (
+                    <BotonEnlace
+                      href={pieza.enlaceDrive}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      variante="contorno"
+                    >
+                      <IconoDrive />
+                      Ver en Drive
+                    </BotonEnlace>
+                  )}
                   {/*
                     Sin rondas, «Pedir cambios» no lleva a ningún lado: el
                     servidor lo rechaza. Y su mensaje se dibujaba **detrás** de

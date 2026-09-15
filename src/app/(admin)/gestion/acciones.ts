@@ -464,7 +464,17 @@ export type ParaAvisar = {
 };
 
 export async function entregarCarpeta(
-  carpetaId: string
+  carpetaId: string,
+  /**
+   * Una sola pieza, si se entrega de a una.
+   *
+   * **Es la misma acción con distinto alcance, y por eso es una sola
+   * función.** Entregar una carpeta y entregar un archivo hacen exactamente lo
+   * mismo —el mismo evento del dominio, la misma firma, el mismo aviso, el
+   * mismo mensaje para el cliente—; lo único que cambia es sobre cuántas
+   * piezas corre. Escritas dos veces, la segunda se olvida de algo.
+   */
+  soloEsta?: string
 ): Promise<
   | { ok: true; entregadas: number; avisar: ParaAvisar | null }
   | { ok: false; motivo: string }
@@ -492,6 +502,9 @@ export async function entregarCarpeta(
   const cambios: Record<string, EstadoDePieza> = {};
 
   for (const [id, guardada] of Object.entries(estados)) {
+    // Entregar de a una: el resto de la carpeta se queda donde está.
+    if (soloEsta && id !== soloEsta) continue;
+
     // Las reglas de qué se puede entregar **no están acá**: salen de
     // `aplicar()`, la misma función que corre en el navegador.
     const r = aplicar(
@@ -515,7 +528,12 @@ export async function entregarCarpeta(
 
   const cuantas = Object.keys(cambios).length;
   if (cuantas === 0) {
-    return { ok: false, motivo: "No hay nada sin entregar en esta carpeta." };
+    return {
+      ok: false,
+      motivo: soloEsta
+        ? "Esa pieza no está para entregar."
+        : "No hay nada sin entregar en esta carpeta.",
+    };
   }
 
   await guardarPiezas(cambios);
