@@ -72,8 +72,16 @@ export function Portal({ datos }: { datos: PortalDeCliente }) {
           <h1 className="text-titulo font-extrabold tracking-tight">
             Todavía no hay nada para revisar
           </h1>
+          {/*
+            **Lo que hace aparecer una pieza es la entrega, no la subida.**
+            El texto decía «cuando la agencia suba archivos» y quedó de cuando
+            subir a Drive alcanzaba para que el cliente lo viera. Desde que hay
+            un botón «Entregar», eso es mentira en el peor momento: alguien del
+            otro lado lee que no subimos nada cuando en realidad está todo
+            subido y falta que alguien lo entregue.
+          */}
           <p className="mt-3 text-normal text-tinta-suave">
-            Cuando la agencia suba archivos a una carpeta, aparecen acá.
+            Cuando la agencia te entregue algo, aparece acá.
           </p>
         </div>
       </div>
