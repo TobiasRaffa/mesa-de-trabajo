@@ -141,15 +141,22 @@ function Columna({
   onMirar: (c: CarpetaEnElTablero) => void;
 }) {
   const { titulo, explica, filo } = CANCHAS[cual];
+  const trabajos = clientes.reduce((n, c) => n + c.carpetas.length, 0);
 
   return (
     // `min-w-0` para que un nombre largo no ensanche la columna y saque la
     // página de ancho. Ya pasó en el portal.
     <section className={`min-w-0 border-t-4 pt-4 ${filo}`}>
+      {/*
+        **El número cuenta trabajos, no clientes.** Contaba clientes, y era la
+        clase de dato que parece información y engaña: «Lo tiene el cliente: 1»
+        con tres trabajos adentro de ese cliente. Lo que se pregunta mirando
+        una columna es cuánto hay ahí, y cuánto hay son trabajos.
+      */}
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-guia font-extrabold tracking-tight">{titulo}</h2>
         <span className="cifras text-titulo font-extrabold leading-none tracking-tighter text-apagado">
-          {clientes.length}
+          {trabajos}
         </span>
       </div>
       <p className="mt-0.5 text-micro text-apagado">{explica}</p>
@@ -159,7 +166,10 @@ function Columna({
       ) : (
         <ul className="mt-4 flex flex-col gap-2">
           {clientes.map((c) => (
-            <li key={c.clienteId} className="border border-linea bg-lienzo px-3 py-2">
+            <li
+              key={c.clienteId}
+              className={`border border-linea border-l-4 bg-lienzo px-3 py-2 ${filo}`}
+            >
               <Plegable
                 // **Sin recuerdo, a propósito.** En Admin conviene que una
                 // sección quede abierta: se entra a hacer una cosa puntual.
@@ -167,9 +177,7 @@ function Columna({
                 // heredar lo que quedó abierto hace tres días lo devuelve al
                 // párrafo del que se lo sacó. Siempre arranca cerrado.
                 titulo={<span className="text-normal">{c.cliente}</span>}
-                resumen={`${c.carpetas.length} ${
-                  c.carpetas.length === 1 ? "trabajo" : "trabajos"
-                }`}
+                resumen={<Senales cliente={c} />}
               >
                 <ul className="mt-2 flex flex-col">
                   {c.carpetas.map((carpeta) => (
@@ -187,6 +195,61 @@ function Columna({
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * Lo que se ve de un cliente **sin abrirlo**.
+ *
+ * Es el punto del tablero. Cerrado decía «1 trabajo» y nada más, así que para
+ * saber si había algo que atender había que abrir cliente por cliente —o sea,
+ * volver a la lista larga que el tablero vino a reemplazar—.
+ *
+ * Se dicen tres cosas y no más, y son las tres que hacen que alguien se
+ * levante de la silla: **algo vencido**, **algo sin entregar** y **mensajes
+ * sin leer**. El resto —cuántas piezas, quién lo lleva, cuándo vence— aparece
+ * al abrir, que es cuando importa.
+ */
+function Senales({ cliente }: { cliente: PorCliente }) {
+  const cuantos = cliente.carpetas.length;
+  const vencidos = cliente.carpetas.filter((c) => c.vencida).length;
+  const sinEntregar = cliente.carpetas.reduce((n, c) => n + c.sinEntregar, 0);
+  // Los mensajes sin leer son del cliente, no de cada carpeta: el mismo número
+  // viene repetido en todas. Sumarlos sería contarlos una vez por trabajo.
+  const sinLeer = cliente.carpetas[0]?.sinLeer ?? 0;
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span>
+        {cuantos} {cuantos === 1 ? "trabajo" : "trabajos"}
+      </span>
+      {vencidos > 0 && (
+        <Senal tono="alerta">
+          {vencidos === 1 ? "vencido" : `${vencidos} vencidos`}
+        </Senal>
+      )}
+      {sinEntregar > 0 && <Senal tono="acento">{sinEntregar} sin entregar</Senal>}
+      {/* Dice «mensajes» y no «sin leer» porque arriba, en el encabezado del
+          tablero, «sin leer» son las notificaciones. Dos cosas distintas con
+          el mismo nombre en la misma pantalla se leen como una sola. */}
+      {sinLeer > 0 && (
+        <Senal tono="acento">
+          {sinLeer} {sinLeer === 1 ? "mensaje" : "mensajes"}
+        </Senal>
+      )}
+    </span>
+  );
+}
+
+function Senal({ tono, children }: { tono: "alerta" | "acento"; children: React.ReactNode }) {
+  return (
+    <span
+      className={`px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider ${
+        tono === "alerta" ? "bg-alerta-tenue text-alerta" : "bg-acento-tenue text-acento"
+      }`}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -246,9 +309,17 @@ function Trabajo({
         <span className="min-w-0 flex-1 truncate font-bold tracking-tight">
           {c.carpeta}
         </span>
-        {c.vencida && (
-          <span className="shrink-0 text-micro font-extrabold uppercase tracking-wider text-alerta">
-            vencido
+        {/* **La fecha va en el renglón y no solo al apoyar el mouse.** Es lo
+            primero que se pregunta de un trabajo abierto, y en un teléfono no
+            hay dónde apoyar nada. */}
+        {c.vence && (
+          <span
+            className={`cifras shrink-0 text-micro ${
+              c.vencida ? "font-extrabold text-alerta" : "text-apagado"
+            }`}
+          >
+            {c.vencida ? "venció " : ""}
+            {fecha.format(c.vence)}
           </span>
         )}
       </button>
