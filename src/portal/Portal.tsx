@@ -43,6 +43,7 @@ import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
+import { Miniatura } from "@/ui/Miniatura";
 import type { CarpetaDeTrabajo, PortalDeCliente } from "@/portal/datos/cliente";
 import { RevisarPieza, type PiezaAbierta } from "@/portal/RevisarPieza";
 
@@ -383,7 +384,7 @@ function Revision({
                          text-menudo font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
             >
               <IconoDrive />
-              Abrir en Drive
+              Ver en Drive
             </a>
           )}
         </div>
@@ -552,7 +553,7 @@ function Revision({
                              text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
                 >
                   <IconoDrive />
-                  Abrir en Drive
+                  Ver en Drive
                 </a>
               )
             )}
@@ -586,10 +587,12 @@ function Revision({
                     className="flex min-w-0 flex-1 items-center gap-4 py-4 text-left transition-colors hover:bg-hueco/60"
                   >
                     <span className="relative h-16 w-16 shrink-0 overflow-hidden bg-tinta">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Miniatura
                         src={urlDeMiniatura(pieza.driveFileId, 220, pieza.modificado)}
                         alt=""
+                        nombre={pieza.nombre}
+                        rotulo={pieza.esPdf ? "PDF" : undefined}
+                        tono="oscuro"
                         className="absolute inset-0 h-full w-full object-contain"
                       />
                     </span>
@@ -644,7 +647,7 @@ function Revision({
                                  transition-colors hover:bg-hueco hover:text-tinta"
                     >
                       <IconoDrive />
-                      <span className="sr-only">Abrir en Drive</span>
+                      <span className="sr-only">Ver en Drive</span>
                     </a>
                   )}
                 </li>

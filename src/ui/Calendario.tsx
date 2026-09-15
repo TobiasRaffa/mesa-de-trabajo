@@ -1,5 +1,7 @@
 "use client";
 
+import { Miniatura } from "@/ui/Miniatura";
+
 // La entrega puesta en el tiempo.
 //
 // Dos modos: el mes entero, o semana por semana. El tercero que ofrece el
@@ -139,10 +141,10 @@ function Celda({
       </span>
 
       <span className={`relative ${alto} w-full overflow-hidden bg-hueco`}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Miniatura
           src={primera.miniatura}
           alt=""
+          nombre={primera.nombre}
           className="absolute inset-0 h-full w-full object-cover"
         />
       </span>
@@ -243,10 +245,10 @@ function VistaAgenda({ porDia, esDeHoy, onAbrir }: VistaProps) {
               </span>
 
               <span className="relative h-14 w-14 shrink-0 overflow-hidden bg-hueco">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Miniatura
                   src={pieza.miniatura}
                   alt=""
+                  nombre={pieza.nombre}
                   className="absolute inset-0 h-full w-full object-cover"
                 />
               </span>

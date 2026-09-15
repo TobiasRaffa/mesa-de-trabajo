@@ -1,11 +1,21 @@
 // Cómo se marca que un archivo es la segunda vuelta de otro.
 //
-// **Se marca con el nombre, y nada más.** Al final del nombre se agrega
-// ` V2`, y para la siguiente ` V3`. El archivo original no lleva nada.
+// **Se marca con el nombre, y nada más.** Se escribe `V2` —y después `V3`—
+// **adelante o atrás** del nombre. El archivo original no lleva nada.
 //
-//     9304.jpeg        ← la primera versión
-//     9304 V2.jpeg     ← la segunda: es la misma pieza
-//     9304 V3.jpeg     ← la tercera
+//     9304.jpeg                       ← la primera versión
+//     V2 9304.jpeg                    ← la segunda: es la misma pieza
+//     9304 V2.jpeg                    ← lo mismo, escrito al final
+//
+//     banner dia del padre.pdf        ← la primera
+//     V2 banner dia del padre.pdf     ← la segunda
+//
+// **Adelante también, porque así lo escriben.** Al principio solo se leía el
+// final del nombre, y en el estudio se nombra al revés: «V2 banner dia del
+// padre». Con la regla vieja eso no era una vuelta nueva sino una pieza
+// distinta, y el cliente terminaba con dos trabajos donde había uno solo, sin
+// poder comparar. Se cambió por eso y no por gusto: la regla la escribe quien
+// nombra los archivos, no quien escribe el código.
 //
 // Es a propósito lo más barato que se podía elegir: renombrar al guardar es
 // algo que un diseñador ya hace sin pensar, y no obliga a abrir la aplicación
@@ -24,13 +34,22 @@
 //     nadie lo pida sería mucho peor que no agruparlos.
 
 /**
- * Reconoce el sufijo de versión al final del nombre, antes de la extensión.
+ * La marca de versión al final del nombre, antes de la extensión.
  *
  * Acepta las formas en que la gente lo escribe de verdad: con espacio, guion
  * o guion bajo, y la uve en cualquier caja. `v1` también vale, aunque no haga
  * falta escribirlo.
  */
 const SUFIJO = /[ _-]+v\s*(\d{1,3})$/i;
+
+/**
+ * La misma marca, al principio: «V2 banner dia del padre».
+ *
+ * Pide un separador después del número —espacio, guion o guion bajo— para no
+ * comerse el nombre: sin eso, `V2025 balance` sería la versión 2025 de
+ * «025 balance», que no es nada.
+ */
+const PREFIJO = /^v\s*(\d{1,3})[ _-]+/i;
 
 export type NombreDeArchivo = {
   /** Lo que identifica a la pieza: el nombre sin el sufijo, con extensión. */
@@ -48,11 +67,23 @@ export function leerNombre(nombre: string): NombreDeArchivo {
   const cuerpo = hayExtension ? nombre.slice(0, punto) : nombre;
   const extension = hayExtension ? nombre.slice(punto) : "";
 
-  const marca = cuerpo.match(SUFIJO);
-  const limpio = marca ? cuerpo.slice(0, cuerpo.length - marca[0].length) : cuerpo;
+  // Primero adelante, que es como se escribe acá; si no, al final. Nunca las
+  // dos: «V2 banner V3» no tiene una respuesta correcta, y elegir una en
+  // silencio sería inventarla. Gana la de adelante y la otra queda como parte
+  // del nombre, que es visible y se puede corregir.
+  const adelante = cuerpo.match(PREFIJO);
+  const atras = adelante ? null : cuerpo.match(SUFIJO);
 
-  // «V2.jpeg» a secas no es la versión dos de nada: sin nombre delante, el
-  // sufijo *es* el nombre.
+  const limpio = adelante
+    ? cuerpo.slice(adelante[0].length)
+    : atras
+      ? cuerpo.slice(0, cuerpo.length - atras[0].length)
+      : cuerpo;
+
+  const marca = adelante ?? atras;
+
+  // «V2.jpeg» a secas no es la versión dos de nada: sin nombre al lado, la
+  // marca *es* el nombre.
   if (marca && limpio.trim() === "") {
     return { base: nombre, version: 1, titulo: cuerpo };
   }

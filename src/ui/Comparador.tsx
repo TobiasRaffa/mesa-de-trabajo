@@ -12,6 +12,7 @@
 // tamaño que sirve.
 
 import { useState } from "react";
+import { Miniatura } from "@/ui/Miniatura";
 
 export type VersionComparable = {
   numero: number;
@@ -102,10 +103,10 @@ function Lamina({
                  border border-linea bg-lienzo sm:h-[40vh] lg:h-[50vh]"
     >
       <span className="px-4 text-center text-micro text-apagado">v{version.numero}</span>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <Miniatura
         src={version.src}
         alt={alt}
+        nombre={alt}
         className="absolute inset-0 h-full w-full bg-lienzo object-contain transition-transform group-hover:scale-[1.02]"
       />
     </button>

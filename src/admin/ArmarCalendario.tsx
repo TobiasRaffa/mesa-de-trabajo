@@ -28,6 +28,7 @@ import type { PiezaParaFechar } from "@/admin/datos/carpetas";
 import { Boton } from "@/ui/Boton";
 import { IconoCerrar, IconoEditar, IconoEnviar, IconoFlecha } from "@/ui/Icono";
 import { urlDeMiniatura } from "@/lib/miniaturas";
+import { Miniatura } from "@/ui/Miniatura";
 
 /** `AAAA-MM-DD` de un año, mes (0-11) y día. */
 function dia(anio: number, mes: number, numero: number): string {
@@ -274,10 +275,11 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
                       } ${arrastrando === pieza.id ? "opacity-40" : ""}`}
                     >
                       <span className="relative h-7 w-7 shrink-0 overflow-hidden bg-lienzo/10">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <Miniatura
                           src={urlDeMiniatura(pieza.archivo, 110, pieza.modificado)}
                           alt=""
+                          nombre={pieza.nombre}
+                          tono="oscuro"
                           className="absolute inset-0 h-full w-full object-cover"
                         />
                       </span>
@@ -343,10 +345,10 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
                     } ${editando ? "cursor-grab active:cursor-grabbing" : "opacity-60"}`}
                   >
                     <span className="relative h-8 w-8 shrink-0 overflow-hidden bg-hueco">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Miniatura
                         src={urlDeMiniatura(pieza.archivo, 110, pieza.modificado)}
                         alt=""
+                        nombre={pieza.nombre}
                         className="absolute inset-0 h-full w-full object-cover"
                       />
                     </span>

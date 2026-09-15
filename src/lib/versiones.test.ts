@@ -43,8 +43,42 @@ describe("leerNombre", () => {
     });
   });
 
-  it("no toma un sufijo que está en el medio", () => {
-    expect(leerNombre("v2 del banner.jpg").version).toBe(1);
+  // **La marca adelante es como la escribe el estudio**, y por eso esta prueba
+  // dice hoy lo contrario de lo que decía: antes afirmaba que «v2 del banner»
+  // NO era una versión. Lo era, y el cliente veía dos piezas donde hay una.
+  it.each([
+    ["V2 banner dia del padre.pdf", "banner dia del padre.pdf", 2],
+    ["v2 del banner.jpg", "del banner.jpg", 2],
+    ["V3-Carta de otoño.png", "Carta de otoño.png", 3],
+    ["v2_grilla.jpg", "grilla.jpg", 2],
+  ])("«%s» es una vuelta de la misma pieza", (nombre, base, version) => {
+    const leido = leerNombre(nombre);
+    expect(leido.base).toBe(base);
+    expect(leido.version).toBe(version);
+  });
+
+  it("junta la misma pieza esté la marca adelante o atrás", () => {
+    // Las dos formas tienen que caer en la misma pieza, o media agencia
+    // nombraría de un modo y media del otro y se partiría el trabajo.
+    expect(leerNombre("V2 9304.jpeg").base).toBe(leerNombre("9304 V2.jpeg").base);
+  });
+
+  it("no se come un año que empieza con uve", () => {
+    // Sin el separador obligatorio, «V2025 balance» sería la versión 2025 de
+    // «025 balance»: un nombre que no existe y una pieza partida en dos.
+    expect(leerNombre("V2025 balance.xlsx")).toEqual({
+      base: "V2025 balance.xlsx",
+      version: 1,
+      titulo: "V2025 balance",
+    });
+  });
+
+  it("una marca adelante y otra atrás no se adivina: manda la de adelante", () => {
+    // No hay respuesta correcta para «V2 banner V3», y elegir en silencio
+    // sería inventarla. Lo que queda en el nombre se ve y se corrige.
+    const leido = leerNombre("V2 banner V3.jpg");
+    expect(leido.version).toBe(2);
+    expect(leido.base).toBe("banner V3.jpg");
   });
 
   it("un archivo llamado solo «V2» no es la versión de nada", () => {

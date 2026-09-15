@@ -11,6 +11,7 @@
 
 import { useEffect } from "react";
 import { IconoCerrar } from "@/ui/Icono";
+import { Miniatura } from "@/ui/Miniatura";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 
 export type Lamina = {
@@ -83,10 +84,11 @@ export function Ampliada({ laminas, onCerrar }: Props) {
                 {lamina.rotulo}
               </figcaption>
             )}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Miniatura
               src={lamina.src}
               alt={lamina.alt}
+              nombre={lamina.alt}
+              tono="oscuro"
               className="min-h-0 w-full flex-1 object-contain"
             />
           </figure>

@@ -39,6 +39,7 @@ import {
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { fechaCorta } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
+import { Miniatura } from "@/ui/Miniatura";
 import type { VersionDePieza } from "@/portal/datos/cliente";
 import type { Cambio } from "@/lib/piezas";
 
@@ -228,10 +229,11 @@ export function RevisarPieza({
                   className="relative grid h-[38vh] w-full place-items-center overflow-hidden
                              border border-linea bg-lienzo sm:h-[46vh] lg:h-[58vh]"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <Miniatura
                     src={srcGrande}
                     alt={pieza.nombre}
+                    nombre={pieza.nombre}
+                    rotulo={pieza.esPdf ? "PDF" : undefined}
                     className="absolute inset-0 h-full w-full object-contain p-2"
                   />
                 </button>
@@ -272,7 +274,7 @@ export function RevisarPieza({
                     tamano="chico"
                   >
                     <IconoDrive />
-                    Abrir en Drive
+                    Ver en Drive
                   </BotonEnlace>
                 )}
 
