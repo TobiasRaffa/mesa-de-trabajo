@@ -11,6 +11,7 @@ import { useActionState, useEffect } from "react";
 import {
   cambiarCliente,
   cambiarVerEnDrive,
+  ponerTelefonoDeCliente,
   renovarLinkDeCliente,
 } from "@/app/(admin)/gestion/acciones";
 import { LinkParaCompartir } from "@/admin/LinkParaCompartir";
@@ -34,11 +35,12 @@ export function ConfiguracionDeCliente({
   const [estado, guardar, esperando] = useActionState(cambiarCliente, null);
   const [estadoLink, renovar, renovando] = useActionState(renovarLinkDeCliente, null);
   const [estadoDrive, verDrive, cambiandoDrive] = useActionState(cambiarVerEnDrive, null);
+  const [estadoTel, guardarTel, guardandoTel] = useActionState(ponerTelefonoDeCliente, null);
   const apagado = !cliente.habilitado;
 
   useEffect(() => {
-    if (estado?.ok || estadoLink?.ok || estadoDrive?.ok) alGuardar();
-  }, [estado, estadoLink, estadoDrive, alGuardar]);
+    if (estado?.ok || estadoLink?.ok || estadoDrive?.ok || estadoTel?.ok) alGuardar();
+  }, [estado, estadoLink, estadoDrive, estadoTel, alGuardar]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -97,6 +99,41 @@ export function ConfiguracionDeCliente({
             alGuardar={alGuardar}
           />
         </div>
+      </section>
+
+      {/* ------------------------------ El teléfono ---------------------- */}
+      <section>
+        <h4 className={TITULO}>Teléfono del cliente</h4>
+        <p className="mt-1 text-menudo text-apagado">
+          Para el mensaje de entrega: con esto, al entregar un trabajo aparece un
+          botón que abre WhatsApp con el aviso ya escrito. La aplicación no manda
+          nada sola; el mensaje lo mandás vos.
+        </p>
+        <form action={guardarTel} className="mt-2 flex flex-wrap gap-2">
+          <input type="hidden" name="clienteId" value={cliente.id} />
+          <input
+            type="tel"
+            name="telefono"
+            defaultValue={cliente.telefono}
+            placeholder="+54 9 11 5555-5555"
+            aria-label="Teléfono del cliente"
+            className="min-w-52 flex-1 border-2 border-linea bg-lienzo px-3 py-2 text-normal
+                       placeholder:text-apagado focus:border-acento focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={guardandoTel}
+            className="min-h-toque border-2 border-tinta px-4 text-normal font-bold
+                       tracking-tight text-tinta transition-colors hover:bg-hueco disabled:opacity-40"
+          >
+            {guardandoTel ? "Guardando…" : "Guardar"}
+          </button>
+        </form>
+        {estadoTel && !estadoTel.ok && (
+          <p aria-live="polite" className="mt-2 text-menudo font-semibold text-alerta">
+            {estadoTel.motivo}
+          </p>
+        )}
       </section>
 
       {/* ---------------------------- Links a Drive ---------------------- */}

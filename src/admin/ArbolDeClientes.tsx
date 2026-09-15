@@ -632,18 +632,17 @@ function FilaCarpeta({
         <div className="border-t border-linea-tenue">
           {/* Arriba de todo: lo que hay que hacer con esta carpeta va antes
               que lo que hay adentro. */}
-          {!carpeta.reservada && carpeta.sinEntregar > 0 && (
-            <div
-              className="border-b border-linea-tenue py-3 pr-4"
-              style={{ paddingLeft: nivel * SANGRIA + 44 }}
-            >
-              <Entregar
-                carpetaId={carpeta.id}
-                carpeta={carpeta.nombre}
-                cuantas={carpeta.sinEntregar}
-                alEntregar={alGuardar}
-              />
-            </div>
+          {/* El bloque lo dibuja «Entregar», no esto: al entregar lo último,
+              `sinEntregar` baja a cero y esta condición se lo llevaba puesto
+              con el mensaje para el cliente adentro. */}
+          {!carpeta.reservada && (
+            <Entregar
+              carpetaId={carpeta.id}
+              carpeta={carpeta.nombre}
+              cuantas={carpeta.sinEntregar}
+              sangria={nivel * SANGRIA + 44}
+              alEntregar={alGuardar}
+            />
           )}
 
           {error && (

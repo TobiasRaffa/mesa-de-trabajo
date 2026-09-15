@@ -40,6 +40,7 @@ const cliente = (id: string) => ({
   token: "t-" + id,
   tag: "tag-" + id,
   verEnDrive: false,
+      telefono: "",
 });
 
 const archivo = (parents: string[] | undefined) => ({

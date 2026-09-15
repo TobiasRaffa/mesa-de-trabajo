@@ -23,7 +23,6 @@ import { avisar } from "@/lib/avisar";
 import { clienteDeCarpeta, esCarpetaDelCliente } from "@/lib/carpetas";
 import { datosDeCarpeta } from "@/lib/google";
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
-import { mudarAFinales } from "@/lib/entregasFinales";
 
 import {
   anotar,
@@ -187,23 +186,19 @@ export async function moverPieza(
     pieza = anotar(pieza, "cambios_descartados", CLIENTE);
   }
 
-  // **Aprobar muda el archivo a «Entregas finales».** Es una consecuencia, no
-  // una condición: si Drive no contesta, la aprobación vale igual y se anota
-  // que no se pudo mover.
-  if (evento.tipo === "aprobar" && !pieza.mudada) {
-    const mudanza = await mudarAFinales(donde.cliente.id, cual.archivoActual, carpetaId);
-    if (mudanza.movida) {
-      // Se anota **qué archivo** se mudó: sin eso no habría con qué ir a
-      // buscarlo para que siga apareciendo en su carpeta de origen.
-      pieza = anotar(
-        { ...pieza, mudada: true, archivoMudado: cual.archivoActual },
-        "movida_a_finales",
-        "La aplicación"
-      );
-    } else {
-      pieza = anotar(pieza, "no_se_pudo_mover", "La aplicación", mudanza.motivo);
-    }
-  }
+  // **Aprobar ya no muda el archivo a «Entregas finales».**
+  //
+  // Lo hacía, y estaba mal entendido de este lado: se creía que el archivo
+  // aprobado *era* la entrega final. No lo es. La entrega final es otro
+  // archivo —el mismo trabajo ya terminado de verdad, en el formato que va a
+  // usarse: el PDF de imprenta, el empaquetado— y lo sube una persona del
+  // equipo, aparte, cuando está.
+  //
+  // Mover el aprobado dejaba la misma pieza en dos lugares, sacaba el archivo
+  // de la carpeta donde el equipo trabaja, y obligaba a un viaje de vuelta
+  // cada vez que algo se reabría. Ahora la pieza aprobada se queda donde está,
+  // marcada aprobada, y «Entregas finales» es lo que su nombre dice: donde el
+  // equipo deja lo terminado.
 
   await guardarPieza(piezaId, pieza);
 

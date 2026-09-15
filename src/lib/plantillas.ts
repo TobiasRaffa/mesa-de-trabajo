@@ -24,7 +24,44 @@ export type Datos = {
   link: string;
   /** Cuántas piezas quedan sin revisar, si viene al caso. */
   pendientes?: number;
+  /** Cuántos días tiene para revisar, si viene al caso. */
+  dias?: number;
 };
+
+/**
+ * El aviso de que un trabajo se entregó.
+ *
+ * Vive aparte de la lista porque no se elige de un menú: sale solo, al
+ * terminar de entregar, que es el único momento en que hace falta. Buscarlo
+ * entre seis plantillas justo después de apretar el botón es el paso que se
+ * saltea, y entonces el cliente no se entera de que tiene algo esperándolo.
+ */
+export function mensajeDeEntrega({ carpeta, link, dias }: Datos): string {
+  const plazo =
+    dias === undefined
+      ? ""
+      : ` Tenés ${dias} ${dias === 1 ? "día" : "días"} para revisarlo.`;
+  return (
+    `Hola! Te entregamos ${carpeta}.${plazo}\n${link}\n\n` +
+    `Entrás con la clave que te pasamos. Cualquier cosa me escribís.`
+  );
+}
+
+/**
+ * El número, como lo quiere un link de WhatsApp: solo dígitos.
+ *
+ * La gente escribe «+54 9 11 5555-5555», y wa.me quiere «5491155555555». Se
+ * limpia acá y no al guardar: lo que la agencia escribió queda como lo
+ * escribió, que es lo que va a reconocer cuando lo mire.
+ *
+ * Devuelve `null` si no queda un número que valga: un link roto a WhatsApp es
+ * peor que no ofrecerlo, porque se descubre recién del otro lado.
+ */
+export function linkDeWhatsApp(telefono: string, texto: string): string | null {
+  const digitos = telefono.replace(/\D/g, "");
+  if (digitos.length < 8) return null;
+  return `https://wa.me/${digitos}?text=${encodeURIComponent(texto)}`;
+}
 
 export const PLANTILLAS: Plantilla[] = [
   {

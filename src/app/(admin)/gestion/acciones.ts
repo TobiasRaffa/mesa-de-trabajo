@@ -33,10 +33,12 @@ import {
   olvidarCarpetas,
 } from "@/lib/carpetas";
 import { datosDeCarpeta } from "@/lib/google";
+import { plazoDe, plazoQueCorre } from "@/lib/plazos";
 import {
   habilitarCliente,
   mostrarDriveA,
   ponerTag,
+  ponerTelefono,
   renovarLink,
   todosLosClientes,
 } from "@/lib/clientes";
@@ -242,6 +244,27 @@ export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) 
 }
 
 /**
+ * Le anota el teléfono por donde se le escribe.
+ *
+ * **No pide contraseña, y la clave sí.** No es lo mismo: la clave abre el
+ * portal, el teléfono es un dato de contacto que cualquiera del equipo tiene
+ * en la agenda. Pedir la contraseña para algo que se consigue mirando un
+ * mail es el trámite que hace que después nadie complete nada.
+ */
+export async function ponerTelefonoDeCliente(_previo: unknown, formulario: FormData) {
+  const clienteId = String(formulario.get("clienteId") ?? "");
+  const telefono = String(formulario.get("telefono") ?? "");
+
+  if (!(await esClienteReal(clienteId))) {
+    return { ok: false as const, motivo: "Ese cliente no existe." };
+  }
+
+  await ponerTelefono(clienteId, telefono);
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+/**
  * Muestra la clave de un cliente, con la contraseña del equipo.
  *
  * **La clave no viaja al navegador hasta acá.** La pantalla solo sabe si el
@@ -421,10 +444,31 @@ export async function escribirComoAgencia(
  * portal vino a sacar del medio.
  *
  * Acá arranca el plazo, y de acá sale el aviso al cliente.
+ *
+ * **Devuelve con qué avisarle.** No el mensaje armado: los datos para armarlo
+ * —el nombre del trabajo, los días que corren, el link y el teléfono—. El
+ * texto se termina en el navegador porque ahí está la dirección de la
+ * aplicación, que el servidor no tiene forma de saber sin configurarla.
+ *
+ * La aplicación sigue sin escribirle a nadie: deja el mensaje listo y quien
+ * entregó decide si lo manda, por dónde, y qué dice.
  */
+export type ParaAvisar = {
+  carpeta: string;
+  /** Los días de revisión que corren en esta carpeta. */
+  dias: number;
+  /** El token del portal del cliente: con eso se arma el link. */
+  token: string;
+  /** Como lo escribieron. Vacío si nadie lo cargó. */
+  telefono: string;
+};
+
 export async function entregarCarpeta(
   carpetaId: string
-): Promise<{ ok: true; entregadas: number } | { ok: false; motivo: string }> {
+): Promise<
+  | { ok: true; entregadas: number; avisar: ParaAvisar | null }
+  | { ok: false; motivo: string }
+> {
   if (!(await esCarpetaDelCliente(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
@@ -478,6 +522,8 @@ export async function entregarCarpeta(
 
   // El aviso va después de guardar: si el correo falla, la entrega vale igual.
   const cliente = await clienteDeCarpeta(carpetaId);
+  let paraAvisar: ParaAvisar | null = null;
+
   if (cliente) {
     let nombre = "una carpeta";
     try {
@@ -491,10 +537,21 @@ export async function entregarCarpeta(
       carpeta: nombre,
       detalle: `${cuantas} ${cuantas === 1 ? "pieza" : "piezas"}`,
     });
+
+    paraAvisar = {
+      carpeta: nombre,
+      dias: plazoQueCorre(
+        await plazoDe(carpetaId),
+        undefined,
+        await plazoDe(cliente.id)
+      ),
+      token: cliente.token,
+      telefono: cliente.telefono,
+    };
   }
 
   revalidatePath("/gestion", "layout");
-  return { ok: true, entregadas: cuantas };
+  return { ok: true, entregadas: cuantas, avisar: paraAvisar };
 }
 
 // ---------------------------------------------------------------------------

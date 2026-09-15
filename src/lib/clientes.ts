@@ -47,6 +47,19 @@ export type AjustesDeCliente = {
    * afuera de la aplicación, no hay forma de saberlo solo: hay que decirlo.
    */
   verEnDrive: boolean;
+  /**
+   * El teléfono por donde se le escribe, para el aviso de entrega.
+   *
+   * **No es para que la aplicación le escriba.** Eso no pasa acá y no va a
+   * pasar: con esto se arma un link de WhatsApp con el mensaje escrito, y
+   * quien entrega decide si lo manda, qué dice y cuándo. Vacío significa que
+   * nadie lo cargó todavía; entonces queda el botón de copiar y nada más.
+   *
+   * Se guarda tal como lo escriben. Los signos y espacios se sacan al armar
+   * el link, no al guardarlo: corregirle el teléfono a alguien mientras lo
+   * escribe es la clase de ayuda que termina borrando un número bueno.
+   */
+  telefono: string;
 };
 
 export type Cliente = AjustesDeCliente & {
@@ -63,6 +76,24 @@ export type Cliente = AjustesDeCliente & {
  */
 function nuevoToken(): string {
   return randomBytes(12).toString("base64url");
+}
+
+/**
+ * Un cliente recién descubierto.
+ *
+ * Está escrito una sola vez porque la lista de campos crece —primero fue el
+ * link, después el tag, después los links a Drive, ahora el teléfono— y
+ * escrita dos veces, la segunda se olvida. Sin tag, el portal no deja entrar:
+ * es lo que hay que completar.
+ */
+function clienteNuevo(): AjustesDeCliente {
+  return {
+    habilitado: true,
+    token: nuevoToken(),
+    tag: "",
+    verEnDrive: false,
+    telefono: "",
+  };
 }
 
 function esAjuste(v: unknown): v is AjustesDeCliente {
@@ -83,6 +114,7 @@ async function leerGuardado(): Promise<Record<string, AjustesDeCliente>> {
       token: v.token,
       tag: typeof v.tag === "string" ? v.tag : "",
       verEnDrive: v.verEnDrive === true,
+      telefono: typeof v.telefono === "string" ? v.telefono : "",
     };
   }
   return salida;
@@ -106,8 +138,7 @@ export async function todosLosClientes(): Promise<Cliente[]> {
   const clientes: Cliente[] = carpetas.map((carpeta: CarpetaDrive) => {
     let ajustes = guardado[carpeta.id];
     if (!ajustes) {
-      // Sin tag, el portal no deja entrar: es lo que hay que completar.
-      ajustes = { habilitado: true, token: nuevoToken(), tag: "", verEnDrive: false };
+      ajustes = clienteNuevo();
       guardado[carpeta.id] = ajustes;
       nuevos[carpeta.id] = ajustes;
     }
@@ -143,14 +174,23 @@ export async function clientePorId(id: string): Promise<Cliente | null> {
  * Acá se lee lo que hay y se le pega el cambio encima.
  */
 async function cambiar(id: string, parche: Partial<AjustesDeCliente>): Promise<void> {
-  const actual = (await leerGuardado())[id];
-  await almacen.guardar(id, {
-    habilitado: actual?.habilitado ?? true,
-    token: actual?.token ?? nuevoToken(),
-    tag: actual?.tag ?? "",
-    verEnDrive: actual?.verEnDrive ?? false,
-    ...parche,
-  });
+  // Se parte de lo que hay, entero, y se le pega el cambio encima. Enumerar
+  // los campos acá era exactamente lo que este comentario decía que no había
+  // que hacer: al agregar el teléfono, esta función compiló, corrió, y habría
+  // borrado el teléfono de todos en la primera vez que alguien tocara otra
+  // cosa. Un campo nuevo ya no obliga a tocar nada de acá.
+  const actual = (await leerGuardado())[id] ?? clienteNuevo();
+  await almacen.guardar(id, { ...actual, ...parche });
+}
+
+/**
+ * Le anota el teléfono por donde se le escribe.
+ *
+ * Se guarda como lo escribieron: los signos y los espacios se sacan al armar
+ * el link de WhatsApp, no al guardarlo.
+ */
+export async function ponerTelefono(id: string, telefono: string): Promise<void> {
+  await cambiar(id, { telefono: telefono.trim().slice(0, 40) });
 }
 
 export async function habilitarCliente(id: string, habilitado: boolean): Promise<void> {

@@ -12,27 +12,51 @@
 // **Pregunta antes.** Es lo único de gestión que el cliente ve pasar en el
 // momento: le aparece el trabajo, le arranca el plazo y le sale el aviso. Un
 // clic de más acá vale menos que un «perdón, mirá que eso todavía no estaba».
+//
+// **Y después ofrece el mensaje.** Entregar y avisar son dos actos, y el
+// segundo es el que se olvida: el trabajo entregado, el plazo corriendo, y el
+// cliente sin enterarse. El mensaje aparece acá mismo, escrito, para copiar o
+// mandar por WhatsApp.
 
 import { useState, useTransition } from "react";
-import { entregarCarpeta } from "@/app/(admin)/gestion/acciones";
+import { entregarCarpeta, type ParaAvisar } from "@/app/(admin)/gestion/acciones";
+import { AvisoDeEntrega } from "@/admin/AvisoDeEntrega";
 
 export function Entregar({
   carpetaId,
   carpeta,
   cuantas,
+  sangria,
   alEntregar,
 }: {
   carpetaId: string;
   carpeta: string;
   /** Cuántas piezas están sin entregar. Si no hay ninguna, no se muestra. */
   cuantas: number;
+  /**
+   * Cuánto se corre desde la izquierda, según qué tan hondo está en el árbol.
+   *
+   * **El bloque lo dibuja este componente y no el árbol**, y eso no es un
+   * detalle: el árbol lo dibujaba mientras hubiera algo sin entregar, así que
+   * al entregar lo último lo hacía desaparecer —con el mensaje para el cliente
+   * adentro, justo cuando hacía falta—.
+   */
+  sangria: number;
   alEntregar: () => void;
 }) {
   const [confirmando, setConfirmando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [yendo, empezar] = useTransition();
 
-  if (cuantas === 0) return null;
+  // Lo que quedó recién entregado, para ofrecer el aviso. Vive acá y no se
+  // pierde cuando `cuantas` baja a cero: es justo después de entregar cuando
+  // hay que avisar, y ese es el momento en que ya no queda nada sin entregar.
+  const [recienEntregado, setRecienEntregado] = useState<{
+    avisar: ParaAvisar;
+    cuantas: number;
+  } | null>(null);
+
+  if (cuantas === 0 && !recienEntregado) return null;
 
   function entregar() {
     setError(null);
@@ -40,6 +64,7 @@ export function Entregar({
       const r = await entregarCarpeta(carpetaId);
       if (r.ok) {
         setConfirmando(false);
+        if (r.avisar) setRecienEntregado({ avisar: r.avisar, cuantas: r.entregadas });
         alEntregar();
       } else {
         setError(r.motivo);
@@ -47,19 +72,52 @@ export function Entregar({
     });
   }
 
-  if (!confirmando) {
-    return (
-      <button
-        type="button"
-        onClick={() => setConfirmando(true)}
-        className="min-h-toque shrink-0 bg-acento px-4 text-normal font-bold tracking-tight
-                   text-white transition-colors hover:bg-acento-hover"
-      >
-        Entregar {cuantas}
-      </button>
-    );
-  }
+  return (
+    <div className="border-b border-linea-tenue py-3 pr-4" style={{ paddingLeft: sangria }}>
+      {recienEntregado ? (
+        <AvisoDeEntrega
+          avisar={recienEntregado.avisar}
+          cuantas={recienEntregado.cuantas}
+          onListo={() => setRecienEntregado(null)}
+        />
+      ) : !confirmando ? (
+        <button
+          type="button"
+          onClick={() => setConfirmando(true)}
+          className="min-h-toque shrink-0 bg-acento px-4 text-normal font-bold tracking-tight
+                     text-white transition-colors hover:bg-acento-hover"
+        >
+          Entregar {cuantas}
+        </button>
+      ) : (
+        <Confirmacion
+          carpeta={carpeta}
+          cuantas={cuantas}
+          yendo={yendo}
+          error={error}
+          onSi={entregar}
+          onNo={() => setConfirmando(false)}
+        />
+      )}
+    </div>
+  );
+}
 
+function Confirmacion({
+  carpeta,
+  cuantas,
+  yendo,
+  error,
+  onSi,
+  onNo,
+}: {
+  carpeta: string;
+  cuantas: number;
+  yendo: boolean;
+  error: string | null;
+  onSi: () => void;
+  onNo: () => void;
+}) {
   return (
     <div className="flex flex-col gap-2 border-2 border-acento bg-acento-tenue p-3">
       <p className="text-menudo font-semibold text-acento">
@@ -71,7 +129,7 @@ export function Entregar({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={entregar}
+          onClick={onSi}
           disabled={yendo}
           className="min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
                      text-white transition-colors hover:bg-acento-hover disabled:opacity-40"
@@ -80,7 +138,7 @@ export function Entregar({
         </button>
         <button
           type="button"
-          onClick={() => setConfirmando(false)}
+          onClick={onNo}
           disabled={yendo}
           className="min-h-toque border-2 border-tinta px-4 text-normal font-bold
                      tracking-tight text-tinta transition-colors hover:bg-hueco"
