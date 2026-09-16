@@ -91,6 +91,15 @@ export type CarpetaEnElTablero = {
   diasQueCorren: number;
   /** Si el cliente ve esta carpeta en su portal. */
   visible: boolean;
+  /**
+   * Cuántas carpetas tiene adentro.
+   *
+   * Hace falta para distinguir una carpeta **vacía** de una que guarda su
+   * trabajo un nivel más abajo. El tablero solo mira los archivos sueltos de
+   * cada carpeta de trabajo, así que las dos dan cero piezas y se parecen; la
+   * primera no tiene nada que hacer y la segunda sí.
+   */
+  subcarpetas: number;
 };
 
 export type Tablero = {
@@ -117,12 +126,13 @@ export async function elTablero(): Promise<Tablero> {
         carpetas
           .filter((c) => !esCarpetaReservada(c.name))
           .map(async (carpeta): Promise<CarpetaEnElTablero> => {
-            const [archivos, diasDeLaCarpeta, deQuienEsLaCarpeta, ajustes] =
+            const [archivos, diasDeLaCarpeta, deQuienEsLaCarpeta, ajustes, adentro] =
               await Promise.all([
                 piezasDeLaCarpeta(carpeta.id),
                 plazoDe(carpeta.id),
                 responsableDe(carpeta.id),
                 ajustesDe(carpeta.id),
+                subcarpetasDe(carpeta.id).catch(() => []),
               ]);
 
             const agrupadas = agruparVersiones(archivos);
@@ -229,6 +239,7 @@ export async function elTablero(): Promise<Tablero> {
               terminadas,
               sinLeer: sinLeer[cliente.id] ?? 0,
               visible: ajustes.visible,
+              subcarpetas: adentro.length,
             };
           })
       );
@@ -238,7 +249,15 @@ export async function elTablero(): Promise<Tablero> {
   return {
     avisos: avisos.slice(0, 30),
     sinVer: avisos.filter((a) => !a.visto).length,
-    carpetas: porCliente.flat(),
+    // **Una carpeta vacía no va al tablero.** Estaba y no decía nada: ni
+    // trabajo pendiente ni trabajo hecho, un renglón que hay que leer para
+    // descubrir que no hay nada. Sigue estando en la ficha del cliente, que es
+    // donde se la configura o se le sube algo.
+    //
+    // Vacía de verdad: sin piezas **y** sin carpetas adentro. Una que guarda
+    // su trabajo un nivel más abajo también da cero piezas, y esconderla sería
+    // esconder trabajo.
+    carpetas: porCliente.flat().filter((c) => c.piezas > 0 || c.subcarpetas > 0),
     correoConfigurado: correoConfigurado(),
   };
 }

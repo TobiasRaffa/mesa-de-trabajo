@@ -389,8 +389,17 @@ function Revision({
           )}
         </div>
 
-        {/* Las carpetas que la agencia dejó a la vista. */}
-        {datos.carpetas.length > 1 && (
+        {/*
+          Las carpetas que la agencia dejó a la vista.
+
+          **Se muestran aunque haya una sola.** Estaban escondidas hasta que
+          hubiera dos, con la idea de no dibujar un menú de un solo renglón. El
+          resultado era peor: el cliente entraba y no veía en qué carpeta
+          estaba parado ni cuántas piezas había adentro —el título grande es el
+          nombre del cliente, no el del trabajo—, y cuando apareciera la segunda
+          carpeta le cambiaba la pantalla de lugar.
+        */}
+        {datos.carpetas.length > 0 && (
           <nav aria-label="Carpetas">
             <p className="text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
               Carpetas
