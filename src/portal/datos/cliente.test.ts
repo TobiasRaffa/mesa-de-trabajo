@@ -17,7 +17,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/google", () => ({
   datosDeCarpeta: vi.fn(),
   subcarpetasDe: vi.fn(),
+  // Lo que el cliente escribió encima del archivo en Drive. Acá no hay
+  // ninguno: estas pruebas miran qué carpetas y archivos llegan al portal, y
+  // los comentarios tienen las suyas.
+  comentariosDeArchivo: vi.fn(async () => []),
 }));
+// El equipo vive en archivos y acá no hace falta: sin nadie cargado, ningún
+// comentario es del equipo, que es lo que estas pruebas necesitan.
+vi.mock("@/lib/equipo", () => ({ comoFirmaElEquipo: vi.fn(async () => []) }));
 // El cliente: acá solo interesa si tiene acceso a Drive, que decide si los
 // links se mandan al navegador o no.
 vi.mock("@/lib/clientes", () => ({

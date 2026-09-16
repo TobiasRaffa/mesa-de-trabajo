@@ -24,6 +24,7 @@ import {
   type Vista,
 } from "@/lib/ajustes";
 import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
+import { conLosComentariosDelCliente } from "@/lib/comentariosDelCliente";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
 import { RONDAS_INCLUIDAS_POR_DEFECTO } from "@/dominio/pieza";
@@ -217,10 +218,23 @@ export async function portalDelCliente(
       const identidades = conArchivos.map((p) => p.id);
       const entregas = esCarpetaDeEntregas(carpeta.name);
 
-      const [dias, guardados] = await Promise.all([
+      const [dias, deLaBase] = await Promise.all([
         publicacionesDe(identidades),
         estadosDe(carpeta.id, conArchivos),
       ]);
+
+      // **Lo que el cliente escribió encima del archivo, en Drive, es un
+      // pedido suyo igual.** Entra a su lista de cambios con la hoja adelante,
+      // y lo espera ahí hasta que toque «Enviar revisión»: un comentario
+      // suelto no es una devolución. Lo escribe la misma función que usa la
+      // pantalla de gestión, para que los dos vean lo mismo.
+      const { estados: guardados } = await conLosComentariosDelCliente(
+        agrupadas.map((pieza, i) => ({
+          id: identidades[i],
+          ultimoArchivo: pieza.versiones[pieza.versiones.length - 1].archivo.id,
+        })),
+        deLaBase
+      );
 
       // En «Entregas finales» todo está aprobado por definición: llegó ahí
       // porque el cliente lo aprobó. Lo anotado de cada pieza vive bajo su

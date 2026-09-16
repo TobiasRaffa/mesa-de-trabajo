@@ -888,7 +888,12 @@ export async function agregarAlEquipo(_previo: unknown, formulario: FormData) {
     return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
   }
 
-  await sumarAlEquipo(nombre, correo, formulario.get("avisaDeTodo") === "si");
+  await sumarAlEquipo(
+    nombre,
+    correo,
+    formulario.get("avisaDeTodo") === "si",
+    String(formulario.get("enDrive") ?? "").trim()
+  );
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
@@ -906,7 +911,13 @@ export async function editarDelEquipo(_previo: unknown, formulario: FormData) {
     return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
   }
 
-  await cambiarPersona(id, nombre, correo, formulario.get("avisaDeTodo") === "si");
+  await cambiarPersona(
+    id,
+    nombre,
+    correo,
+    formulario.get("avisaDeTodo") === "si",
+    String(formulario.get("enDrive") ?? "").trim()
+  );
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }

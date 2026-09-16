@@ -37,6 +37,7 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
           <p className="font-bold tracking-tight">{persona.nombre}</p>
           <p className="mt-0.5 text-menudo text-apagado">
             {persona.correo || "sin correo"}
+            {persona.enDrive && ` · en Drive: ${persona.enDrive}`}
             {persona.avisaDeTodo && " · recibe todos los avisos"}
           </p>
         </div>
@@ -64,6 +65,16 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
             defaultValue={persona.correo}
             placeholder="correo"
             aria-label="Correo"
+            className={CAMPO}
+          />
+          {/* Cómo la muestra Google cuando comenta encima de un archivo. Es lo
+              que hace que sus notas en Drive no entren a la lista de cambios
+              del cliente. Vacío se usa el nombre de acá al lado. */}
+          <input
+            name="enDrive"
+            defaultValue={persona.enDrive ?? ""}
+            placeholder="cómo aparece en Drive"
+            aria-label="Cómo aparece en Drive"
             className={CAMPO}
           />
           <label className="flex items-center gap-2 text-menudo font-semibold">
@@ -132,6 +143,12 @@ export function SumarPersona() {
           type="email"
           placeholder="correo"
           aria-label="Correo"
+          className={CAMPO}
+        />
+        <input
+          name="enDrive"
+          placeholder="cómo aparece en Drive"
+          aria-label="Cómo aparece en Drive"
           className={CAMPO}
         />
         <label className="flex items-center gap-2 text-menudo font-semibold">

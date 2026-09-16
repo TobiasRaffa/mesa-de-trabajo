@@ -43,6 +43,16 @@ export type EstadoDePieza = {
   ronda: number;
   rondasExtra: number;
   cambios: Cambio[];
+  /**
+   * Los comentarios de Drive que ya se copiaron a `cambios`.
+   *
+   * **No se vacía nunca, ni cuando se vacía `cambios`.** Esa lista se limpia
+   * al entregar la vuelta siguiente —es lo correcto, la revisión nueva empieza
+   * en blanco— pero el comentario sigue estando en Drive, así que sin esta
+   * memoria volvería a copiarse en la lectura siguiente, y el cliente vería
+   * resucitar un pedido que ya le contestamos.
+   */
+  comentariosCopiados?: string[];
   /** La revisión de esta vuelta ya se mandó: lo escrito queda firme. */
   enviada: boolean;
   /** Se movió a «Entregas finales» y ya no está en la carpeta de trabajo. */
@@ -159,6 +169,9 @@ function normalizar(v: EstadoDePieza): EstadoDePieza {
     rondasExtra:
       typeof crudo.rondasExtra === "number" && crudo.rondasExtra >= 0 ? crudo.rondasExtra : 0,
     cambios: Array.isArray(crudo.cambios) ? crudo.cambios.filter(esCambio) : [],
+    comentariosCopiados: Array.isArray(crudo.comentariosCopiados)
+      ? crudo.comentariosCopiados.filter((x): x is string => typeof x === "string")
+      : undefined,
     enviada: crudo.enviada === true,
     mudada: crudo.mudada === true,
     entregadaEl: typeof crudo.entregadaEl === "string" ? crudo.entregadaEl : undefined,

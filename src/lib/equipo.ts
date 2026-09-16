@@ -25,6 +25,21 @@ export type Persona = {
    * asignada no le llegaba a nadie.
    */
   avisaDeTodo: boolean;
+  /**
+   * Cómo aparece esta persona cuando comenta en Drive.
+   *
+   * **Sirve para no ponerle al cliente palabras que no dijo.** Los comentarios
+   * escritos encima de un archivo se copian a la lista de cambios pedidos, y
+   * desde Drive un pedido del cliente y una nota que el diseñador se deja a sí
+   * mismo son la misma cosa: un nombre y un texto. Con esto, lo que escribe el
+   * equipo no entra a esa lista.
+   *
+   * Vacío no rompe nada: además de esto se compara contra el nombre y el
+   * correo que ya están cargados. Hace falta cuando Google la muestra con otro
+   * nombre —«Narella Rafaelli» donde acá dice «Nari»—, que es cuando el
+   * problema aparece.
+   */
+  enDrive?: string;
 };
 
 /**
@@ -51,19 +66,22 @@ export async function elEquipo(): Promise<Persona[]> {
     ...p,
     correo: typeof p.correo === "string" ? p.correo : "",
     avisaDeTodo: p.avisaDeTodo === true,
+    enDrive: typeof p.enDrive === "string" && p.enDrive ? p.enDrive : undefined,
   }));
 }
 
 export async function sumarAlEquipo(
   nombre: string,
   correo: string,
-  avisaDeTodo = false
+  avisaDeTodo = false,
+  enDrive = ""
 ): Promise<Persona> {
   const persona: Persona = {
     id: randomUUID(),
     nombre: nombre.trim().slice(0, 60),
     correo: correo.trim().slice(0, 120),
     avisaDeTodo,
+    enDrive: enDrive.trim().slice(0, 120) || undefined,
   };
   await almacen.guardar(persona.id, persona);
   return persona;
@@ -73,7 +91,8 @@ export async function cambiarPersona(
   id: string,
   nombre: string,
   correo: string,
-  avisaDeTodo: boolean
+  avisaDeTodo: boolean,
+  enDrive = ""
 ): Promise<void> {
   const actual = await almacen.uno(id);
   if (!actual) return;
@@ -82,7 +101,21 @@ export async function cambiarPersona(
     nombre: nombre.trim().slice(0, 60),
     correo: correo.trim().slice(0, 120),
     avisaDeTodo,
+    enDrive: enDrive.trim().slice(0, 120) || undefined,
   });
+}
+
+/**
+ * Con qué nombres se reconoce al equipo en un comentario de Drive.
+ *
+ * Los tres de cada persona, y no solo el de Drive: lo habitual es que Google
+ * la muestre con el mismo nombre que está cargado acá, y en ese caso esto
+ * funciona sin que nadie tenga que completar nada.
+ */
+export async function comoFirmaElEquipo(): Promise<string[]> {
+  return (await elEquipo())
+    .flatMap((p) => [p.enDrive, p.nombre, p.correo])
+    .filter((x): x is string => Boolean(x && x.trim()));
 }
 
 /**

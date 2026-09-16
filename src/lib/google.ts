@@ -314,8 +314,16 @@ export type ComentarioDeDrive = {
 export async function comentariosDeArchivo(
   fileId: string
 ): Promise<ComentarioDeDrive[]> {
-  const r = await leerComentarios(fileId);
-  return r.ok ? r.comentarios : [];
+  // **Con la misma memoria corta que los listados.** Desde que lo escrito en
+  // Drive se pasa a la lista de cambios del cliente, esto se pregunta en cada
+  // carga del portal y de la gestión, una vez por pieza: una carpeta de diez
+  // piezas eran diez viajes a Google por pantalla. Medio minuto es lo mismo
+  // que tarda en aparecer un archivo recién subido, así que un comentario
+  // recién escrito no tarda más que eso.
+  return conMemoria(`comentarios:${fileId}`, async () => {
+    const r = await leerComentarios(fileId);
+    return r.ok ? r.comentarios : [];
+  });
 }
 
 /**

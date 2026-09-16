@@ -8,7 +8,8 @@
 import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustes";
 import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
-import { comentariosDeArchivo, datosDeCarpeta, subcarpetasDe } from "@/lib/google";
+import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
+import { conLosComentariosDelCliente } from "@/lib/comentariosDelCliente";
 import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { plazosDe } from "@/lib/plazos";
 import { responsablesDe } from "@/lib/responsables";
@@ -67,7 +68,7 @@ export async function carpetaParaFechar(
   const agrupadas = agruparVersiones(archivos);
   const conArchivos = conSusArchivos(carpetaId, agrupadas);
   const identidades = conArchivos.map((p) => p.id);
-  const [dias, estados] = await Promise.all([
+  const [dias, guardados] = await Promise.all([
     publicacionesDe(identidades),
     estadosDe(carpetaId, conArchivos),
   ]);
@@ -75,16 +76,16 @@ export async function carpetaParaFechar(
   // **Lo que escribieron encima del archivo, en Drive.**
   //
   // Pasa de verdad: alguien abre el PDF en Drive y comenta ahí, señalando un
-  // pedazo del diseño. Eso existía y la aplicación no se enteraba, así que la
-  // mitad de la devolución vivía en un lado y la mitad en el otro, y la
-  // pantalla que dice «qué pasó con cada pieza» contaba la mitad.
-  //
-  // Se piden en paralelo y nunca rompen: una carpeta con diez piezas son diez
-  // preguntas a Drive, y ninguna de ellas puede tumbar la pantalla.
-  const comentarios = await Promise.all(
-    agrupadas.map((pieza) =>
-      comentariosDeArchivo(pieza.versiones[pieza.versiones.length - 1].archivo.id)
-    )
+  // pedazo del diseño. Lo que escribió el cliente pasa a su lista de cambios
+  // pedidos, con la hoja adelante; lo que escribió el equipo no, porque no es
+  // un pedido del cliente. De eso se ocupa `comentariosDelCliente`, y lo hace
+  // ahí y no acá **porque el portal tiene que ver exactamente lo mismo**.
+  const { estados, sinCopiar } = await conLosComentariosDelCliente(
+    agrupadas.map((pieza, i) => ({
+      id: identidades[i],
+      ultimoArchivo: pieza.versiones[pieza.versiones.length - 1].archivo.id,
+    })),
+    guardados
   );
 
   return {
@@ -93,7 +94,7 @@ export async function carpetaParaFechar(
       ...estados[identidades[i]],
       id: identidades[i],
       nombre: pieza.titulo,
-      comentarios: comentarios[i],
+      comentarios: sinCopiar[identidades[i]] ?? [],
     })),
     carpeta: {
       id: carpetaId,

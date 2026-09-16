@@ -117,6 +117,37 @@ export function sigueEnJuego(estado: Estado): boolean {
 }
 
 /**
+ * ¿Puede el cliente escribir cambios ahora?
+ *
+ * Dos condiciones, y las dos hacen falta: que la pieza **esté de su lado** y
+ * que **todavía no la haya mandado**. Mandada, lo escrito queda firme: es lo
+ * que la agencia ya está trabajando, y agregarle un renglón por atrás sería
+ * cambiarle el pedido a alguien que ya empezó.
+ *
+ * Existe por los comentarios de Drive. Uno escrito mientras la pieza está de
+ * nuestro lado no es un pedido de esta vuelta —el cliente no la tiene— y
+ * meterlo igual en su lista le pone en la boca algo que no dijo ahora. Se
+ * queda esperando, y entra cuando le vuelva a tocar.
+ */
+export function puedeEscribirCambios(estado: Estado, enviada: boolean): boolean {
+  if (enviada) return false;
+
+  switch (estado) {
+    case "entregada":
+    case "en_revision":
+    case "cambios_marcados":
+      return true;
+    // `en_curso` y `extra_pedida` la tenemos nosotros; `final` y `cancelada`
+    // ya no esperan a nadie.
+    case "en_curso":
+    case "extra_pedida":
+    case "final":
+    case "cancelada":
+      return false;
+  }
+}
+
+/**
  * ¿Hay algo nuevo para entregarle al cliente?
  *
  * **No alcanza con que la pieza esté de nuestro lado.** Cuando el cliente
