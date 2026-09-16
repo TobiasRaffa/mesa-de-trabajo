@@ -23,7 +23,7 @@ import { Estado } from "@/ui/Estado";
 import { Miniatura } from "@/ui/Miniatura";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import { diasConNosotros, hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
-import { IconoCerrar } from "@/ui/Icono";
+import { IconoCerrar, IconoDrive } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
@@ -176,7 +176,7 @@ export function ResumenDeTrabajo({
         // columna de renglones partidos.
         className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden bg-lienzo"
       >
-        <header className="flex items-start gap-3 bg-tinta px-5 py-4 text-lienzo">
+        <header className="flex items-center gap-3 bg-tinta px-5 py-4 text-lienzo">
           <div className="min-w-0 flex-1">
             <p className="text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
               {c.cliente}
@@ -185,6 +185,15 @@ export function ResumenDeTrabajo({
               {c.carpeta}
             </h2>
           </div>
+          {/* Abrir la carpeta es del trabajo entero, no de una pieza: va con
+              el título, que es lo único que también lo es. */}
+          <Link
+            href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
+            className="min-h-toque inline-flex shrink-0 items-center border-2 border-lienzo/35 px-3
+                       text-menudo font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
+          >
+            Abrir la carpeta
+          </Link>
           <button
             type="button"
             onClick={onCerrar}
@@ -224,13 +233,6 @@ export function ResumenDeTrabajo({
                 setVuelta((n) => n + 1);
               }}
             />
-            <Link
-              href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
-              className="min-h-toque inline-flex items-center border-2 border-tinta px-3
-                         text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
-            >
-              Abrir la carpeta
-            </Link>
             {sinLeer > 0 && (
               <Link
                 href="/gestion/chats"
@@ -380,12 +382,30 @@ function Pieza({
             />
           </div>
 
-          {anterior && (
+          {/* Debajo de la foto, las dos cosas que se hacen **con la foto**:
+              abrir el archivo de verdad y ponerla al lado de la vuelta
+              anterior. Estaba una acá y la otra abajo de todo, con los botones
+              que no tienen nada que ver con mirarla. */}
+          <div className="flex flex-wrap gap-2">
+            {p.enlaceDrive && (
+              <a
+                href={p.enlaceDrive}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="min-h-toque inline-flex flex-1 items-center justify-center gap-2
+                           border-2 border-tinta px-3 text-menudo font-bold tracking-tight
+                           text-tinta transition-colors hover:bg-hueco"
+              >
+                <IconoDrive />
+                Abrir en Drive
+              </a>
+            )}
+            {anterior && (
             <button
               type="button"
               onClick={() => setComparando(!comparando)}
               aria-pressed={comparando}
-              className={`min-h-toque border-2 border-tinta px-3 text-menudo font-bold
+              className={`min-h-toque flex-1 border-2 border-tinta px-3 text-menudo font-bold
                           tracking-tight transition-colors ${
                             comparando
                               ? "bg-tinta text-lienzo"
@@ -394,7 +414,8 @@ function Pieza({
             >
               {comparando ? "Ver solo la última" : `Comparar con la v${p.vueltas - 1}`}
             </button>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="min-w-0">
