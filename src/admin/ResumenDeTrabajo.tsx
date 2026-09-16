@@ -57,6 +57,7 @@ import {
   IconoFlecha,
 } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import { Fondo } from "@/ui/Fondo";
 import { enPalabrasElDia } from "@/admin/cuando";
 import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
@@ -177,176 +178,180 @@ export function ResumenDeTrabajo({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-tinta/50 sm:items-center sm:p-6"
-      onClick={onCerrar}
-    >
-      <div
-        ref={marco}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${c.cliente}: ${c.carpeta}`}
-        onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden bg-lienzo"
+    <>
+      {/* La configuración se dibuja al lado y no adentro: es una ventana
+          aparte, apilada encima. Que tocar su fondo no cierre además esta es
+          cosa de <Fondo>, que lo resuelve para todas. */}
+      <Fondo
+        onCerrar={onCerrar}
+        className="z-50 flex items-end justify-center sm:items-center sm:p-6"
       >
-        {/*
-          El encabezado: qué se está mirando y cómo salir. Nada más que eso.
-          Lo único que hay acá que no es el título es «Abrir la carpeta», y
-          está porque es la única acción de la ventana que no es de una pieza
-          sino del trabajo entero: al lado del nombre del trabajo es donde
-          alguien la va a buscar.
-        */}
-        <header className="flex items-center gap-3 bg-tinta px-5 py-4 text-lienzo">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
-              {c.cliente} · {c.carpeta}
-              {enOrden.length > 1 && ` · pieza ${donde + 1} de ${enOrden.length}`}
-            </p>
-            <h2 className="truncate text-titulo font-extrabold leading-tight tracking-tight">
-              {pieza ? pieza.nombre : c.carpeta}
-              {pieza && pieza.vueltas > 1 && (
-                <span className="ml-2 align-middle text-menudo font-extrabold uppercase tracking-wider text-lienzo/45">
-                  v{pieza.vueltas}
-                </span>
+        <div
+          ref={marco}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${c.cliente}: ${c.carpeta}`}
+          className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden bg-lienzo"
+        >
+          {/*
+            El encabezado: qué se está mirando y cómo salir. Nada más que eso.
+            Lo único que hay acá que no es el título es «Abrir la carpeta», y
+            está porque es la única acción de la ventana que no es de una pieza
+            sino del trabajo entero: al lado del nombre del trabajo es donde
+            alguien la va a buscar.
+          */}
+          <header className="flex items-center gap-3 bg-tinta px-5 py-4 text-lienzo">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
+                {c.cliente} · {c.carpeta}
+                {enOrden.length > 1 && ` · pieza ${donde + 1} de ${enOrden.length}`}
+              </p>
+              <h2 className="truncate text-titulo font-extrabold leading-tight tracking-tight">
+                {pieza ? pieza.nombre : c.carpeta}
+                {pieza && pieza.vueltas > 1 && (
+                  <span className="ml-2 align-middle text-menudo font-extrabold uppercase tracking-wider text-lienzo/45">
+                    v{pieza.vueltas}
+                  </span>
+                )}
+              </h2>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1">
+              {/* Las flechas solo aparecen si hay a dónde ir. */}
+              {enOrden.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => ir(-1)}
+                    aria-label="Pieza anterior"
+                    className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25"
+                  >
+                    <IconoFlecha className="rotate-180" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => ir(1)}
+                    aria-label="Pieza siguiente"
+                    className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25"
+                  >
+                    <IconoFlecha />
+                  </button>
+                </>
               )}
-            </h2>
-          </div>
+              {/* Del mismo alto que la cruz y con fondo propio: son un par, y
+                  contra el fondo oscuro un botón de contorno se pierde. */}
+              <Link
+                href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
+                className="ml-2 inline-flex h-9 items-center bg-lienzo px-3 text-menudo
+                           font-bold tracking-tight text-tinta transition-colors hover:bg-lienzo/90"
+              >
+                Abrir la carpeta
+              </Link>
+              <button
+                type="button"
+                onClick={onCerrar}
+                aria-label="Cerrar"
+                className="grid h-9 w-9 place-items-center bg-lienzo text-tinta transition-colors hover:bg-lienzo/90"
+              >
+                <IconoCerrar />
+              </button>
+            </div>
+          </header>
 
-          <div className="flex shrink-0 items-center gap-1">
-            {/* Las flechas solo aparecen si hay a dónde ir. */}
-            {enOrden.length > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => ir(-1)}
-                  aria-label="Pieza anterior"
-                  className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25"
-                >
-                  <IconoFlecha className="rotate-180" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => ir(1)}
-                  aria-label="Pieza siguiente"
-                  className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25"
-                >
-                  <IconoFlecha />
-                </button>
-              </>
+          {/* El medio: la pieza y lo que se sabe de ella. Se desplaza, y no
+              tiene un solo botón de acción. */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {error && (
+              <p className="px-5 py-4 text-normal font-semibold text-alerta">{error}</p>
             )}
-            {/* Del mismo alto que la cruz y con fondo propio: son un par, y
-                contra el fondo oscuro un botón de contorno se pierde. */}
-            <Link
-              href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
-              className="ml-2 inline-flex h-9 items-center bg-lienzo px-3 text-menudo
-                         font-bold tracking-tight text-tinta transition-colors hover:bg-lienzo/90"
-            >
-              Abrir la carpeta
-            </Link>
-            <button
-              type="button"
-              onClick={onCerrar}
-              aria-label="Cerrar"
-              className="grid h-9 w-9 place-items-center bg-lienzo text-tinta transition-colors hover:bg-lienzo/90"
-            >
-              <IconoCerrar />
-            </button>
+
+            {!error && piezas === null && (
+              <p className="px-5 py-4 text-normal text-apagado">Leyendo la carpeta…</p>
+            )}
+
+            {piezas !== null && enOrden.length === 0 && (
+              <p className="px-5 py-4 text-normal text-apagado">
+                Esta carpeta no tiene piezas.
+              </p>
+            )}
+
+            {pieza && (
+              <Ficha pieza={pieza} detalle={detalle} comparando={comparando === pieza.id} />
+            )}
           </div>
-        </header>
 
-        {/* El medio: la pieza y lo que se sabe de ella. Se desplaza, y no
-            tiene un solo botón de acción. */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {error && (
-            <p className="px-5 py-4 text-normal font-semibold text-alerta">{error}</p>
-          )}
-
-          {!error && piezas === null && (
-            <p className="px-5 py-4 text-normal text-apagado">Leyendo la carpeta…</p>
-          )}
-
-          {piezas !== null && enOrden.length === 0 && (
-            <p className="px-5 py-4 text-normal text-apagado">
-              Esta carpeta no tiene piezas.
-            </p>
-          )}
-
+          {/*
+            Abajo: todos los botones, siempre los mismos y en el mismo orden.
+            Primero los de mirar la pieza, después los de decidir sobre ella. El
+            que no se puede hacer no se dibuja, pero ninguno cambia de lugar por
+            eso: la fila se lee de izquierda a derecha sin buscar.
+          */}
           {pieza && (
-            <Ficha pieza={pieza} detalle={detalle} comparando={comparando === pieza.id} />
+            <footer
+              className="flex flex-wrap items-center gap-2 border-t-2 border-tinta bg-lienzo
+                         px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3"
+            >
+              {pieza.enlaceDrive && (
+                <BotonEnlace
+                  variante="contorno"
+                  href={pieza.enlaceDrive}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  <IconoDrive />
+                  Abrir en Drive
+                </BotonEnlace>
+              )}
+
+              {pieza.vueltas > 1 && (
+                <Boton
+                  variante={comparando === pieza.id ? "principal" : "contorno"}
+                  aria-pressed={comparando === pieza.id}
+                  onClick={() => setComparando(comparando === pieza.id ? null : pieza.id)}
+                >
+                  <IconoComparar />
+                  {comparando === pieza.id
+                    ? "Ver solo la última"
+                    : `Comparar con la v${pieza.vueltas - 1}`}
+                </Boton>
+              )}
+
+              <Boton variante="contorno" onClick={() => setConfigurando(pieza.id)}>
+                <IconoConfig />
+                Configurar
+              </Boton>
+
+              {/* Lo que empuja a la derecha lo que hay que decidir: mirar es
+                  gratis, entregar y otorgar una vuelta extra no. */}
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {pieza.estado === "extra_pedida" && (
+                  <RevisionExtra
+                    carpetaId={c.carpetaId}
+                    piezaId={pieza.id}
+                    onHecho={recargar}
+                  />
+                )}
+
+                {/* **Decide solo si se muestra.** Envuelto en una condición de
+                    afuera, entregar lo último lo hacía desaparecer con el
+                    mensaje para el cliente adentro, justo cuando hacía falta. */}
+                <Entregar
+                  key={pieza.id}
+                  carpetaId={c.carpetaId}
+                  carpeta={pieza.nombre}
+                  piezaId={pieza.id}
+                  cuantas={
+                    hayAlgoParaEntregar(pieza.estado, pieza.ronda, pieza.vueltas) ? 1 : 0
+                  }
+                  dias={pieza.diasQueCorren}
+                  alEntregar={recargar}
+                />
+              </div>
+            </footer>
           )}
         </div>
-
-        {/*
-          Abajo: todos los botones, siempre los mismos y en el mismo orden.
-          Primero los de mirar la pieza, después los de decidir sobre ella. El
-          que no se puede hacer no se dibuja, pero ninguno cambia de lugar por
-          eso: la fila se lee de izquierda a derecha sin buscar.
-        */}
-        {pieza && (
-          <footer
-            className="flex flex-wrap items-center gap-2 border-t-2 border-tinta bg-lienzo
-                       px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3"
-          >
-            {pieza.enlaceDrive && (
-              <BotonEnlace
-                variante="contorno"
-                href={pieza.enlaceDrive}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                <IconoDrive />
-                Abrir en Drive
-              </BotonEnlace>
-            )}
-
-            {pieza.vueltas > 1 && (
-              <Boton
-                variante={comparando === pieza.id ? "principal" : "contorno"}
-                aria-pressed={comparando === pieza.id}
-                onClick={() => setComparando(comparando === pieza.id ? null : pieza.id)}
-              >
-                <IconoComparar />
-                {comparando === pieza.id
-                  ? "Ver solo la última"
-                  : `Comparar con la v${pieza.vueltas - 1}`}
-              </Boton>
-            )}
-
-            <Boton variante="contorno" onClick={() => setConfigurando(pieza.id)}>
-              <IconoConfig />
-              Configurar
-            </Boton>
-
-            {/* Lo que empuja a la derecha lo que hay que decidir: mirar es
-                gratis, entregar y otorgar una vuelta extra no. */}
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              {pieza.estado === "extra_pedida" && (
-                <RevisionExtra
-                  carpetaId={c.carpetaId}
-                  piezaId={pieza.id}
-                  onHecho={recargar}
-                />
-              )}
-
-              {/* **Decide solo si se muestra.** Envuelto en una condición de
-                  afuera, entregar lo último lo hacía desaparecer con el
-                  mensaje para el cliente adentro, justo cuando hacía falta. */}
-              <Entregar
-                key={pieza.id}
-                carpetaId={c.carpetaId}
-                carpeta={pieza.nombre}
-                piezaId={pieza.id}
-                cuantas={
-                  hayAlgoParaEntregar(pieza.estado, pieza.ronda, pieza.vueltas) ? 1 : 0
-                }
-                dias={pieza.diasQueCorren}
-                alEntregar={recargar}
-              />
-            </div>
-          </footer>
-        )}
-      </div>
+      </Fondo>
 
       {configurando && pieza && (
         <ConfigurarPieza
@@ -358,7 +363,7 @@ export function ResumenDeTrabajo({
           onCerrar={() => setConfigurando(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 

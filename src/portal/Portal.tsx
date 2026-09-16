@@ -41,6 +41,7 @@ import {
 } from "@/portal/acciones";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import { Fondo } from "@/ui/Fondo";
 import { fechaCorta } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import { Miniatura } from "@/ui/Miniatura";
@@ -761,9 +762,9 @@ function Ventana({
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-tinta/50 sm:items-center sm:p-6"
-      onClick={onCerrar}
+    <Fondo
+      onCerrar={onCerrar}
+      className="z-50 flex items-end justify-center sm:items-center sm:p-6"
     >
       <div
         ref={marco}
@@ -771,7 +772,6 @@ function Ventana({
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
-        onClick={(e) => e.stopPropagation()}
         className="flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden bg-lienzo"
       >
         <header className="flex items-start gap-3 bg-acento px-6 py-4 text-white">
@@ -797,7 +797,7 @@ function Ventana({
           </footer>
         )}
       </div>
-    </div>
+    </Fondo>
   );
 }
 

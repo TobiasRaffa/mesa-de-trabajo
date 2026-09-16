@@ -24,6 +24,7 @@ import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 import { IconoCerrar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import { Fondo } from "@/ui/Fondo";
 import { enPalabrasLaFecha } from "@/admin/cuando";
 
 export function ConfigurarPieza({
@@ -46,9 +47,9 @@ export function ConfigurarPieza({
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-tinta/50 p-0 sm:items-center sm:p-6"
-      onClick={onCerrar}
+    <Fondo
+      onCerrar={onCerrar}
+      className="z-[60] flex items-end justify-center p-0 sm:items-center sm:p-6"
     >
       <div
         ref={marco}
@@ -56,7 +57,6 @@ export function ConfigurarPieza({
         role="dialog"
         aria-modal="true"
         aria-label={`Configurar ${archivo.nombre}`}
-        onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden bg-lienzo"
       >
         <header className="flex items-center gap-3 bg-tinta px-5 py-4 text-lienzo">
@@ -137,6 +137,6 @@ export function ConfigurarPieza({
           )}
         </div>
       </div>
-    </div>
+    </Fondo>
   );
 }

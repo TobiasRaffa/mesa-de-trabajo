@@ -138,17 +138,6 @@ export async function linkDeCarpeta(carpetaId: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 /**
- * Si esto, por sí solo, está escondido.
- *
- * **No mira hacia arriba**: no dice si el camino hasta acá pasa por algo
- * escondido. Para eso está el permiso, que es el que sube por el árbol. Esta
- * función responde una sola cosa, y quien la use tiene que saber cuál.
- */
-export async function estaEscondido(id: string): Promise<boolean> {
-  return !normalizar(await almacen.uno(id)).visible;
-}
-
-/**
  * Cuáles de estos están escondidos. Una sola lectura para todos.
  *
  * Preguntar de a uno serían veinte lecturas para dibujar una carpeta con veinte

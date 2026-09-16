@@ -28,6 +28,7 @@ import { useEffect, useRef, useState } from "react";
 import { Boton } from "@/ui/Boton";
 import { IconoCerrar, IconoEnviar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import { Fondo } from "@/ui/Fondo";
 import type { Mensaje } from "@/lib/conversaciones";
 
 export type { Mensaje };
@@ -115,9 +116,9 @@ export function Conversacion({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-tinta/50 sm:items-center sm:p-6"
-      onClick={onCerrar}
+    <Fondo
+      onCerrar={onCerrar}
+      className="z-50 flex items-end justify-center sm:items-center sm:p-6"
     >
       <div
         ref={marco}
@@ -125,7 +126,6 @@ export function Conversacion({
         role="dialog"
         aria-modal="true"
         aria-label={`Conversación sobre ${carpeta}`}
-        onClick={(e) => e.stopPropagation()}
         className="flex h-[88vh] w-full max-w-xl flex-col overflow-hidden bg-lienzo sm:h-[80vh]"
       >
         <header className="flex items-center gap-3 bg-acento px-4 py-3 text-white">
@@ -199,7 +199,7 @@ export function Conversacion({
           </p>
         </footer>
       </div>
-    </div>
+    </Fondo>
   );
 }
 
