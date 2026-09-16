@@ -85,28 +85,42 @@ export function cambiosPorVuelta(
   enviada = false
 ): CambiosDeUnaVuelta[] {
   const salida: CambiosDeUnaVuelta[] = [];
-  let version = 1;
+  const envios = historia
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => h.que === "revision_enviada");
 
-  for (let i = 0; i < historia.length; i++) {
-    const h = historia[i];
-    if (h.que !== "revision_enviada") continue;
-
+  envios.forEach(({ h, i }, orden) => {
     // La forma de ahora dice la versión adelante; la vieja la deja en la
     // entrega que vino después.
     const propio = leerPedido(h.detalle);
     const enLaEntrega = leerPedido(
       historia.slice(i + 1).find((x) => x.que === "entregada")?.detalle
     );
-    const puntos = propio.puntos.length > 0 ? propio.puntos : enLaEntrega.puntos;
+
+    // **Y si no está en ninguna de las dos, es lo que todavía está sin
+    // contestar.** Pasa con lo mandado antes de que el envío lo anotara y
+    // todavía sin entregar: la única copia está en la pieza.
+    const ultimo = orden === envios.length - 1;
+    const puntos =
+      propio.puntos.length > 0
+        ? propio.puntos
+        : enLaEntrega.puntos.length > 0
+          ? enLaEntrega.puntos
+          : ultimo && enviada
+            ? ahora
+            : [];
 
     if (puntos.length > 0) {
-      salida.push({ version: propio.version ?? version, puntos, abierta: false });
+      salida.push({ version: propio.version ?? orden + 1, puntos, abierta: false });
     }
-    version++;
-  }
+  });
 
-  if (ahora.length > 0) {
-    salida.push({ version: vueltaActual, puntos: ahora, abierta: !enviada });
+  // **Lo de la pieza solo se suma si todavía no se mandó.** Mandado, la
+  // historia ya lo tiene: la lista de la pieza no se vacía hasta que se
+  // entrega la vuelta siguiente, así que sumarlo igual mostraba el mismo
+  // pedido dos veces, uno debajo del otro.
+  if (ahora.length > 0 && !enviada) {
+    salida.push({ version: vueltaActual, puntos: ahora, abierta: true });
   }
 
   return salida;

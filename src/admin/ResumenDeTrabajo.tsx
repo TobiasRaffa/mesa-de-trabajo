@@ -8,63 +8,80 @@
 // falta acá?». Eso hace que el tablero deje de ser el lugar donde se mira cómo
 // viene todo y pase a ser un índice.
 //
+// **Tiene la forma exacta de la ventana del cliente**, y eso es la decisión de
+// diseño de este archivo, no una casualidad. Tres zonas fijas:
+//
+//   encabezado   qué se está mirando, abrir la carpeta, cerrar.
+//   medio        la pieza y lo que se sabe de ella. Nada más. Se desplaza.
+//   abajo        **todos** los botones, juntos y quietos.
+//
+// Los botones estaban repartidos —uno debajo de la foto, otro debajo del
+// detalle, otro adentro de la ficha— y esa es la versión de esta pantalla que
+// no funcionaba: para saber qué se podía hacer con una pieza había que
+// recorrerla entera con la vista, y lo que se podía hacer cambiaba de lugar
+// según la pieza. Abajo siempre están todos, en el mismo orden, y la barra no
+// se mueve aunque el detalle sea largo.
+//
+// **Y por eso se mira de a una pieza.** Una barra de acciones que valga para
+// «todas las piezas de la carpeta» no existe: «Abrir en Drive» abre un archivo,
+// no cinco. Si los botones son de una pieza, la ventana es de una pieza, y se
+// pasa de una a otra con las flechas del encabezado, igual que el cliente.
+//
 // **Las piezas se piden al abrir y no antes.** El tablero ya cuesta una vuelta
 // a Drive por carpeta; traer además todas las piezas de todas las carpetas para
 // una ventana que se abre de a una sería pagar por adelantado algo que casi
 // nunca se mira.
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { abrirCarpeta, historiaDeCarpeta } from "@/app/(admin)/gestion/acciones";
+import {
+  abrirCarpeta,
+  habilitarExtraDePieza,
+  historiaDeCarpeta,
+} from "@/app/(admin)/gestion/acciones";
 import { DetalleDePieza } from "@/admin/DetalleDePieza";
+import { ConfigurarPieza } from "@/admin/ConfigurarPieza";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { Entregar } from "@/admin/Entregar";
 import { Estado } from "@/ui/Estado";
 import { Miniatura } from "@/ui/Miniatura";
+import { Boton, BotonEnlace } from "@/ui/Boton";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import { diasConNosotros, hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
-import { IconoCerrar, IconoDrive } from "@/ui/Icono";
+import {
+  IconoCerrar,
+  IconoComparar,
+  IconoConfig,
+  IconoDrive,
+  IconoFlecha,
+} from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import { enPalabrasElDia } from "@/admin/cuando";
 import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
-
-const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
-
-const comoFecha = (dia: string) => {
-  const [a, m, d] = dia.split("-").map(Number);
-  return fecha.format(new Date(a, m - 1, d));
-};
 
 /**
  * Lo que esta ventana necesita saber de un trabajo.
  *
  * **Es su propio tipo y no el del tablero.** La abren dos pantallas que
  * guardan cosas distintas —el tablero y el árbol de clientes—, y obligar a una
- * a fabricar la forma de la otra terminaba en campos inventados. Acá se pide
- * lo que de verdad se usa, y lo que no siempre se sabe va opcional: la ventana
- * lo saca de las piezas apenas llegan.
+ * a fabricar la forma de la otra terminaba en campos inventados.
+ *
+ * Son seis cosas y ninguna es un número del tablero. Los tenía —«1 en juego, 1
+ * sin revisar»— para dibujar mientras Drive contestaba, y esa línea se fue:
+ * decía en chiquito lo mismo que la pieza dice abajo en grande, y encima lo
+ * decía mal apenas se entregaba algo desde acá, porque era una foto sacada al
+ * abrir la pantalla de atrás.
  */
 export type TrabajoParaMirar = {
   clienteId: string;
   cliente: string;
   carpetaId: string;
   carpeta: string;
-  /** Lo que se hereda hacia las piezas. */
+  /** Lo que se hereda hacia las piezas mientras no tengan lo suyo. */
   diasQueCorren: number;
   responsableQueCorre: string | null;
-  asignadaA: string | null;
-  visible: boolean;
-  /** Si el cliente la ve como lista o como calendario. */
-  vista: "lista" | "calendario";
-  /** Lo que el tablero ya sabe, para dibujar sin esperar a Drive. */
-  enJuego?: number;
-  terminadas?: number;
-  sinEntregar?: number;
-  sinRevisar?: number;
-  vence?: Date | null;
-  vencida?: boolean;
-  porVencer?: boolean;
-  sinLeer?: number;
 };
 
 export function ResumenDeTrabajo({
@@ -76,12 +93,12 @@ export function ResumenDeTrabajo({
   carpeta: TrabajoParaMirar;
   equipo: Persona[];
   /**
-   * Una sola pieza, cuando se abre desde su archivo.
+   * Con cuál pieza abrir.
    *
    * **Desde el árbol se abre por archivo y no por carpeta**: una carpeta con
    * dos archivos no deja decir cuál se quiere mirar. Desde el tablero se abre
-   * la carpeta entera, que es lo que ahí se está mirando, y entonces se ven
-   * todas sus piezas una abajo de la otra. La ventana es la misma.
+   * la carpeta y arranca por la primera. En los dos casos se puede pasar a las
+   * demás con las flechas: la ventana es la misma y muestra la carpeta entera.
    */
   soloPieza?: string;
   onCerrar: () => void;
@@ -91,18 +108,26 @@ export function ResumenDeTrabajo({
   const [error, setError] = useState<string | null>(null);
 
   // Se vuelve a pedir la carpeta cuando algo de acá adentro la cambió —una
-  // entrega—, para que la lista no siga mostrando lo de hace un minuto.
+  // entrega, una revisión extra— para que no siga mostrando lo de hace un
+  // minuto.
   const [vuelta, setVuelta] = useState(0);
-
-  // Si al entregar se cambió el plazo, manda ese: la foto del tablero se sacó
-  // antes y diría el viejo al lado del mensaje que prometió el nuevo.
-  const [diasPuestos, setDiasPuestos] = useState<number | null>(null);
-  const diasQueCorren = diasPuestos ?? c.diasQueCorren;
+  const recargar = () => setVuelta((n) => n + 1);
 
   // Lo que pasó en cada pieza: los cambios que pidió el cliente, lo que
   // escribieron encima del archivo en Drive, y cuándo. Se pide aparte porque
   // cuesta una vuelta por pieza y solo hace falta con la ventana abierta.
   const [historia, setHistoria] = useState<PiezaConHistoria[] | null>(null);
+
+  // **Cuál se está mirando, por su id y no por su posición.** Entregar algo
+  // cambia su estado, y el orden de la lista sale del estado: guardando el
+  // número, entregar la pieza que estaba abierta movía la ventana a otra.
+  const [abierta, setAbierta] = useState<string | null>(soloPieza ?? null);
+
+  // Estas dos son de la pieza que se está mirando, y por eso se guardan con su
+  // id: pasar a la siguiente tiene que dejar de comparar y cerrar lo que se
+  // estaba configurando, sin un efecto que lo limpie a mano.
+  const [comparando, setComparando] = useState<string | null>(null);
+  const [configurando, setConfigurando] = useState<string | null>(null);
 
   useEffect(() => {
     let vivo = true;
@@ -131,26 +156,25 @@ export function ResumenDeTrabajo({
     };
   }, [c.carpetaId, c.diasQueCorren, c.responsableQueCorre, vuelta]);
 
-  // Lo que ya no está en juego, aparte. El estado es de cada pieza: un trabajo
-  // no está «aprobado», lo están algunas de sus piezas.
-  // Cuando se abrió desde un archivo, la ventana es de esa pieza y nada más.
-  const aLaVista = (piezas ?? []).filter((p) => !soloPieza || p.id === soloPieza);
+  // **Lo que sigue en juego primero.** Lo aprobado no desaparece —acá nada
+  // desaparece— pero no es lo que se vino a mirar: queda al final, con su
+  // estado puesto.
+  const enOrden = [
+    ...(piezas ?? []).filter((p) => sigueEnJuego(p.estado)),
+    ...(piezas ?? []).filter((p) => !sigueEnJuego(p.estado)),
+  ];
 
-  const terminadas = aLaVista.filter((p) => !sigueEnJuego(p.estado));
-  const enJuego = aLaVista.filter((p) => sigueEnJuego(p.estado));
+  const donde = Math.max(
+    0,
+    enOrden.findIndex((p) => p.id === abierta)
+  );
+  const pieza = enOrden[donde];
+  const detalle = pieza && historia?.find((h) => h.id === pieza.id);
 
-  // **Los números salen de las piezas apenas llegan, y del tablero mientras
-  // tanto.** El tablero es una foto sacada al abrir la pantalla: si desde acá
-  // se entrega algo, esa foto queda vieja en el acto y diría «1 sin entregar»
-  // al lado de un botón que ya no tiene nada que entregar.
-  const cargadas = piezas !== null;
-  // La misma regla que el tablero, no «está de nuestro lado»: una pieza que
-  // el cliente devolvió con cambios no tiene nada nuevo para entregar hasta
-  // que aparezca la vuelta siguiente. Acá se calculaba distinto, y la ventana
-  // ofrecía entregar lo que la columna de al lado decía que no.
-  const sinEntregar = cargadas
-    ? enJuego.filter((p) => hayAlgoParaEntregar(p.estado, p.ronda, p.vueltas)).length
-    : (c.sinEntregar ?? 0);
+  const ir = (paso: number) => {
+    const siguiente = enOrden[(donde + paso + enOrden.length) % enOrden.length];
+    if (siguiente) setAbierta(siguiente.id);
+  };
 
   return (
     <div
@@ -164,315 +188,314 @@ export function ResumenDeTrabajo({
         aria-modal="true"
         aria-label={`${c.cliente}: ${c.carpeta}`}
         onClick={(e) => e.stopPropagation()}
-        // Grande: acá adentro está todo lo del trabajo —las piezas con su
-        // imagen, lo que pidió el cliente, los comentarios de Drive, la
-        // historia y la configuración—. En una ventana angosta eso es una
-        // columna de renglones partidos.
         className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden bg-lienzo"
       >
+        {/*
+          El encabezado: qué se está mirando y cómo salir. Nada más que eso.
+          Lo único que hay acá que no es el título es «Abrir la carpeta», y
+          está porque es la única acción de la ventana que no es de una pieza
+          sino del trabajo entero: al lado del nombre del trabajo es donde
+          alguien la va a buscar.
+        */}
         <header className="flex items-center gap-3 bg-tinta px-5 py-4 text-lienzo">
           <div className="min-w-0 flex-1">
-            <p className="text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
-              {c.cliente}
+            <p className="truncate text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
+              {c.cliente} · {c.carpeta}
+              {enOrden.length > 1 && ` · pieza ${donde + 1} de ${enOrden.length}`}
             </p>
-            <h2 className="text-titulo font-extrabold leading-tight tracking-tight">
-              {c.carpeta}
+            <h2 className="truncate text-titulo font-extrabold leading-tight tracking-tight">
+              {pieza ? pieza.nombre : c.carpeta}
+              {pieza && pieza.vueltas > 1 && (
+                <span className="ml-2 align-middle text-menudo font-extrabold uppercase tracking-wider text-lienzo/45">
+                  v{pieza.vueltas}
+                </span>
+              )}
             </h2>
           </div>
-          {/* Abrir la carpeta es del trabajo entero, no de una pieza: va con
-              el título, que es lo único que también lo es. */}
-          {/* Del mismo alto que la cruz y con fondo propio: son un par, y
-              contra el fondo oscuro un botón de contorno se pierde. */}
-          <Link
-            href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
-            className="inline-flex h-9 shrink-0 items-center bg-lienzo px-3 text-menudo
-                       font-bold tracking-tight text-tinta transition-colors hover:bg-lienzo/90"
-          >
-            Abrir la carpeta
-          </Link>
-          <button
-            type="button"
-            onClick={onCerrar}
-            aria-label="Cerrar"
-            className="grid h-9 w-9 shrink-0 place-items-center bg-lienzo text-tinta transition-colors hover:bg-lienzo/90"
-          >
-            <IconoCerrar />
-          </button>
+
+          <div className="flex shrink-0 items-center gap-1">
+            {/* Las flechas solo aparecen si hay a dónde ir. */}
+            {enOrden.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => ir(-1)}
+                  aria-label="Pieza anterior"
+                  className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25"
+                >
+                  <IconoFlecha className="rotate-180" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => ir(1)}
+                  aria-label="Pieza siguiente"
+                  className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25"
+                >
+                  <IconoFlecha />
+                </button>
+              </>
+            )}
+            {/* Del mismo alto que la cruz y con fondo propio: son un par, y
+                contra el fondo oscuro un botón de contorno se pierde. */}
+            <Link
+              href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
+              className="ml-2 inline-flex h-9 items-center bg-lienzo px-3 text-menudo
+                         font-bold tracking-tight text-tinta transition-colors hover:bg-lienzo/90"
+            >
+              Abrir la carpeta
+            </Link>
+            <button
+              type="button"
+              onClick={onCerrar}
+              aria-label="Cerrar"
+              className="grid h-9 w-9 place-items-center bg-lienzo text-tinta transition-colors hover:bg-lienzo/90"
+            >
+              <IconoCerrar />
+            </button>
+          </div>
         </header>
 
-        {/*
-          **Sin la línea de números.** Decía «1 en juego · 1 sin revisar · 1 día
-          para revisar» y las tres cosas volvían a estar abajo: el estado de la
-          pieza ya dice «para revisar», cuántas hay se ve contándolas, y el
-          vencimiento va con la pieza que vence. Queda lo único que es del
-          trabajo entero y no se puede leer de otro lado: el botón de entregar.
-        */}
-        {sinEntregar > 0 && (
-          <div className="border-b-2 border-tinta px-5 py-3">
-            <Entregar
-              carpetaId={c.carpetaId}
-              carpeta={c.carpeta}
-              cuantas={sinEntregar}
-              dias={diasQueCorren}
-              alEntregar={(dias) => {
-                if (dias !== undefined) setDiasPuestos(dias);
-                setVuelta((n) => n + 1);
-              }}
-            />
-          </div>
-        )}
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          {error && <p className="text-normal font-semibold text-alerta">{error}</p>}
+        {/* El medio: la pieza y lo que se sabe de ella. Se desplaza, y no
+            tiene un solo botón de acción. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {error && (
+            <p className="px-5 py-4 text-normal font-semibold text-alerta">{error}</p>
+          )}
 
           {!error && piezas === null && (
-            <p className="text-normal text-apagado">Leyendo la carpeta…</p>
+            <p className="px-5 py-4 text-normal text-apagado">Leyendo la carpeta…</p>
           )}
 
-          {piezas?.length === 0 && (
-            <p className="text-normal text-apagado">Esta carpeta no tiene piezas.</p>
+          {piezas !== null && enOrden.length === 0 && (
+            <p className="px-5 py-4 text-normal text-apagado">
+              Esta carpeta no tiene piezas.
+            </p>
           )}
 
-          {piezas && piezas.length > 0 && (
-            <>
-              {enJuego.length > 0 && (
-                <Lista
-                  piezas={enJuego}
-                  historia={historia}
-                  equipo={equipo}
-                  onCambio={() => setVuelta((n) => n + 1)}
+          {pieza && (
+            <Ficha pieza={pieza} detalle={detalle} comparando={comparando === pieza.id} />
+          )}
+        </div>
+
+        {/*
+          Abajo: todos los botones, siempre los mismos y en el mismo orden.
+          Primero los de mirar la pieza, después los de decidir sobre ella. El
+          que no se puede hacer no se dibuja, pero ninguno cambia de lugar por
+          eso: la fila se lee de izquierda a derecha sin buscar.
+        */}
+        {pieza && (
+          <footer
+            className="flex flex-wrap items-center gap-2 border-t-2 border-tinta bg-lienzo
+                       px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3"
+          >
+            {pieza.enlaceDrive && (
+              <BotonEnlace
+                variante="contorno"
+                href={pieza.enlaceDrive}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                <IconoDrive />
+                Abrir en Drive
+              </BotonEnlace>
+            )}
+
+            {pieza.vueltas > 1 && (
+              <Boton
+                variante={comparando === pieza.id ? "principal" : "contorno"}
+                aria-pressed={comparando === pieza.id}
+                onClick={() => setComparando(comparando === pieza.id ? null : pieza.id)}
+              >
+                <IconoComparar />
+                {comparando === pieza.id
+                  ? "Ver solo la última"
+                  : `Comparar con la v${pieza.vueltas - 1}`}
+              </Boton>
+            )}
+
+            <Boton variante="contorno" onClick={() => setConfigurando(pieza.id)}>
+              <IconoConfig />
+              Configurar
+            </Boton>
+
+            {/* Lo que empuja a la derecha lo que hay que decidir: mirar es
+                gratis, entregar y otorgar una vuelta extra no. */}
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {pieza.estado === "extra_pedida" && (
+                <RevisionExtra
+                  carpetaId={c.carpetaId}
+                  piezaId={pieza.id}
+                  onHecho={recargar}
                 />
               )}
 
-              {/*
-                **Lo aprobado va abajo y bajo su propio título.** Mezclado
-                arriba, una pieza aprobada se lee como una más de las que hay
-                que mirar, que es justo lo contrario de lo que es. Y no se
-                esconde: sigue estando, con su estado, porque acá nada
-                desaparece.
-              */}
-              {terminadas.length > 0 && (
-                <>
-                  {enJuego.length > 0 && (
-                    <h3 className="mt-5 text-micro font-extrabold uppercase tracking-widest text-apagado">
-                      Ya aprobadas
-                    </h3>
-                  )}
-                  <Lista
-                    piezas={terminadas}
-                    historia={historia}
-                    equipo={equipo}
-                    onCambio={() => setVuelta((n) => n + 1)}
-                  />
-                </>
-              )}
-            </>
-          )}
-        </div>
+              {/* **Decide solo si se muestra.** Envuelto en una condición de
+                  afuera, entregar lo último lo hacía desaparecer con el
+                  mensaje para el cliente adentro, justo cuando hacía falta. */}
+              <Entregar
+                key={pieza.id}
+                carpetaId={c.carpetaId}
+                carpeta={pieza.nombre}
+                piezaId={pieza.id}
+                cuantas={
+                  hayAlgoParaEntregar(pieza.estado, pieza.ronda, pieza.vueltas) ? 1 : 0
+                }
+                dias={pieza.diasQueCorren}
+                alEntregar={recargar}
+              />
+            </div>
+          </footer>
+        )}
       </div>
+
+      {configurando && pieza && (
+        <ConfigurarPieza
+          pieza={detalle}
+          archivo={pieza}
+          carpetaId={c.carpetaId}
+          equipo={equipo}
+          onCambio={recargar}
+          onCerrar={() => setConfigurando(null)}
+        />
+      )}
     </div>
   );
 }
 
-function Lista({
-  piezas,
-  historia,
-  equipo,
-  onCambio,
-}: {
-  piezas: NodoArchivo[];
-  historia: PiezaConHistoria[] | null;
-  equipo: Persona[];
-  onCambio: () => void;
-}) {
-  return (
-    <ul className="mt-2 border-t border-linea">
-      {piezas.map((p) => (
-        <Pieza
-          key={p.id}
-          pieza={p}
-          detalle={historia?.find((h) => h.id === p.id)}
-          equipo={equipo}
-          onCambio={onCambio}
-        />
-      ))}
-    </ul>
-  );
-}
-
 /**
- * Una pieza, con lo que hace falta para no tener que abrir la carpeta.
+ * La pieza: de un lado se la mira, del otro se lee lo que se sabe de ella.
  *
  * **La miniatura importa más de lo que parece.** Una lista de nombres obliga a
  * acordarse de qué era «9312»; con la imagen al lado se reconoce sin leer, que
  * es la diferencia entre mirar el tablero y tener que ir a buscar.
- *
- * Debajo del nombre va lo que cambia decisiones: quién lo lleva, cuándo vence,
- * cuándo sale publicado. Arriba, lo que lo identifica: la vuelta en la que va y
- * si el cliente lo ve.
  */
-function Pieza({
+function Ficha({
   pieza: p,
   detalle,
-  equipo,
-  onCambio,
+  comparando,
 }: {
   pieza: NodoArchivo;
   detalle?: PiezaConHistoria;
-  equipo: Persona[];
-  onCambio: () => void;
+  comparando: boolean;
 }) {
   // La última vuelta es la que se está mirando, y es la que tiene imagen.
   const archivo = p.archivos[p.archivos.length - 1];
   const anterior = p.archivos[p.archivos.length - 2];
-
-  // **Comparar es la pregunta de la agencia, no solo la del cliente.** Antes
-  // de entregar una vuelta nueva, lo que se quiere ver es qué cambió respecto
-  // de la anterior; el cliente ya podía y nosotros no.
-  const [comparando, setComparando] = useState(false);
+  const aLaPar = comparando && anterior !== undefined;
 
   const nuestros = detalle
     ? diasConNosotros(detalle.estado, detalle.historia.at(-1)?.cuando, new Date())
     : null;
 
   return (
-    // **La misma forma que la ventana del cliente**: la pieza grande de un
-    // lado y todo lo que se sabe de ella del otro. Era una lista de renglones
-    // con una miniatura de estampilla, y de un trabajo lo primero que se mira
-    // es el trabajo.
-    <li className="border-b border-linea py-4">
-      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <div className="flex flex-col gap-2">
-          <div className={`grid gap-1 ${comparando && anterior ? "grid-cols-2" : ""}`}>
-            {comparando && anterior && (
-              <Vuelta
-                archivo={anterior}
-                nombre={p.nombre}
-                rotulo={`v${p.vueltas - 1}`}
-              />
-            )}
-            <Vuelta
-              archivo={archivo}
-              nombre={p.nombre}
-              modificado={p.modificado}
-              rotulo={comparando && anterior ? `v${p.vueltas}` : undefined}
-            />
-          </div>
+    <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-8">
+      <div className={`grid gap-1 self-start ${aLaPar ? "grid-cols-2" : ""}`}>
+        {aLaPar && (
+          <Vuelta archivo={anterior} nombre={p.nombre} rotulo={`v${p.vueltas - 1}`} />
+        )}
+        <Vuelta
+          archivo={archivo}
+          nombre={p.nombre}
+          modificado={p.modificado}
+          rotulo={aLaPar ? `v${p.vueltas}` : undefined}
+        />
+      </div>
 
-          {/* Debajo de la foto, las dos cosas que se hacen **con la foto**:
-              abrir el archivo de verdad y ponerla al lado de la vuelta
-              anterior. Estaba una acá y la otra abajo de todo, con los botones
-              que no tienen nada que ver con mirarla. */}
-          <div className="flex flex-wrap gap-2">
-            {p.enlaceDrive && (
-              <a
-                href={p.enlaceDrive}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="min-h-toque inline-flex flex-1 items-center justify-center gap-2
-                           border-2 border-tinta px-3 text-menudo font-bold tracking-tight
-                           text-tinta transition-colors hover:bg-hueco"
-              >
-                <IconoDrive />
-                Abrir en Drive
-              </a>
-            )}
-            {anterior && (
-            <button
-              type="button"
-              onClick={() => setComparando(!comparando)}
-              aria-pressed={comparando}
-              className={`min-h-toque flex-1 border-2 border-tinta px-3 text-menudo font-bold
-                          tracking-tight transition-colors ${
-                            comparando
-                              ? "bg-tinta text-lienzo"
-                              : "text-tinta hover:bg-hueco"
-                          }`}
-            >
-              {comparando ? "Ver solo la última" : `Comparar con la v${p.vueltas - 1}`}
-            </button>
-            )}
-          </div>
-        </div>
-
-        <div className="min-w-0">
-          {/*
-            **El nombre manda.** Estaba del mismo tamaño que la etiqueta de
-            estado, y esa etiqueta es un detalle del trabajo —como quién lo
-            lleva o hace cuánto que lo tenemos—, no su título. Así había que
-            buscar cuál pieza se estaba mirando.
-          */}
-          <h3 className="text-titulo font-extrabold leading-tight tracking-tight">
-            {p.nombre}
-            {p.vueltas > 1 && (
-              <span className="ml-2 align-middle text-menudo font-extrabold uppercase tracking-wider text-apagado">
-                v{p.vueltas}
-              </span>
-            )}
-          </h3>
-
-          {/*
-            **La descripción del trabajo, en un tamaño que se lea.** Estaba en
-            letra micro y gris: «Nari» y «vence 17 sept» no se veían, y son
-            justo lo que se pregunta después del nombre. Van en el cuerpo de
-            texto normal, cada cosa con su rótulo, una debajo de la otra.
-          */}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Estado estado={p.estado} />
-            {!p.visible && (
-              <span className="bg-tinta px-2 py-1 text-micro font-extrabold uppercase tracking-wider text-lienzo">
-                Oculta
-              </span>
-            )}
-          </div>
-
-          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-menudo">
-            <div className="flex gap-2">
-              <dt className="text-apagado">A cargo de</dt>
-              <dd className="font-bold tracking-tight">
-                {p.responsableA ?? "sin asignar"}
-              </dd>
-            </div>
-            {p.vence && (
-              <div className="flex gap-2">
-                <dt className="text-apagado">Vence</dt>
-                <dd className="cifras font-bold tracking-tight">{comoFecha(p.vence)}</dd>
-              </div>
-            )}
-            {p.publicaEl && (
-              <div className="flex gap-2">
-                <dt className="text-apagado">Sale</dt>
-                <dd className="cifras font-bold tracking-tight">
-                  {comoFecha(p.publicaEl)}
-                </dd>
-              </div>
-            )}
-            {/* Hace cuánto que la tenemos nosotros. No es un plazo —no tenemos
-                límite— pero dice si algo se está quedando quieto. */}
-            {nuestros !== null && (
-              <div className="flex gap-2">
-                <dt className="text-apagado">Con nosotros</dt>
-                <dd className={`cifras font-bold tracking-tight ${tonoDeEspera(nuestros)}`}>
-                  {nuestros} {nuestros === 1 ? "día" : "días"}
-                </dd>
-              </div>
-            )}
-          </dl>
-
-          {/* Todo lo que pasó con esta pieza: lo que pidió el cliente, lo que
-              escribieron en Drive, y qué se puede hacer. */}
-          {detalle && (
-            <DetalleDePieza
-              pieza={detalle}
-              archivo={p}
-              carpetaId={p.id.split("::")[0]}
-              equipo={equipo}
-              onCambio={onCambio}
-            />
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Estado estado={p.estado} />
+          {!p.visible && (
+            <span className="bg-tinta px-2 py-1 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+              Oculta
+            </span>
           )}
         </div>
+
+        {/*
+          **La descripción del trabajo, en un tamaño que se lea.** Estaba en
+          letra micro y gris: «Nari» y «vence 17 sept» no se veían, y son justo
+          lo que se pregunta después del nombre.
+        */}
+        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-menudo">
+          <Dato rotulo="A cargo de">{p.responsableA ?? "sin asignar"}</Dato>
+          {p.vence && <Dato rotulo="Vence">{enPalabrasElDia(p.vence)}</Dato>}
+          {p.publicaEl && <Dato rotulo="Sale">{enPalabrasElDia(p.publicaEl)}</Dato>}
+          {/* Hace cuánto que la tenemos nosotros. No es un plazo —no tenemos
+              límite— pero dice si algo se está quedando quieto. */}
+          {nuestros !== null && (
+            <Dato rotulo="Con nosotros" tono={tonoDeEspera(nuestros)}>
+              {nuestros} {nuestros === 1 ? "día" : "días"}
+            </Dato>
+          )}
+        </dl>
+
+        {detalle && <DetalleDePieza pieza={detalle} vueltas={p.vueltas} />}
       </div>
-    </li>
+    </div>
+  );
+}
+
+function Dato({
+  rotulo,
+  tono = "",
+  children,
+}: {
+  rotulo: string;
+  tono?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-2">
+      <dt className="text-apagado">{rotulo}</dt>
+      <dd className={`cifras font-bold tracking-tight ${tono}`}>{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * La vuelta extra que pidió el cliente, con el botón para dársela.
+ *
+ * **Es lo único de esta barra que contesta a alguien que está esperando.** El
+ * cliente se quedó sin vueltas incluidas, pidió una más, y el portal le dijo
+ * «te avisamos cuando la habiliten». Antes había que ir a buscar el botón a la
+ * ficha del archivo, en otra pantalla.
+ *
+ * Es un botón pelado a propósito: qué pasó ya lo dice el estado de la pieza,
+ * que está a dos centímetros.
+ */
+function RevisionExtra({
+  carpetaId,
+  piezaId,
+  onHecho,
+}: {
+  carpetaId: string;
+  piezaId: string;
+  onHecho: () => void;
+}) {
+  const [yendo, setYendo] = useState(false);
+  const [dicho, setDicho] = useState<string | null>(null);
+
+  return (
+    <>
+      {dicho && (
+        <span aria-live="polite" className="text-menudo font-semibold text-tinta-suave">
+          {dicho}
+        </span>
+      )}
+      <Boton
+        variante="contorno"
+        disabled={yendo}
+        onClick={async () => {
+          setYendo(true);
+          const r = await habilitarExtraDePieza(carpetaId, piezaId);
+          setYendo(false);
+          setDicho(r.motivo);
+          if (r.ok) onHecho();
+        }}
+      >
+        {yendo ? "…" : "Otorgar revisión extra"}
+      </Boton>
+    </>
   );
 }
 
@@ -499,8 +522,8 @@ function Vuelta({
       target="_blank"
       rel="noreferrer noopener"
       title={`Abrir ${nombre}`}
-      className="relative block h-56 w-full overflow-hidden border border-linea bg-hueco
-                 transition-colors hover:border-tinta"
+      className="relative block h-[38vh] w-full overflow-hidden border border-linea bg-hueco
+                 transition-colors hover:border-tinta lg:h-[52vh]"
     >
       <Miniatura
         src={urlDeMiniatura(archivo, 800, modificado)}

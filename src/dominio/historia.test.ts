@@ -66,3 +66,48 @@ describe("qué pidió el cliente en cada vuelta", () => {
     expect(r).toEqual([]);
   });
 });
+
+describe("lo mandado y todavía sin contestar aparece una sola vez", () => {
+  // **El caso que lo destapó, tal cual estaba en los datos.** El cliente mandó
+  // sus cambios y la agencia todavía no entregó la vuelta: la lista de la
+  // pieza sigue llena —se vacía recién al entregar— y además el envío quedó
+  // anotado en la historia. Sumando las dos, el mismo pedido salía dos veces,
+  // uno debajo del otro, como si hubiera pedido lo mismo dos veces.
+  const historia: HitoLeido[] = [
+    enviada(),
+    entregada("Responde a: 1) camiba el color"),
+    enviada(),
+    entregada("Responde a: 1) sadasd"),
+    enviada("V3: 1) Hola quiero la v3"),
+  ];
+
+  it("no lo repite", () => {
+    const r = cambiosPorVuelta(historia, ["Hola quiero la v3"], 3, true);
+
+    expect(r.map((v) => v.version)).toEqual([1, 2, 3]);
+    expect(r.filter((v) => v.puntos.includes("Hola quiero la v3"))).toHaveLength(1);
+  });
+
+  it("cada vuelta con lo suyo", () => {
+    const r = cambiosPorVuelta(historia, ["Hola quiero la v3"], 3, true);
+
+    expect(r[0].puntos).toEqual(["camiba el color"]);
+    expect(r[1].puntos).toEqual(["sadasd"]);
+    expect(r[2].puntos).toEqual(["Hola quiero la v3"]);
+  });
+
+  it("si se mandó antes de que el envío lo anotara, no se pierde", () => {
+    // Mandado con la forma vieja y todavía sin entregar: la única copia está
+    // en la pieza. Sin esto, lo que el cliente acaba de pedir no se veía.
+    const r = cambiosPorVuelta([enviada()], ["el color de fondo"], 2, true);
+
+    expect(r).toEqual([{ version: 1, puntos: ["el color de fondo"], abierta: false }]);
+  });
+
+  it("lo que está escribiendo y no mandó sí se muestra aparte", () => {
+    const r = cambiosPorVuelta([enviada("V1: 1) el color")], ["y el fondo"], 2, false);
+
+    expect(r).toHaveLength(2);
+    expect(r[1]).toEqual({ version: 2, puntos: ["y el fondo"], abierta: true });
+  });
+});

@@ -530,3 +530,92 @@ describe("quién hizo cada cosa", () => {
     expect(sesion).toContain("export async function firmaDeAgencia");
   });
 });
+
+/**
+ * **La ventana del trabajo tiene tres zonas, y los botones van en una sola.**
+ *
+ * Es lo que más veces se rompió de esta aplicación. Los botones se van
+ * acomodando al lado de lo que hacen —«Abrir en Drive» debajo de la foto,
+ * «Configurar» debajo del detalle— y el resultado es que dónde está cada cosa
+ * depende de qué pieza se esté mirando y de cuánto detalle tenga. Se acomodó
+ * cuatro veces y volvió cuatro veces, porque nada en el código decía que
+ * estuviera mal: era una preferencia que vivía en la cabeza de alguien.
+ *
+ * Ahora lo dice esto. El medio se lee; la barra de abajo se toca.
+ */
+describe("la ventana del trabajo no vuelve a mezclar mirar con hacer", () => {
+  const VENTANA = path.join(FUENTE, "admin", "ResumenDeTrabajo.tsx");
+  const ventana = readFileSync(VENTANA, "utf8");
+
+  /** Todo lo que en JSX significa «esto se toca». */
+  const SE_TOCA = [/<button/, /<Boton\b/, /<BotonEnlace\b/, /onClick=/];
+
+  /**
+   * El cuerpo de una función de este archivo, sin sus comentarios.
+   *
+   * Corta en la próxima declaración de primer nivel, que en este archivo
+   * siempre arranca en la columna cero.
+   */
+  const cuerpoDe = (texto: string, nombre: string): string => {
+    const desde = texto.indexOf("function " + nombre + "(");
+    expect(
+      desde,
+      "No existe " + nombre + ": si se renombró, esta prueba dejó de mirar nada."
+    ).toBeGreaterThan(-1);
+
+    const lineas = texto.slice(desde).split("\n");
+    const hasta = lineas.findIndex(
+      (l, i) => i > 0 && /^(function |export |\/\*\*)/.test(l)
+    );
+
+    return (hasta === -1 ? lineas : lineas.slice(0, hasta))
+      .filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"))
+      .join("\n");
+  };
+
+  it("el medio de la ventana no tiene ni un botón", () => {
+    // `Ficha` es lo único que se dibuja en la parte que se desplaza.
+    const culpables = SE_TOCA.filter((r) => r.test(cuerpoDe(ventana, "Ficha"))).map(String);
+
+    expect(
+      culpables,
+      "La parte del medio de la ventana volvió a tener botones. Ahí va la " +
+        "previsualización y los detalles, y nada más: todo lo que se toca va " +
+        "junto en el <footer>, que es lo único que no se corre de lugar " +
+        "cuando el detalle es largo."
+    ).toEqual([]);
+  });
+
+  it("lo que se anota de una pieza tampoco", () => {
+    const detalle = readFileSync(path.join(FUENTE, "admin", "DetalleDePieza.tsx"), "utf8");
+    const culpables = SE_TOCA.filter((r) => r.test(detalle)).map(String);
+
+    expect(
+      culpables,
+      "DetalleDePieza volvió a tener botones. Se dibuja en el medio de la " +
+        "ventana: sus acciones —configurar, otorgar la revisión extra— viven " +
+        "en la barra de abajo de ResumenDeTrabajo."
+    ).toEqual([]);
+  });
+
+  it("los botones están todos adentro de la barra de abajo", () => {
+    const abre = ventana.indexOf("<footer");
+    const cierra = ventana.indexOf("</footer>");
+    expect(abre, "La ventana se quedó sin <footer>.").toBeGreaterThan(-1);
+
+    const barra = ventana.slice(abre, cierra);
+    for (const cual of ["Abrir en Drive", "Comparar con la v", "Configurar", "<Entregar"]) {
+      expect(barra, "«" + cual + "» se fue de la barra de abajo.").toContain(cual);
+    }
+  });
+
+  it("el encabezado tiene el título, abrir la carpeta y cerrar", () => {
+    const encabezado = ventana.slice(
+      ventana.indexOf("<header"),
+      ventana.indexOf("</header>")
+    );
+    expect(encabezado).toContain("<h2");
+    expect(encabezado).toContain("Abrir la carpeta");
+    expect(encabezado).toContain("IconoCerrar");
+  });
+});
