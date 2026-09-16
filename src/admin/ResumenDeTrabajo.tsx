@@ -26,7 +26,11 @@ import { hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
 import { IconoCerrar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import type { NodoArchivo } from "@/admin/datos/arbol";
-import type { CarpetaEnElTablero } from "@/admin/datos/tablero";
+import type { Persona } from "@/lib/equipo";
+import { Visibilidad } from "@/admin/Visibilidad";
+import { Responsable } from "@/admin/Responsable";
+import { DiasDeRevision } from "@/admin/DiasDeRevision";
+import { Plegable } from "@/admin/Plegable";
 
 const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
 
@@ -35,11 +39,43 @@ const comoFecha = (dia: string) => {
   return fecha.format(new Date(a, m - 1, d));
 };
 
+/**
+ * Lo que esta ventana necesita saber de un trabajo.
+ *
+ * **Es su propio tipo y no el del tablero.** La abren dos pantallas que
+ * guardan cosas distintas —el tablero y el árbol de clientes—, y obligar a una
+ * a fabricar la forma de la otra terminaba en campos inventados. Acá se pide
+ * lo que de verdad se usa, y lo que no siempre se sabe va opcional: la ventana
+ * lo saca de las piezas apenas llegan.
+ */
+export type TrabajoParaMirar = {
+  clienteId: string;
+  cliente: string;
+  carpetaId: string;
+  carpeta: string;
+  /** Lo que se hereda hacia las piezas. */
+  diasQueCorren: number;
+  responsableQueCorre: string | null;
+  asignadaA: string | null;
+  visible: boolean;
+  /** Lo que el tablero ya sabe, para dibujar sin esperar a Drive. */
+  enJuego?: number;
+  terminadas?: number;
+  sinEntregar?: number;
+  sinRevisar?: number;
+  vence?: Date | null;
+  vencida?: boolean;
+  porVencer?: boolean;
+  sinLeer?: number;
+};
+
 export function ResumenDeTrabajo({
   carpeta: c,
+  equipo,
   onCerrar,
 }: {
-  carpeta: CarpetaEnElTablero;
+  carpeta: TrabajoParaMirar;
+  equipo: Persona[];
   onCerrar: () => void;
 }) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
@@ -103,10 +139,13 @@ export function ResumenDeTrabajo({
   // ofrecía entregar lo que la columna de al lado decía que no.
   const sinEntregar = cargadas
     ? enJuego.filter((p) => hayAlgoParaEntregar(p.estado, p.ronda, p.vueltas)).length
-    : c.sinEntregar;
+    : (c.sinEntregar ?? 0);
   const sinRevisar = cargadas
     ? enJuego.filter((p) => p.estado === "entregada" || p.estado === "en_revision").length
-    : c.sinRevisar;
+    : (c.sinRevisar ?? 0);
+  const cuantasEnJuego = cargadas ? enJuego.length : (c.enJuego ?? 0);
+  const cuantasTerminadas = cargadas ? terminadas.length : (c.terminadas ?? 0);
+  const sinLeer = c.sinLeer ?? 0;
 
   return (
     <div
@@ -120,7 +159,11 @@ export function ResumenDeTrabajo({
         aria-modal="true"
         aria-label={`${c.cliente}: ${c.carpeta}`}
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden bg-lienzo"
+        // Grande: acá adentro está todo lo del trabajo —las piezas con su
+        // imagen, lo que pidió el cliente, los comentarios de Drive, la
+        // historia y la configuración—. En una ventana angosta eso es una
+        // columna de renglones partidos.
+        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden bg-lienzo"
       >
         <header className="flex items-start gap-3 bg-tinta px-5 py-4 text-lienzo">
           <div className="min-w-0 flex-1">
@@ -148,12 +191,9 @@ export function ResumenDeTrabajo({
             <Dato que="Quién lo lleva" es={c.asignadaA ?? "sin asignar"} />
             {/* En juego y terminadas van separadas porque son dos cosas
                 distintas: una pide algo, la otra ya no. */}
-            <Dato que="En juego" es={String(cargadas ? enJuego.length : c.enJuego)} />
-            {(cargadas ? terminadas.length : c.terminadas) > 0 && (
-              <Dato
-                que="Aprobadas"
-                es={String(cargadas ? terminadas.length : c.terminadas)}
-              />
+            <Dato que="En juego" es={String(cuantasEnJuego)} />
+            {cuantasTerminadas > 0 && (
+              <Dato que="Aprobadas" es={String(cuantasTerminadas)} />
             )}
             {sinEntregar > 0 && (
               <Dato que="Sin entregar" es={String(sinEntregar)} tono="alerta" />
@@ -200,15 +240,66 @@ export function ResumenDeTrabajo({
             >
               Abrir la carpeta
             </Link>
-            {c.sinLeer > 0 && (
+            {sinLeer > 0 && (
               <Link
                 href="/gestion/chats"
                 className="min-h-toque inline-flex items-center bg-acento px-4 text-normal
                            font-bold tracking-tight text-white transition-colors hover:bg-acento-hover"
               >
-                {c.sinLeer} sin leer
+                {sinLeer} sin leer
               </Link>
             )}
+          </div>
+
+          {/*
+            **La configuración, acá adentro.** Lo que más se cambia de un
+            trabajo mirándolo es quién lo lleva, cuántos días tiene el cliente
+            y si lo ve: las tres cosas estaban en otra pantalla, y para tocar
+            una había que cerrar esto, buscar el cliente, abrir el árbol y
+            encontrar la carpeta.
+
+            Plegado, porque se mira mucho más de lo que se cambia.
+          */}
+          <div className="mt-3 border-t border-linea pt-3">
+            <Plegable titulo={<span className="text-normal">Configurar</span>}>
+              <div className="mt-3 flex flex-wrap items-start gap-x-8 gap-y-4">
+                <Visibilidad
+                  ids={[c.carpetaId]}
+                  visible={c.visible}
+                  que="carpeta"
+                  alGuardar={() => setVuelta((n) => n + 1)}
+                />
+                <section>
+                  <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+                    Quién lo lleva
+                  </h4>
+                  <div className="mt-2">
+                    <Responsable
+                      nivel="carpeta"
+                      id={c.carpetaId}
+                      quien={c.responsableQueCorre}
+                      propio={false}
+                      equipo={equipo}
+                      alGuardar={() => setVuelta((n) => n + 1)}
+                    />
+                  </div>
+                </section>
+                <section>
+                  <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+                    Tiempo de revisión
+                  </h4>
+                  <div className="mt-2">
+                    <DiasDeRevision
+                      nivel="carpeta"
+                      id={c.carpetaId}
+                      dias={diasQueCorren}
+                      propio={false}
+                      alGuardar={() => setVuelta((n) => n + 1)}
+                    />
+                  </div>
+                </section>
+              </div>
+            </Plegable>
           </div>
         </div>
 

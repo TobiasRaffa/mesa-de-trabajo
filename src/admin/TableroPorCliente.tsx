@@ -35,6 +35,7 @@ import {
   type Filtros,
 } from "@/admin/FiltrosDelTablero";
 import type { Cancha, CarpetaEnElTablero } from "@/admin/datos/tablero";
+import type { Persona } from "@/lib/equipo";
 import { Miniatura } from "@/ui/Miniatura";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 
@@ -120,7 +121,14 @@ function porCliente(carpetas: CarpetaEnElTablero[]): PorCliente[] {
   return salida;
 }
 
-export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[] }) {
+export function TableroPorCliente({
+  carpetas,
+  equipo,
+}: {
+  carpetas: CarpetaEnElTablero[];
+  /** Para poder cambiar quién lleva un trabajo sin salir del tablero. */
+  equipo: Persona[];
+}) {
   // Cuál se está mirando en grande. Vive acá arriba y no en cada ficha: la
   // ventana tapa la pantalla entera, así que solo puede haber una.
   const [mirando, setMirando] = useState<CarpetaEnElTablero | null>(null);
@@ -171,7 +179,11 @@ export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[]
       )}
 
       {mirando && (
-        <ResumenDeTrabajo carpeta={mirando} onCerrar={() => setMirando(null)} />
+        <ResumenDeTrabajo
+          carpeta={mirando}
+          equipo={equipo}
+          onCerrar={() => setMirando(null)}
+        />
       )}
     </>
   );
@@ -262,7 +274,6 @@ function Senales({ cliente }: { cliente: PorCliente }) {
   const cuantos = cliente.carpetas.length;
   const vencidos = cliente.carpetas.filter((c) => c.vencida).length;
   const porVencer = cliente.carpetas.filter((c) => c.porVencer).length;
-  const extra = cliente.carpetas.reduce((n, c) => n + c.extraPedida, 0);
   const sinEntregar = cliente.carpetas.reduce((n, c) => n + c.sinEntregar, 0);
   // Los mensajes sin leer son del cliente, no de cada carpeta: el mismo número
   // viene repetido en todas. Sumarlos sería contarlos una vez por trabajo.
@@ -273,13 +284,6 @@ function Senales({ cliente }: { cliente: PorCliente }) {
       <span>
         {cuantos} {cuantos === 1 ? "trabajo" : "trabajos"}
       </span>
-      {/* Primero lo que pide una decisión y no trabajo: alguien tiene que
-          decir que sí, y hasta que lo diga el cliente está esperando. */}
-      {extra > 0 && (
-        <Senal tono="alerta">
-          {extra === 1 ? "pide otra vuelta" : `${extra} piden otra vuelta`}
-        </Senal>
-      )}
       {vencidos > 0 && (
         <Senal tono="alerta">
           {vencidos === 1 ? "vencido" : `${vencidos} vencidos`}

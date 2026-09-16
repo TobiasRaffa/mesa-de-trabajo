@@ -135,6 +135,9 @@ export function DetalleDePieza({
  * cuando la habiliten». Hasta ahora había que ir a buscar el botón a la ficha
  * del archivo, en otra pantalla: el cliente esperaba a que alguien pasara por
  * ahí de casualidad.
+ *
+ * Es un botón pelado a propósito: qué pasó ya lo dice el estado de la pieza,
+ * que está a dos centímetros.
  */
 function VueltaExtra({
   carpetaId,
@@ -149,32 +152,32 @@ function VueltaExtra({
   const [dicho, setDicho] = useState<string | null>(null);
 
   return (
-    <div className="flex flex-col gap-2 border-2 border-alerta bg-alerta-tenue p-2.5">
-      <p className="text-menudo font-semibold text-alerta">
-        Se quedó sin vueltas incluidas y pidió una más. Está esperando.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={yendo}
-          onClick={() =>
-            empezar(async () => {
-              const r = await habilitarExtraDePieza(carpetaId, piezaId);
-              setDicho(r.motivo);
-              if (r.ok) onHecho();
-            })
-          }
-          className="min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
-                     text-white transition-colors hover:bg-acento-hover disabled:opacity-40"
-        >
-          {yendo ? "…" : "Darle otra vuelta"}
-        </button>
-        {dicho && (
-          <span aria-live="polite" className="text-menudo font-semibold text-tinta-suave">
-            {dicho}
-          </span>
-        )}
-      </div>
+    <div className="flex flex-wrap items-center gap-2">
+      {/* **Un botón y nada más.** Estaba con un cartel de dos líneas
+          explicando qué había pasado, y el estado de la pieza —«revisión
+          adicional pedida»— ya lo dice al lado. Repetirlo hacía que la única
+          cosa accionable de la ventana quedara enterrada en su propia
+          explicación. */}
+      <button
+        type="button"
+        disabled={yendo}
+        onClick={() =>
+          empezar(async () => {
+            const r = await habilitarExtraDePieza(carpetaId, piezaId);
+            setDicho(r.motivo);
+            if (r.ok) onHecho();
+          })
+        }
+        className="min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
+                   text-white transition-colors hover:bg-acento-hover disabled:opacity-40"
+      >
+        {yendo ? "…" : "Otorgar revisión extra"}
+      </button>
+      {dicho && (
+        <span aria-live="polite" className="text-menudo font-semibold text-tinta-suave">
+          {dicho}
+        </span>
+      )}
     </div>
   );
 }

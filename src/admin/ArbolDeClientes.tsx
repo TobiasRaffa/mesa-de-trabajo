@@ -37,6 +37,7 @@ import { ConfiguracionDeCliente } from "@/admin/ConfiguracionDeCliente";
 import { ConfiguracionDeCarpeta } from "@/admin/ConfiguracionDeCarpeta";
 import { ConfiguracionDeArchivo } from "@/admin/ConfiguracionDeArchivo";
 import { Entregar } from "@/admin/Entregar";
+import { ResumenDeTrabajo, type TrabajoParaMirar } from "@/admin/ResumenDeTrabajo";
 import { Visibilidad } from "@/admin/Visibilidad";
 import { Estado } from "@/ui/Estado";
 import { IconoConfig, IconoDrive, IconoFlecha } from "@/ui/Icono";
@@ -60,7 +61,15 @@ const SANGRIA = 22;
 const Abierta = createContext<{
   cual: string | null;
   alternarConfig: (id: string) => void;
-}>({ cual: null, alternarConfig: () => {} });
+  /**
+   * Abre la ventana grande de un trabajo.
+   *
+   * Va por el contexto y no como prop porque el árbol se dibuja recursivo:
+   * pasarla de mano en mano obligaría a atravesar dos componentes que no la
+   * usan, y la ventana es una sola para toda la pantalla.
+   */
+  mirar: (carpeta: NodoCarpeta, clienteId: string) => void;
+}>({ cual: null, alternarConfig: () => {}, mirar: () => {} });
 
 /** El hueco de un botón que no está, para que la columna no se mueva. */
 const Hueco = () => <span aria-hidden="true" className="h-9 w-9 shrink-0" />;
@@ -245,14 +254,36 @@ export function ArbolDeClientes({
     };
   }, [cual]);
 
+  // Cuál trabajo se está mirando en grande. Una sola para toda la pantalla:
+  // la ventana la tapa entera.
+  const [mirando, setMirando] = useState<TrabajoParaMirar | null>(null);
+
   const contexto = useMemo(
     () => ({
       cual,
       // Tocar la que ya está abierta la cierra; tocar otra cambia de una a la
       // otra, sin dejar las dos abiertas.
       alternarConfig: (id: string) => setCual((antes) => (antes === id ? null : id)),
+      mirar: (carpeta: NodoCarpeta, clienteId: string) =>
+        setMirando({
+          clienteId,
+          // El nombre sale de la lista que ya tenemos: la fila no lo lleva
+          // encima y pasárselo de mano en mano era atravesar dos componentes
+          // que no lo usan.
+          cliente: clientes.find((x) => x.id === clienteId)?.nombre ?? "",
+          carpetaId: carpeta.id,
+          carpeta: carpeta.nombre,
+          diasQueCorren: carpeta.diasQueCorren,
+          responsableQueCorre: carpeta.responsableQueCorre,
+          asignadaA: carpeta.responsableA,
+          visible: carpeta.visible,
+          enJuego: carpeta.enJuego,
+          terminadas: carpeta.terminadas,
+          sinEntregar: carpeta.sinEntregar,
+          sinRevisar: carpeta.sinRevisar,
+        }),
     }),
-    [cual]
+    [cual, clientes]
   );
 
   return (
@@ -262,6 +293,14 @@ export function ArbolDeClientes({
           <FilaCliente key={cliente.id} cliente={cliente} equipo={equipo} />
         ))}
       </ul>
+
+      {mirando && (
+        <ResumenDeTrabajo
+          carpeta={mirando}
+          equipo={equipo}
+          onCerrar={() => setMirando(null)}
+        />
+      )}
     </Abierta.Provider>
   );
 }
@@ -475,7 +514,7 @@ function FilaCarpeta({
   alGuardar: () => void;
 }) {
   const [abierta, setAbierta] = useState(false);
-  const { cual, alternarConfig } = useContext(Abierta);
+  const { cual, alternarConfig, mirar } = useContext(Abierta);
   const config = cual === carpeta.id;
   const [contenido, setContenido] = useState<Contenido | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -541,9 +580,33 @@ function FilaCarpeta({
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`font-bold tracking-tight ${oculta ? "text-apagado" : ""}`}>
-            {carpeta.nombre}
-          </span>
+          {/*
+            **El nombre abre el trabajo entero.** La flecha muestra qué hay
+            adentro y el engranaje qué se puede cambiar; faltaba lo tercero, que
+            es lo que más se quiere: ver el trabajo. Antes había que irse al
+            tablero y buscarlo ahí.
+
+            Solo en el primer nivel de un cliente —nivel 1, porque el 0 es el
+            cliente—: más adentro, `clienteId` pasa a ser la carpeta de arriba
+            y la ventana necesita el cliente de verdad para armar sus links.
+          */}
+          {nivel === 1 && !carpeta.reservada ? (
+            <button
+              type="button"
+              onClick={() => mirar(carpeta, clienteId)}
+              title={`Ver ${carpeta.nombre}`}
+              className={`font-bold tracking-tight transition-colors hover:text-acento
+                          focus-visible:outline-2 focus-visible:outline-acento ${
+                            oculta ? "text-apagado" : ""
+                          }`}
+            >
+              {carpeta.nombre}
+            </button>
+          ) : (
+            <span className={`font-bold tracking-tight ${oculta ? "text-apagado" : ""}`}>
+              {carpeta.nombre}
+            </span>
+          )}
           {carpeta.reservada && (
             <span className="bg-hueco px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-apagado">
               Reservada

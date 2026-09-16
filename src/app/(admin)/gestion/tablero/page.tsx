@@ -19,6 +19,7 @@ import Link from "next/link";
 import { elTablero } from "@/admin/datos/tablero";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { TableroPorCliente } from "@/admin/TableroPorCliente";
+import { elEquipo } from "@/lib/equipo";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +87,7 @@ export default async function TableroPagina() {
         </section>
       )}
 
-      <TableroPorCliente carpetas={tablero.carpetas} />
+      <TableroPorCliente carpetas={tablero.carpetas} equipo={await elEquipo()} />
     </main>
   );
 }
