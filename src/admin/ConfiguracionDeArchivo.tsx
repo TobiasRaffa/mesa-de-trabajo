@@ -49,6 +49,7 @@ export function ConfiguracionDeArchivo({
         carpeta={archivo.nombre}
         cuantas={archivo.estado === "en_curso" ? 1 : 0}
         piezaId={archivo.id}
+        dias={archivo.diasQueCorren}
         alEntregar={alGuardar}
       />
 

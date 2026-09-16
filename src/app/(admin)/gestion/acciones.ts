@@ -474,7 +474,20 @@ export async function entregarCarpeta(
    * mismo mensaje para el cliente—; lo único que cambia es sobre cuántas
    * piezas corre. Escritas dos veces, la segunda se olvida de algo.
    */
-  soloEsta?: string
+  soloEsta?: string,
+  /**
+   * Los días que el cliente tiene para revisar **esto**.
+   *
+   * Se pregunta al entregar porque es el único momento en que alguien lo sabe
+   * de verdad: hasta ahí es una regla general del cliente, y acá es «esto lo
+   * necesito para el jueves». Escribirlo antes, en la configuración, obliga a
+   * acordarse de volver a cambiarlo después; escribirlo acá es decirlo cuando
+   * se está pensando.
+   *
+   * Queda guardado donde corresponde —en la pieza si se entrega una sola, en
+   * la carpeta si se entrega la tanda— y de ahí en más corre solo.
+   */
+  dias?: number
 ): Promise<
   | { ok: true; entregadas: number; avisar: ParaAvisar | null }
   | { ok: false; motivo: string }
@@ -491,6 +504,22 @@ export async function entregarCarpeta(
   }
 
   const estados = await estadosDe(carpetaId, conSusArchivos(carpetaId, agrupadas));
+
+  // El plazo se guarda **antes** de entregar: el vencimiento se calcula desde
+  // la fecha de entrega con los días que corren, y si se guardara después la
+  // primera pantalla que mire vería el plazo viejo.
+  if (dias !== undefined) {
+    // Se reusa la acción que ya existe y no se escribe el plazo a mano: es la
+    // que sabe que poner un plazo en una carpeta tiene que dejar heredando a
+    // sus piezas. Escrito dos veces, una de las dos se olvida de eso.
+    const puesto = await guardarDiasDeRevision(
+      soloEsta ? "archivo" : "carpeta",
+      soloEsta ?? carpetaId,
+      dias,
+      carpetaId
+    );
+    if (!puesto.ok) return { ok: false, motivo: puesto.motivo };
+  }
 
   const ahora = new Date().toISOString();
   // Quién lo hizo. Hoy dice «El equipo»; el día que haya login dirá el nombre

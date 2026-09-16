@@ -64,6 +64,17 @@ export type CarpetaEnElTablero = {
   vence: Date | null;
   /** Está vencida y todavía falta que el cliente decida. */
   vencida: boolean;
+  /**
+   * Le quedan dos días o menos, y todavía falta que el cliente decida.
+   *
+   * **Dos días y no un porcentaje del plazo.** Con plazos de 3 a 30 días, un
+   * porcentaje da avisos de un día en uno y de una semana en el otro; «te
+   * quedan dos días» quiere decir lo mismo siempre y se entiende sin pensar.
+   *
+   * Solo cuenta si hay algo esperando al cliente: un plazo que corre sobre una
+   * carpeta donde no queda nada por decidir no es un problema de nadie.
+   */
+  porVencer: boolean;
   /** Cuántas hay en total, terminadas incluidas. */
   piezas: number;
   /**
@@ -232,6 +243,12 @@ export async function elTablero(): Promise<Tablero> {
               // Vencida solo cuenta si todavía falta que el cliente decida:
               // una carpeta terminada con fecha vieja no es un problema.
               vencida: Boolean(vence && vence < hoyALaMedianoche() && sinRevisar > 0),
+              porVencer: Boolean(
+                vence &&
+                  vence >= hoyALaMedianoche() &&
+                  vence <= enDias(2) &&
+                  sinRevisar > 0
+              ),
               piezas: piezas.length,
               enJuego: piezas.length - terminadas,
               sinRevisar,
@@ -267,6 +284,13 @@ export async function elTablero(): Promise<Tablero> {
  * Se compara contra la medianoche y no contra el instante: una entrega que
  * vence «hoy» no está vencida a las nueve de la mañana.
  */
+/** La medianoche de dentro de tantos días. */
+function enDias(cuantos: number): Date {
+  const d = hoyALaMedianoche();
+  d.setDate(d.getDate() + cuantos);
+  return d;
+}
+
 function hoyALaMedianoche(): Date {
   const ahora = new Date();
   return new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());

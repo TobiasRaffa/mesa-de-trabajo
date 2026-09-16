@@ -640,6 +640,7 @@ function FilaCarpeta({
               carpetaId={carpeta.id}
               carpeta={carpeta.nombre}
               cuantas={carpeta.sinEntregar}
+              dias={carpeta.diasQueCorren}
               sangria={nivel * SANGRIA + 44}
               alEntregar={alGuardar}
             />

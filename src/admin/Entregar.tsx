@@ -21,12 +21,14 @@
 import { useState, useTransition } from "react";
 import { entregarCarpeta, type ParaAvisar } from "@/app/(admin)/gestion/acciones";
 import { AvisoDeEntrega } from "@/admin/AvisoDeEntrega";
+import { DIAS_POSIBLES } from "@/lib/dias";
 
 export function Entregar({
   carpetaId,
   carpeta,
   cuantas,
   piezaId,
+  dias,
   sangria,
   alEntregar,
 }: {
@@ -43,6 +45,14 @@ export function Entregar({
    */
   piezaId?: string;
   /**
+   * Los días de revisión que corren hoy acá.
+   *
+   * Se muestran al confirmar y se pueden cambiar en el momento: es el único
+   * instante en que alguien de verdad sabe cuánto tiempo hay. Antes había que
+   * acordarse de ir a la configuración a cambiarlo y después volver.
+   */
+  dias: number;
+  /**
    * Cuánto se corre desde la izquierda, según qué tan hondo está en el árbol.
    *
    * **El bloque lo dibuja este componente y no el árbol**, y eso no es un
@@ -54,7 +64,14 @@ export function Entregar({
    * donde va suelto entre los demás botones.
    */
   sangria?: number;
-  alEntregar: () => void;
+  /**
+   * Se avisa con los días que terminaron corriendo, si se cambiaron.
+   *
+   * Quien nos dibuja suele mostrar el plazo al lado, y lo saca de una foto
+   * tomada antes: sin esto seguiría diciendo «25 días» abajo de un mensaje que
+   * le prometió uno al cliente.
+   */
+  alEntregar: (dias?: number) => void;
 }) {
   const [confirmando, setConfirmando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,16 +85,25 @@ export function Entregar({
     cuantas: number;
   } | null>(null);
 
+  // Lo que se va a mandar: arranca en lo que corre hoy.
+  const [diasElegidos, setDiasElegidos] = useState(dias);
+
   if (cuantas === 0 && !recienEntregado) return null;
 
   function entregar() {
     setError(null);
     empezar(async () => {
-      const r = await entregarCarpeta(carpetaId, piezaId);
+      const r = await entregarCarpeta(
+        carpetaId,
+        piezaId,
+        // Solo se manda si se cambió: entregar sin tocar nada no tiene por qué
+        // escribir un plazo donde no había ninguno puesto a mano.
+        diasElegidos === dias ? undefined : diasElegidos
+      );
       if (r.ok) {
         setConfirmando(false);
         if (r.avisar) setRecienEntregado({ avisar: r.avisar, cuantas: r.entregadas });
-        alEntregar();
+        alEntregar(diasElegidos === dias ? undefined : diasElegidos);
       } else {
         setError(r.motivo);
       }
@@ -105,6 +131,8 @@ export function Entregar({
         <Confirmacion
           carpeta={carpeta}
           cuantas={piezaId ? 0 : cuantas}
+          dias={diasElegidos}
+          onDias={setDiasElegidos}
           yendo={yendo}
           error={error}
           onSi={entregar}
@@ -126,6 +154,8 @@ export function Entregar({
 function Confirmacion({
   carpeta,
   cuantas,
+  dias,
+  onDias,
   yendo,
   error,
   onSi,
@@ -133,6 +163,8 @@ function Confirmacion({
 }: {
   carpeta: string;
   cuantas: number;
+  dias: number;
+  onDias: (dias: number) => void;
   yendo: boolean;
   error: string | null;
   onSi: () => void;
@@ -151,6 +183,26 @@ function Confirmacion({
             : `Se le entregan ${cuantas} piezas de ${carpeta}. Las va a ver ahora`}
         , le arranca el plazo y le sale el aviso.
       </p>
+
+      {/* El plazo, acá y no en otra pantalla: es el momento en que alguien
+          sabe cuánto tiempo hay para esto. */}
+      <label className="flex flex-wrap items-center gap-2 text-menudo font-semibold text-acento">
+        Tiene
+        <select
+          value={dias}
+          disabled={yendo}
+          onChange={(e) => onDias(Number(e.target.value))}
+          className="h-8 border-2 border-acento bg-lienzo px-2 text-menudo font-bold
+                     tracking-tight text-tinta disabled:opacity-40"
+        >
+          {DIAS_POSIBLES.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+        {dias === 1 ? "día para revisar" : "días para revisar"}
+      </label>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

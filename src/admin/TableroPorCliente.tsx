@@ -259,6 +259,7 @@ function Columna({
 function Senales({ cliente }: { cliente: PorCliente }) {
   const cuantos = cliente.carpetas.length;
   const vencidos = cliente.carpetas.filter((c) => c.vencida).length;
+  const porVencer = cliente.carpetas.filter((c) => c.porVencer).length;
   const sinEntregar = cliente.carpetas.reduce((n, c) => n + c.sinEntregar, 0);
   // Los mensajes sin leer son del cliente, no de cada carpeta: el mismo número
   // viene repetido en todas. Sumarlos sería contarlos una vez por trabajo.
@@ -274,6 +275,14 @@ function Senales({ cliente }: { cliente: PorCliente }) {
           {vencidos === 1 ? "vencido" : `${vencidos} vencidos`}
         </Senal>
       )}
+      {/* Naranja: todavía se llega, pero hay que moverse hoy. Rojo y naranja
+          conviven —un cliente puede tener uno de cada—, así que no es un
+          «si no». */}
+      {porVencer > 0 && (
+        <Senal tono="espera">
+          {porVencer === 1 ? "por vencer" : `${porVencer} por vencer`}
+        </Senal>
+      )}
       {sinEntregar > 0 && <Senal tono="acento">{sinEntregar} sin entregar</Senal>}
       {/* Dice «mensajes» y no «sin leer» porque arriba, en el encabezado del
           tablero, «sin leer» son las notificaciones. Dos cosas distintas con
@@ -287,12 +296,22 @@ function Senales({ cliente }: { cliente: PorCliente }) {
   );
 }
 
-function Senal({ tono, children }: { tono: "alerta" | "acento"; children: React.ReactNode }) {
+const TONOS = {
+  alerta: "bg-alerta-tenue text-alerta",
+  espera: "bg-espera-tenue text-espera",
+  acento: "bg-acento-tenue text-acento",
+} as const;
+
+function Senal({
+  tono,
+  children,
+}: {
+  tono: keyof typeof TONOS;
+  children: React.ReactNode;
+}) {
   return (
     <span
-      className={`px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider ${
-        tono === "alerta" ? "bg-alerta-tenue text-alerta" : "bg-acento-tenue text-acento"
-      }`}
+      className={`px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider ${TONOS[tono]}`}
     >
       {children}
     </span>
@@ -348,9 +367,13 @@ function Trabajo({
         className="peer flex w-full items-center gap-2 py-2 text-left transition-colors
                    hover:text-acento focus-visible:outline-2 focus-visible:outline-acento"
       >
+        {/* El punto dice de quién es la pelota, salvo cuando el reloj manda:
+            un trabajo vencido es rojo esté en la cancha que esté. */}
         <span
           aria-hidden="true"
-          className={`h-2 w-2 shrink-0 rounded-full ${cancha.punto}`}
+          className={`h-2 w-2 shrink-0 rounded-full ${
+            c.vencida ? "bg-alerta" : c.porVencer ? "bg-espera-borde" : cancha.punto
+          }`}
         />
         <span className="min-w-0 flex-1 truncate font-bold tracking-tight">
           {c.carpeta}
@@ -361,7 +384,11 @@ function Trabajo({
         {c.vence && (
           <span
             className={`cifras shrink-0 text-micro ${
-              c.vencida ? "font-extrabold text-alerta" : "text-apagado"
+              c.vencida
+                ? "font-extrabold text-alerta"
+                : c.porVencer
+                  ? "font-extrabold text-espera"
+                  : "text-apagado"
             }`}
           >
             {c.vencida ? "venció " : ""}

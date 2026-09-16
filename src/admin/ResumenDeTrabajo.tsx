@@ -48,6 +48,11 @@ export function ResumenDeTrabajo({
   // entrega—, para que la lista no siga mostrando lo de hace un minuto.
   const [vuelta, setVuelta] = useState(0);
 
+  // Si al entregar se cambió el plazo, manda ese: la foto del tablero se sacó
+  // antes y diría el viejo al lado del mensaje que prometió el nuevo.
+  const [diasPuestos, setDiasPuestos] = useState<number | null>(null);
+  const diasQueCorren = diasPuestos ?? c.diasQueCorren;
+
   useEffect(() => {
     let vivo = true;
     abrirCarpeta(c.carpetaId, {
@@ -129,18 +134,20 @@ export function ResumenDeTrabajo({
                 es={String(cargadas ? terminadas.length : c.terminadas)}
               />
             )}
-            {sinEntregar > 0 && <Dato que="Sin entregar" es={String(sinEntregar)} alerta />}
+            {sinEntregar > 0 && (
+              <Dato que="Sin entregar" es={String(sinEntregar)} tono="alerta" />
+            )}
             {sinRevisar > 0 && <Dato que="Sin revisar" es={String(sinRevisar)} />}
             {c.vence && (
               <Dato
                 que={c.vencida ? "Venció" : "Vence"}
                 es={fecha.format(c.vence)}
-                alerta={c.vencida}
+                tono={c.vencida ? "alerta" : c.porVencer ? "espera" : undefined}
               />
             )}
             <Dato
               que="Plazo"
-              es={`${c.diasQueCorren} ${c.diasQueCorren === 1 ? "día" : "días"}`}
+              es={`${diasQueCorren} ${diasQueCorren === 1 ? "día" : "días"}`}
             />
           </div>
 
@@ -159,7 +166,11 @@ export function ResumenDeTrabajo({
               carpetaId={c.carpetaId}
               carpeta={c.carpeta}
               cuantas={sinEntregar}
-              alEntregar={() => setVuelta((n) => n + 1)}
+              dias={diasQueCorren}
+              alEntregar={(dias) => {
+                if (dias !== undefined) setDiasPuestos(dias);
+                setVuelta((n) => n + 1);
+              }}
             />
             <Link
               href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
@@ -283,14 +294,25 @@ function Pieza({ pieza: p }: { pieza: NodoArchivo }) {
   );
 }
 
-function Dato({ que, es, alerta }: { que: string; es: string; alerta?: boolean }) {
+function Dato({
+  que,
+  es,
+  tono,
+}: {
+  que: string;
+  es: string;
+  /** Rojo cuando ya pasó, naranja cuando está por pasar. */
+  tono?: "alerta" | "espera";
+}) {
   return (
     <span className="flex flex-col">
       <span className="text-micro font-extrabold uppercase tracking-widest text-apagado">
         {que}
       </span>
       <span
-        className={`text-normal font-bold tracking-tight ${alerta ? "text-alerta" : ""}`}
+        className={`text-normal font-bold tracking-tight ${
+          tono === "alerta" ? "text-alerta" : tono === "espera" ? "text-espera" : ""
+        }`}
       >
         {es}
       </span>
