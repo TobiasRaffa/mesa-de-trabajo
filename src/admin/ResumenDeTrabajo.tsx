@@ -151,12 +151,6 @@ export function ResumenDeTrabajo({
   const sinEntregar = cargadas
     ? enJuego.filter((p) => hayAlgoParaEntregar(p.estado, p.ronda, p.vueltas)).length
     : (c.sinEntregar ?? 0);
-  const sinRevisar = cargadas
-    ? enJuego.filter((p) => p.estado === "entregada" || p.estado === "en_revision").length
-    : (c.sinRevisar ?? 0);
-  const cuantasEnJuego = cargadas ? enJuego.length : (c.enJuego ?? 0);
-  const cuantasTerminadas = cargadas ? terminadas.length : (c.terminadas ?? 0);
-  const sinLeer = c.sinLeer ?? 0;
 
   return (
     <div
@@ -187,10 +181,12 @@ export function ResumenDeTrabajo({
           </div>
           {/* Abrir la carpeta es del trabajo entero, no de una pieza: va con
               el título, que es lo único que también lo es. */}
+          {/* Del mismo alto que la cruz y con fondo propio: son un par, y
+              contra el fondo oscuro un botón de contorno se pierde. */}
           <Link
             href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
-            className="min-h-toque inline-flex shrink-0 items-center border-2 border-lienzo/35 px-3
-                       text-menudo font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
+            className="inline-flex h-9 shrink-0 items-center bg-lienzo px-3 text-menudo
+                       font-bold tracking-tight text-tinta transition-colors hover:bg-lienzo/90"
           >
             Abrir la carpeta
           </Link>
@@ -205,24 +201,14 @@ export function ResumenDeTrabajo({
         </header>
 
         {/*
-          **Una sola línea con lo del trabajo entero.** Tenía un bloque con
-          «quién lo lleva», «vence» y «plazo», y esos tres volvían a aparecer
-          al lado de cada pieza: lo mismo escrito dos veces en la misma
-          pantalla, a diez centímetros. Lo que es de la carpeta se dice acá —y
-          es poco—; lo de cada pieza va con su pieza.
+          **Sin la línea de números.** Decía «1 en juego · 1 sin revisar · 1 día
+          para revisar» y las tres cosas volvían a estar abajo: el estado de la
+          pieza ya dice «para revisar», cuántas hay se ve contándolas, y el
+          vencimiento va con la pieza que vence. Queda lo único que es del
+          trabajo entero y no se puede leer de otro lado: el botón de entregar.
         */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b-2 border-tinta px-5 py-3">
-          <p className="text-menudo text-apagado">
-            {cuantasEnJuego} en juego
-            {sinEntregar > 0 && (
-              <span className="font-bold text-acento"> · {sinEntregar} sin entregar</span>
-            )}
-            {sinRevisar > 0 && ` · ${sinRevisar} sin revisar`}
-            {cuantasTerminadas > 0 && ` · ${cuantasTerminadas} aprobadas`}
-            {` · ${diasQueCorren} ${diasQueCorren === 1 ? "día" : "días"} para revisar`}
-          </p>
-
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+        {sinEntregar > 0 && (
+          <div className="border-b-2 border-tinta px-5 py-3">
             <Entregar
               carpetaId={c.carpetaId}
               carpeta={c.carpeta}
@@ -233,17 +219,8 @@ export function ResumenDeTrabajo({
                 setVuelta((n) => n + 1);
               }}
             />
-            {sinLeer > 0 && (
-              <Link
-                href="/gestion/chats"
-                className="min-h-toque inline-flex items-center bg-acento px-3 text-menudo
-                           font-bold tracking-tight text-white transition-colors hover:bg-acento-hover"
-              >
-                {sinLeer} sin leer
-              </Link>
-            )}
           </div>
-        </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {error && <p className="text-normal font-semibold text-alerta">{error}</p>}
@@ -434,24 +411,53 @@ function Pieza({
             )}
           </h3>
 
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-apagado">
+          {/*
+            **La descripción del trabajo, en un tamaño que se lea.** Estaba en
+            letra micro y gris: «Nari» y «vence 17 sept» no se veían, y son
+            justo lo que se pregunta después del nombre. Van en el cuerpo de
+            texto normal, cada cosa con su rótulo, una debajo de la otra.
+          */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <Estado estado={p.estado} />
-            <span>{p.responsableA ?? "sin asignar"}</span>
-            {/* Hace cuánto que la tenemos nosotros: un detalle más de la
-                pieza, como quién la lleva. No es un plazo; es una cuenta. */}
-            {nuestros !== null && (
-              <span className={`cifras font-extrabold ${tonoDeEspera(nuestros)}`}>
-                {nuestros} {nuestros === 1 ? "día" : "días"} con nosotros
-              </span>
-            )}
-            {p.vence && <span className="cifras">vence {comoFecha(p.vence)}</span>}
-            {p.publicaEl && <span className="cifras">sale el {comoFecha(p.publicaEl)}</span>}
             {!p.visible && (
-              <span className="bg-tinta px-1.5 py-0.5 font-extrabold uppercase tracking-wider text-lienzo">
+              <span className="bg-tinta px-2 py-1 text-micro font-extrabold uppercase tracking-wider text-lienzo">
                 Oculta
               </span>
             )}
           </div>
+
+          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-menudo">
+            <div className="flex gap-2">
+              <dt className="text-apagado">A cargo de</dt>
+              <dd className="font-bold tracking-tight">
+                {p.responsableA ?? "sin asignar"}
+              </dd>
+            </div>
+            {p.vence && (
+              <div className="flex gap-2">
+                <dt className="text-apagado">Vence</dt>
+                <dd className="cifras font-bold tracking-tight">{comoFecha(p.vence)}</dd>
+              </div>
+            )}
+            {p.publicaEl && (
+              <div className="flex gap-2">
+                <dt className="text-apagado">Sale</dt>
+                <dd className="cifras font-bold tracking-tight">
+                  {comoFecha(p.publicaEl)}
+                </dd>
+              </div>
+            )}
+            {/* Hace cuánto que la tenemos nosotros. No es un plazo —no tenemos
+                límite— pero dice si algo se está quedando quieto. */}
+            {nuestros !== null && (
+              <div className="flex gap-2">
+                <dt className="text-apagado">Con nosotros</dt>
+                <dd className={`cifras font-bold tracking-tight ${tonoDeEspera(nuestros)}`}>
+                  {nuestros} {nuestros === 1 ? "día" : "días"}
+                </dd>
+              </div>
+            )}
+          </dl>
 
           {/* Todo lo que pasó con esta pieza: lo que pidió el cliente, lo que
               escribieron en Drive, y qué se puede hacer. */}

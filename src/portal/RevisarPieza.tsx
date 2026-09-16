@@ -243,6 +243,10 @@ export function RevisarPieza({
                 </button>
               )}
 
+              {/* **Los dos del mismo tamaño.** Uno tenía `chico` y el otro no,
+                  así que en la misma fila uno se veía la mitad del otro: dos
+                  botones que hacen lo mismo —mirar la pieza— no pueden pesar
+                  distinto. */}
               <div className="flex flex-wrap gap-2">
                 {pieza.esPdf ? (
                     /* Un PDF tiene más de una página y la miniatura muestra
@@ -251,7 +255,8 @@ export function RevisarPieza({
                        nuestra ruta, así que el cliente no necesita permiso de
                        Drive para nada. */
                     <BotonEnlace
-                      variante="fantasma"
+                      variante="contorno"
+                      tamano="chico"
                       href={`/api/archivo/${pieza.driveFileId}?ver=1`}
                       target="_blank"
                       rel="noreferrer noopener"
