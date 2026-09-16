@@ -317,9 +317,10 @@ describe("las fronteras, revisadas a mano", () => {
 
     expect(
       culpables,
-      "archivosDe le pregunta a Drive, y Drive no lista las piezas aprobadas: " +
-        "se mudaron a «Entregas finales». La pregunta correcta es " +
-        "piezasDeLaCarpeta() de @/lib/piezas."
+      "archivosDe le pregunta a Drive, y Drive no lista las piezas que quedaron " +
+        "fuera de su carpeta: las que se mudaron a «Entregas finales» cuando " +
+        "aprobar las mudaba. La pregunta correcta es piezasDeLaCarpeta() de " +
+        "@/lib/piezas."
     ).toEqual([]);
   });
 

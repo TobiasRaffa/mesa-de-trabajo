@@ -564,7 +564,7 @@ function FilaCarpeta({
 
         <p className="mt-0.5 text-menudo text-apagado">
           {carpeta.reservada ? (
-            "Acá se mueve lo aprobado."
+            "Acá sube el equipo el archivo final, ya terminado."
           ) : (
             <>
               {carpeta.subcarpetas > 0 && (
@@ -583,7 +583,7 @@ function FilaCarpeta({
                   "sin piezas"
                 ) : (
                   <>
-                    todo terminado · {carpeta.piezas}{" "}
+                    todo aprobado · {carpeta.piezas}{" "}
                     {carpeta.piezas === 1 ? "pieza" : "piezas"}
                   </>
                 )
@@ -599,7 +599,7 @@ function FilaCarpeta({
                   {" · "}
                   {carpeta.sinRevisar} sin revisar
                   {carpeta.terminadas > 0 &&
-                    ` · ${carpeta.terminadas} terminada${
+                    ` · ${carpeta.terminadas} aprobada${
                       carpeta.terminadas === 1 ? "" : "s"
                     }`}
                 </>

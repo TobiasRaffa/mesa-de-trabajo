@@ -52,9 +52,14 @@ const POR_OMISION: AjustesDeCarpeta = { visible: true, vista: "lista" };
  * Carpetas con nombre reservado: no son trabajos y el cliente no las revisa
  * como piezas.
  *
- * `Entregas finales` es a dónde va lo aprobado. Se compara sin distinguir
- * mayúsculas ni espacios de más, porque el nombre lo escribe una persona a
- * mano en Drive, cliente por cliente.
+ * `Entregas finales` es donde el equipo sube el archivo terminado de verdad:
+ * el que va a usarse, en su formato final. **No es lo aprobado mudado ahí.**
+ * Eso se hacía y estaba mal entendido: el archivo que el cliente aprueba es el
+ * que se le mostró para revisar, y el final suele ser otro —el PDF de
+ * imprenta, el empaquetado—, que sube una persona cuando está.
+ *
+ * Se compara sin distinguir mayúsculas ni espacios de más, porque el nombre lo
+ * escribe una persona a mano en Drive, cliente por cliente.
  */
 const RESERVADAS = ["entregas finales", "facturas"];
 
@@ -159,10 +164,9 @@ export async function escondidosEntre(ids: string[]): Promise<Set<string>> {
  * Deja solo lo que el cliente puede ver, sea carpeta o archivo.
  *
  * **«Entregas finales» sí se muestra.** Se filtraba junto con «Facturas»
- * porque las dos son reservadas, y eso dejaba al cliente sin el único lugar
- * donde está junto todo lo que aprobó: lo entregado terminaba existiendo solo
- * para la agencia. Se muestra, pero no como trabajo a revisar —ya está
- * decidido—: quien la arma es la aplicación, no la agencia.
+ * porque las dos son reservadas, y eso dejaba al cliente sin el lugar donde
+ * el equipo le deja los archivos terminados. Se muestra, pero no como trabajo
+ * a revisar: ahí no hay nada que decidir.
  *
  * «Facturas» no se muestra nunca. Es de la agencia.
  */

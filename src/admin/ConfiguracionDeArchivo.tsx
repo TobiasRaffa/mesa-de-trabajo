@@ -39,16 +39,18 @@ export function ConfiguracionDeArchivo({
         Faltaba, y sin esto la única salida era entregar todo o no entregar
         nada.
       */}
-      {archivo.estado === "en_curso" && (
-        <Entregar
-          carpetaId={carpetaId}
-          carpeta={archivo.nombre}
-          cuantas={1}
-          piezaId={archivo.id}
-          sangria={0}
-          alEntregar={alGuardar}
-        />
-      )}
+      {/* Sin condición afuera: «Entregar» decide solo si se muestra. Con una
+          condición acá, entregar desmonta el componente en el mismo momento en
+          que el árbol se refresca —y se lleva puesto el mensaje para el
+          cliente, que es justo lo que aparece después de entregar—. Ya había
+          pasado dos veces: en el árbol y en el tablero. */}
+      <Entregar
+        carpetaId={carpetaId}
+        carpeta={archivo.nombre}
+        cuantas={archivo.estado === "en_curso" ? 1 : 0}
+        piezaId={archivo.id}
+        alEntregar={alGuardar}
+      />
 
       <Visibilidad
         ids={archivo.archivos}

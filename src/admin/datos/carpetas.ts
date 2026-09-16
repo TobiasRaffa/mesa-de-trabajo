@@ -60,9 +60,10 @@ export async function carpetaParaFechar(
     piezasDeLaCarpeta(carpetaId),
   ]);
 
-  // Una pieza aprobada se mudó a «Entregas finales» y Drive ya no la lista acá.
-  // Se la trae por su identificador: la historia de una pieza aprobada es
-  // justamente la que más se consulta.
+  // Hay piezas guardadas de cuando aprobar mudaba el archivo a «Entregas
+  // finales»: Drive ya no las lista acá. Se las trae por su identificador,
+  // porque la historia de una pieza aprobada es justamente la que más se
+  // consulta. Lo nuevo no se muda, así que esto solo alcanza a lo de antes.
   const agrupadas = agruparVersiones(archivos);
   const identidades = agrupadas.map((p) =>
     identidadDePieza(carpetaId, p.versiones[0].archivo.name)

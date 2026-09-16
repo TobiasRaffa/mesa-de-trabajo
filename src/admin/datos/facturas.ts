@@ -14,9 +14,10 @@
 import { esCarpetaDeFacturas } from "@/lib/ajustes";
 import { clientesHabilitados } from "@/lib/clientes";
 // Acá sí corresponde preguntarle a Drive en crudo. `piezasDeLaCarpeta` existe
-// porque una pieza aprobada se muda a «Entregas finales» y deja de estar en el
-// listado; una factura no es una pieza, no se revisa y no se muda nunca. Lo
-// que hay en la carpeta es exactamente lo que hay que mostrar.
+// para alcanzar piezas que quedaron fuera de su carpeta —las que se mudaron a
+// «Entregas finales» cuando aprobar las mudaba—; una factura no es una pieza,
+// no se revisa y nunca estuvo en otro lado. Lo que hay en la carpeta es
+// exactamente lo que hay que mostrar.
 // eslint-disable-next-line no-restricted-imports
 import { archivosDe, subcarpetasDe, type ArchivoDrive } from "@/lib/google";
 

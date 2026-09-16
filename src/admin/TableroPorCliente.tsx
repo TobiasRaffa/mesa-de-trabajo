@@ -50,11 +50,14 @@ const CANCHAS: Record<
     comoEsta: "Esperando al cliente",
   },
   listo: {
-    titulo: "Terminado",
-    explica: "No queda nada esperando de ningún lado.",
+    // **Aprobado, no «terminado».** Es la palabra que usan, y además es más
+    // exacta: lo que pasó es que el cliente dijo que sí. «Terminado» suena a
+    // que la agencia lo dio por cerrado, que es otra cosa y la decide otro.
+    titulo: "Aprobado",
+    explica: "El cliente ya dijo que sí. No espera nada de nadie.",
     filo: "border-linea",
     punto: "bg-tinta-suave",
-    comoEsta: "Terminado",
+    comoEsta: "Aprobado",
   },
 };
 
@@ -409,7 +412,7 @@ function Trabajo({
             c.piezas === 0 ? (
               "Sin piezas"
             ) : (
-              `Todo terminado · ${c.piezas} ${c.piezas === 1 ? "pieza" : "piezas"}`
+              `Todo aprobado · ${c.piezas} ${c.piezas === 1 ? "pieza" : "piezas"}`
             )
           ) : (
             <>
@@ -422,7 +425,7 @@ function Trabajo({
               )}
               {c.sinRevisar > 0 && ` · ${c.sinRevisar} sin revisar`}
               {c.terminadas > 0 &&
-                ` · ${c.terminadas} terminada${c.terminadas === 1 ? "" : "s"}`}
+                ` · ${c.terminadas} aprobada${c.terminadas === 1 ? "" : "s"}`}
             </>
           )}
           {c.sinLeer > 0 && (

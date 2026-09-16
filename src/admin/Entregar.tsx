@@ -49,8 +49,11 @@ export function Entregar({
    * detalle: el árbol lo dibujaba mientras hubiera algo sin entregar, así que
    * al entregar lo último lo hacía desaparecer —con el mensaje para el cliente
    * adentro, justo cuando hacía falta—.
+   *
+   * Sin esto no dibuja el bloque del árbol: es lo que hace falta en el tablero,
+   * donde va suelto entre los demás botones.
    */
-  sangria: number;
+  sangria?: number;
   alEntregar: () => void;
 }) {
   const [confirmando, setConfirmando] = useState(false);
@@ -81,8 +84,8 @@ export function Entregar({
     });
   }
 
-  return (
-    <div className="border-b border-linea-tenue py-3 pr-4" style={{ paddingLeft: sangria }}>
+  const adentro = (
+    <>
       {recienEntregado ? (
         <AvisoDeEntrega
           avisar={recienEntregado.avisar}
@@ -108,6 +111,14 @@ export function Entregar({
           onNo={() => setConfirmando(false)}
         />
       )}
+    </>
+  );
+
+  if (sangria === undefined) return adentro;
+
+  return (
+    <div className="border-b border-linea-tenue py-3 pr-4" style={{ paddingLeft: sangria }}>
+      {adentro}
     </div>
   );
 }

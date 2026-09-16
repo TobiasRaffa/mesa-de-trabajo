@@ -137,8 +137,10 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
 - [ ] Crear un cliente de prueba con una carpeta de Drive de prueba, ponerle un
       tag, abrir su link en una ventana de incógnito. Tiene que pedir el tag, y
       con el tag mal no tiene que dejar pasar.
-- [ ] Desde ese portal de prueba, aprobar una pieza. Verificar en Drive que se
-      mudó a «Entregas finales», y en gestión que figura aprobada.
+- [ ] Desde ese portal de prueba, aprobar una pieza. Verificar en gestión que
+      figura aprobada y que **el archivo sigue en su carpeta de trabajo**: la
+      aplicación no lo mueve. «Entregas finales» la llena el equipo a mano con
+      el archivo terminado de verdad.
 - [ ] Escribir un mensaje de cada lado del chat y ver que llegan los dos.
 - [ ] **Volver a desplegar sin cambiar nada** y comprobar que el cliente de
       prueba sigue ahí. Esto es lo que prueba que la base está de verdad en el

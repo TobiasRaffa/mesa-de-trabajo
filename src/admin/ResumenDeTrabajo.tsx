@@ -16,6 +16,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { abrirCarpeta } from "@/app/(admin)/gestion/acciones";
+import { Entregar } from "@/admin/Entregar";
 import { Estado } from "@/ui/Estado";
 import { sigueEnJuego } from "@/dominio/pieza";
 import { IconoCerrar } from "@/ui/Icono";
@@ -41,6 +42,10 @@ export function ResumenDeTrabajo({
   const [piezas, setPiezas] = useState<NodoArchivo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Se vuelve a pedir la carpeta cuando algo de acá adentro la cambió —una
+  // entrega—, para que la lista no siga mostrando lo de hace un minuto.
+  const [vuelta, setVuelta] = useState(0);
+
   useEffect(() => {
     let vivo = true;
     abrirCarpeta(c.carpetaId, {
@@ -56,12 +61,24 @@ export function ResumenDeTrabajo({
     return () => {
       vivo = false;
     };
-  }, [c.carpetaId, c.diasQueCorren]);
+  }, [c.carpetaId, c.diasQueCorren, vuelta]);
 
   // Lo que ya no está en juego, aparte. El estado es de cada pieza: un trabajo
   // no está «aprobado», lo están algunas de sus piezas.
   const terminadas = (piezas ?? []).filter((p) => !sigueEnJuego(p.estado));
   const enJuego = (piezas ?? []).filter((p) => sigueEnJuego(p.estado));
+
+  // **Los números salen de las piezas apenas llegan, y del tablero mientras
+  // tanto.** El tablero es una foto sacada al abrir la pantalla: si desde acá
+  // se entrega algo, esa foto queda vieja en el acto y diría «1 sin entregar»
+  // al lado de un botón que ya no tiene nada que entregar.
+  const cargadas = piezas !== null;
+  const sinEntregar = cargadas
+    ? enJuego.filter((p) => p.estado === "en_curso").length
+    : c.sinEntregar;
+  const sinRevisar = cargadas
+    ? enJuego.filter((p) => p.estado === "entregada" || p.estado === "en_revision").length
+    : c.sinRevisar;
 
   return (
     <div
@@ -103,10 +120,15 @@ export function ResumenDeTrabajo({
             <Dato que="Quién lo lleva" es={c.asignadaA ?? "sin asignar"} />
             {/* En juego y terminadas van separadas porque son dos cosas
                 distintas: una pide algo, la otra ya no. */}
-            <Dato que="En juego" es={String(c.enJuego)} />
-            {c.terminadas > 0 && <Dato que="Terminadas" es={String(c.terminadas)} />}
-            {c.sinEntregar > 0 && <Dato que="Sin entregar" es={String(c.sinEntregar)} alerta />}
-            {c.sinRevisar > 0 && <Dato que="Sin revisar" es={String(c.sinRevisar)} />}
+            <Dato que="En juego" es={String(cargadas ? enJuego.length : c.enJuego)} />
+            {(cargadas ? terminadas.length : c.terminadas) > 0 && (
+              <Dato
+                que="Aprobadas"
+                es={String(cargadas ? terminadas.length : c.terminadas)}
+              />
+            )}
+            {sinEntregar > 0 && <Dato que="Sin entregar" es={String(sinEntregar)} alerta />}
+            {sinRevisar > 0 && <Dato que="Sin revisar" es={String(sinRevisar)} />}
             {c.vence && (
               <Dato
                 que={c.vencida ? "Venció" : "Vence"}
@@ -116,7 +138,23 @@ export function ResumenDeTrabajo({
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {/*
+              **Entregar se hace desde acá.** El tablero es la pantalla donde se
+              mira cómo viene todo, y lo que más seguido hay que hacer después
+              de mirar es entregar. Mandar a buscar el mismo botón al árbol del
+              cliente es pedir tres pantallas para un clic.
+            */}
+            {/* Sin condición afuera: «Entregar» decide solo si se muestra. Con
+                una condición acá, entregar lo último lo desmonta —y se lleva
+                puesto el mensaje para el cliente, justo cuando hace falta—. Ya
+                había pasado en el árbol. */}
+            <Entregar
+              carpetaId={c.carpetaId}
+              carpeta={c.carpeta}
+              cuantas={sinEntregar}
+              alEntregar={() => setVuelta((n) => n + 1)}
+            />
             <Link
               href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
               className="min-h-toque inline-flex items-center border-2 border-tinta px-4
@@ -152,7 +190,7 @@ export function ResumenDeTrabajo({
               {enJuego.length > 0 && <Lista piezas={enJuego} />}
 
               {/*
-                **Lo terminado va abajo y bajo su propio título.** Mezclado
+                **Lo aprobado va abajo y bajo su propio título.** Mezclado
                 arriba, una pieza aprobada se lee como una más de las que hay
                 que mirar, que es justo lo contrario de lo que es. Y no se
                 esconde: sigue estando, con su estado, porque acá nada
@@ -162,7 +200,7 @@ export function ResumenDeTrabajo({
                 <>
                   {enJuego.length > 0 && (
                     <h3 className="mt-5 text-micro font-extrabold uppercase tracking-widest text-apagado">
-                      Ya está · en «Entregas finales»
+                      Ya aprobadas
                     </h3>
                   )}
                   <Lista piezas={terminadas} />

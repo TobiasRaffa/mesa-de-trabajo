@@ -199,3 +199,29 @@ describe("la identidad de una pieza", () => {
     );
   });
 });
+
+describe("la marca adelante no desordena nada", () => {
+  // Drive devuelve los archivos por nombre, y con la marca adelante «V2 banner»
+  // viene ANTES que «banner». Si el orden de llegada mandara, la V2 quedaría
+  // como primera vuelta: el cliente compararía al revés y lo anotado sobre la
+  // pieza colgaría del archivo equivocado.
+  const comoLosDaDrive = [{ name: "V2 banner.pdf" }, { name: "banner.pdf" }];
+
+  it("agrupa las dos en una sola pieza", () => {
+    expect(agruparVersiones(comoLosDaDrive)).toHaveLength(1);
+  });
+
+  it("las ordena por número y no por como llegaron", () => {
+    const [pieza] = agruparVersiones(comoLosDaDrive);
+    expect(pieza.versiones.map((v) => v.numero)).toEqual([1, 2]);
+    expect(pieza.versiones[0].archivo.name).toBe("banner.pdf");
+  });
+
+  it("la identidad no cambia por dónde esté la marca", () => {
+    // Es lo que hace que los cambios pedidos sobre la V1 sigan siendo de la
+    // misma pieza cuando aparece la V2.
+    expect(identidadDePieza("c1", "V2 banner.pdf")).toBe(
+      identidadDePieza("c1", "banner.pdf")
+    );
+  });
+});
