@@ -62,14 +62,30 @@ const Abierta = createContext<{
   cual: string | null;
   alternarConfig: (id: string) => void;
   /**
-   * Abre la ventana grande de un trabajo.
+   * Abre la ventana grande de **una pieza**.
+   *
+   * Por archivo y no por carpeta: una carpeta con dos archivos no deja decir
+   * cuál se quiere mirar. La carpeta llega igual —la ventana la necesita para
+   * lo que es del trabajo entero— pero lo que se muestra es esa pieza.
    *
    * Va por el contexto y no como prop porque el árbol se dibuja recursivo:
    * pasarla de mano en mano obligaría a atravesar dos componentes que no la
    * usan, y la ventana es una sola para toda la pantalla.
    */
-  mirar: (carpeta: NodoCarpeta, clienteId: string) => void;
+  mirar: (carpeta: NodoCarpeta, clienteId: string, piezaId: string) => void;
 }>({ cual: null, alternarConfig: () => {}, mirar: () => {} });
+
+/**
+ * En qué trabajo estamos parados, mientras se dibuja el árbol hacia adentro.
+ *
+ * Lo pone cada carpeta de trabajo alrededor de lo que tiene adentro, y así
+ * cualquier archivo —esté a un nivel o a cuatro— sabe de qué trabajo es y de
+ * qué cliente, sin que haya que pasárselo de mano en mano por componentes que
+ * no lo usan.
+ */
+const EnTrabajo = createContext<{ carpeta: NodoCarpeta; clienteId: string } | null>(
+  null
+);
 
 /** El hueco de un botón que no está, para que la columna no se mueva. */
 const Hueco = () => <span aria-hidden="true" className="h-9 w-9 shrink-0" />;
@@ -256,7 +272,10 @@ export function ArbolDeClientes({
 
   // Cuál trabajo se está mirando en grande. Una sola para toda la pantalla:
   // la ventana la tapa entera.
-  const [mirando, setMirando] = useState<TrabajoParaMirar | null>(null);
+  const [mirando, setMirando] = useState<{
+    trabajo: TrabajoParaMirar;
+    pieza: string;
+  } | null>(null);
 
   const contexto = useMemo(
     () => ({
@@ -264,8 +283,10 @@ export function ArbolDeClientes({
       // Tocar la que ya está abierta la cierra; tocar otra cambia de una a la
       // otra, sin dejar las dos abiertas.
       alternarConfig: (id: string) => setCual((antes) => (antes === id ? null : id)),
-      mirar: (carpeta: NodoCarpeta, clienteId: string) =>
+      mirar: (carpeta: NodoCarpeta, clienteId: string, piezaId: string) =>
         setMirando({
+          pieza: piezaId,
+          trabajo: {
           clienteId,
           // El nombre sale de la lista que ya tenemos: la fila no lo lleva
           // encima y pasárselo de mano en mano era atravesar dos componentes
@@ -281,6 +302,8 @@ export function ArbolDeClientes({
           terminadas: carpeta.terminadas,
           sinEntregar: carpeta.sinEntregar,
           sinRevisar: carpeta.sinRevisar,
+          vista: carpeta.vista,
+          },
         }),
     }),
     [cual, clientes]
@@ -296,8 +319,9 @@ export function ArbolDeClientes({
 
       {mirando && (
         <ResumenDeTrabajo
-          carpeta={mirando}
+          carpeta={mirando.trabajo}
           equipo={equipo}
+          soloPieza={mirando.pieza}
           onCerrar={() => setMirando(null)}
         />
       )}
@@ -514,7 +538,8 @@ function FilaCarpeta({
   alGuardar: () => void;
 }) {
   const [abierta, setAbierta] = useState(false);
-  const { cual, alternarConfig, mirar } = useContext(Abierta);
+  const { cual, alternarConfig } = useContext(Abierta);
+  const enTrabajo = useContext(EnTrabajo);
   const config = cual === carpeta.id;
   const [contenido, setContenido] = useState<Contenido | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -580,36 +605,9 @@ function FilaCarpeta({
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          {/*
-            **El nombre abre el trabajo entero.** La flecha muestra qué hay
-            adentro y el engranaje qué se puede cambiar; faltaba lo tercero, que
-            es lo que más se quiere: ver el trabajo. Antes había que irse al
-            tablero y buscarlo ahí.
-
-            Solo en el primer nivel de un cliente —nivel 1, porque el 0 es el
-            cliente—: más adentro, `clienteId` pasa a ser la carpeta de arriba
-            y la ventana necesita el cliente de verdad para armar sus links.
-          */}
-          {nivel === 1 && !carpeta.reservada ? (
-            <button
-              type="button"
-              onClick={() => mirar(carpeta, clienteId)}
-              title={`Ver ${carpeta.nombre}`}
-              // **Subrayado desde el principio, no solo al pasar por encima.**
-              // Sin eso el nombre se lee como texto y nadie lo toca: el trabajo
-              // quedaba a un clic de distancia que no se veía.
-              className={`font-bold tracking-tight underline decoration-linea
-                          underline-offset-4 transition-colors hover:text-acento
-                          hover:decoration-acento focus-visible:outline-2
-                          focus-visible:outline-acento ${oculta ? "text-apagado" : ""}`}
-            >
-              {carpeta.nombre}
-            </button>
-          ) : (
-            <span className={`font-bold tracking-tight ${oculta ? "text-apagado" : ""}`}>
-              {carpeta.nombre}
-            </span>
-          )}
+          <span className={`font-bold tracking-tight ${oculta ? "text-apagado" : ""}`}>
+            {carpeta.nombre}
+          </span>
           {carpeta.reservada && (
             <span className="bg-hueco px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-apagado">
               Reservada
@@ -716,14 +714,22 @@ function FilaCarpeta({
             <p className="px-4 py-2 text-menudo font-semibold text-alerta">{error}</p>
           )}
           {contenido && (
-            <Adentro
-              contenido={contenido}
-              nivel={nivel + 1}
-              clienteId={carpeta.id}
-              equipo={equipo}
-              alGuardar={traer}
-              vacio="Esta carpeta está vacía."
-            />
+            // Las carpetas de trabajo —las del primer nivel— dejan puesto de
+            // qué trabajo es todo lo que tienen adentro. Más adentro no se
+            // vuelve a poner: una subcarpeta sigue siendo parte del mismo
+            // trabajo.
+            <EnTrabajo.Provider
+              value={nivel === 1 ? { carpeta, clienteId } : enTrabajo}
+            >
+              <Adentro
+                contenido={contenido}
+                nivel={nivel + 1}
+                clienteId={carpeta.id}
+                equipo={equipo}
+                alGuardar={traer}
+                vacio="Esta carpeta está vacía."
+              />
+            </EnTrabajo.Provider>
           )}
 
           {carpeta.vista === "calendario" && !carpeta.reservada && (
@@ -807,7 +813,8 @@ function FilaArchivo({
   equipo: Persona[];
   alGuardar: () => void;
 }) {
-  const { cual, alternarConfig } = useContext(Abierta);
+  const { cual, alternarConfig, mirar } = useContext(Abierta);
+  const enTrabajo = useContext(EnTrabajo);
   const config = cual === archivo.id;
 
   return (
@@ -827,11 +834,33 @@ function FilaArchivo({
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`truncate text-normal ${archivo.visible ? "" : "text-apagado"}`}
-          >
-            {archivo.nombre}
-          </span>
+          {/*
+            **El nombre abre la pieza.** Es lo que más se quiere del árbol y no
+            estaba: la flecha muestra qué hay adentro y el engranaje qué se
+            puede cambiar, pero para *ver* el trabajo había que irse al tablero.
+            Subrayado desde el principio, porque sin eso se lee como texto y
+            nadie lo toca.
+          */}
+          {enTrabajo ? (
+            <button
+              type="button"
+              onClick={() => mirar(enTrabajo.carpeta, enTrabajo.clienteId, archivo.id)}
+              title={`Ver ${archivo.nombre}`}
+              className={`truncate text-normal underline decoration-linea underline-offset-4
+                          transition-colors hover:text-acento hover:decoration-acento
+                          focus-visible:outline-2 focus-visible:outline-acento ${
+                            archivo.visible ? "" : "text-apagado"
+                          }`}
+            >
+              {archivo.nombre}
+            </button>
+          ) : (
+            <span
+              className={`truncate text-normal ${archivo.visible ? "" : "text-apagado"}`}
+            >
+              {archivo.nombre}
+            </span>
+          )}
           <Estado estado={archivo.estado} />
           {!archivo.visible && (
             <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">

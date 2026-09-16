@@ -118,6 +118,8 @@ export type CarpetaEnElTablero = {
   diasQueCorren: number;
   /** Si el cliente ve esta carpeta en su portal. */
   visible: boolean;
+  /** Si el cliente la ve como lista o como calendario. */
+  vista: "lista" | "calendario";
   /**
    * Cuántas carpetas tiene adentro.
    *
@@ -286,6 +288,7 @@ export async function elTablero(): Promise<Tablero> {
               }),
               sinLeer: sinLeer[cliente.id] ?? 0,
               visible: ajustes.visible,
+              vista: ajustes.vista,
               subcarpetas: adentro.length,
             };
           })

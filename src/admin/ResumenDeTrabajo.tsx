@@ -13,9 +13,13 @@
 // una ventana que se abre de a una sería pagar por adelantado algo que casi
 // nunca se mira.
 
-import { useEffect, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
-import { abrirCarpeta, historiaDeCarpeta } from "@/app/(admin)/gestion/acciones";
+import {
+  abrirCarpeta,
+  guardarCarpeta,
+  historiaDeCarpeta,
+} from "@/app/(admin)/gestion/acciones";
 import { DetalleDePieza } from "@/admin/DetalleDePieza";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { Entregar } from "@/admin/Entregar";
@@ -27,10 +31,6 @@ import { IconoCerrar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
-import { Visibilidad } from "@/admin/Visibilidad";
-import { Responsable } from "@/admin/Responsable";
-import { DiasDeRevision } from "@/admin/DiasDeRevision";
-import { Plegable } from "@/admin/Plegable";
 
 const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
 
@@ -58,6 +58,8 @@ export type TrabajoParaMirar = {
   responsableQueCorre: string | null;
   asignadaA: string | null;
   visible: boolean;
+  /** Si el cliente la ve como lista o como calendario. */
+  vista: "lista" | "calendario";
   /** Lo que el tablero ya sabe, para dibujar sin esperar a Drive. */
   enJuego?: number;
   terminadas?: number;
@@ -72,10 +74,20 @@ export type TrabajoParaMirar = {
 export function ResumenDeTrabajo({
   carpeta: c,
   equipo,
+  soloPieza,
   onCerrar,
 }: {
   carpeta: TrabajoParaMirar;
   equipo: Persona[];
+  /**
+   * Una sola pieza, cuando se abre desde su archivo.
+   *
+   * **Desde el árbol se abre por archivo y no por carpeta**: una carpeta con
+   * dos archivos no deja decir cuál se quiere mirar. Desde el tablero se abre
+   * la carpeta entera, que es lo que ahí se está mirando, y entonces se ven
+   * todas sus piezas una abajo de la otra. La ventana es la misma.
+   */
+  soloPieza?: string;
   onCerrar: () => void;
 }) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
@@ -125,8 +137,11 @@ export function ResumenDeTrabajo({
 
   // Lo que ya no está en juego, aparte. El estado es de cada pieza: un trabajo
   // no está «aprobado», lo están algunas de sus piezas.
-  const terminadas = (piezas ?? []).filter((p) => !sigueEnJuego(p.estado));
-  const enJuego = (piezas ?? []).filter((p) => sigueEnJuego(p.estado));
+  // Cuando se abrió desde un archivo, la ventana es de esa pieza y nada más.
+  const aLaVista = (piezas ?? []).filter((p) => !soloPieza || p.id === soloPieza);
+
+  const terminadas = aLaVista.filter((p) => !sigueEnJuego(p.estado));
+  const enJuego = aLaVista.filter((p) => sigueEnJuego(p.estado));
 
   // **Los números salen de las piezas apenas llegan, y del tablero mientras
   // tanto.** El tablero es una foto sacada al abrir la pantalla: si desde acá
@@ -184,45 +199,31 @@ export function ResumenDeTrabajo({
           </button>
         </header>
 
-        {/* Lo que ya sabe el tablero se muestra enseguida, sin esperar a Drive:
-            es la mitad de la respuesta y llega gratis. */}
-        <div className="border-b-2 border-tinta px-5 py-4">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <Dato que="Quién lo lleva" es={c.asignadaA ?? "sin asignar"} />
-            {/* En juego y terminadas van separadas porque son dos cosas
-                distintas: una pide algo, la otra ya no. */}
-            <Dato que="En juego" es={String(cuantasEnJuego)} />
-            {cuantasTerminadas > 0 && (
-              <Dato que="Aprobadas" es={String(cuantasTerminadas)} />
-            )}
+        {/*
+          **Una sola línea con lo del trabajo entero.** Tenía un bloque con
+          «quién lo lleva», «vence» y «plazo», y esos tres volvían a aparecer
+          al lado de cada pieza: lo mismo escrito dos veces en la misma
+          pantalla, a diez centímetros. Lo que es de la carpeta se dice acá —y
+          es poco—; lo de cada pieza va con su pieza.
+        */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b-2 border-tinta px-5 py-3">
+          <p className="text-menudo text-apagado">
+            {cuantasEnJuego} en juego
             {sinEntregar > 0 && (
-              <Dato que="Sin entregar" es={String(sinEntregar)} tono="alerta" />
+              <span className="font-bold text-acento"> · {sinEntregar} sin entregar</span>
             )}
-            {sinRevisar > 0 && <Dato que="Sin revisar" es={String(sinRevisar)} />}
-            {c.vence && (
-              <Dato
-                que={c.vencida ? "Venció" : "Vence"}
-                es={fecha.format(c.vence)}
-                tono={c.vencida ? "alerta" : c.porVencer ? "espera" : undefined}
-              />
-            )}
-            <Dato
-              que="Plazo"
-              es={`${diasQueCorren} ${diasQueCorren === 1 ? "día" : "días"}`}
-            />
-          </div>
+            {sinRevisar > 0 && ` · ${sinRevisar} sin revisar`}
+            {cuantasTerminadas > 0 && ` · ${cuantasTerminadas} aprobadas`}
+            {` · ${diasQueCorren} ${diasQueCorren === 1 ? "día" : "días"} para revisar`}
+          </p>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {/*
-              **Entregar se hace desde acá.** El tablero es la pantalla donde se
-              mira cómo viene todo, y lo que más seguido hay que hacer después
-              de mirar es entregar. Mandar a buscar el mismo botón al árbol del
-              cliente es pedir tres pantallas para un clic.
-            */}
-            {/* Sin condición afuera: «Entregar» decide solo si se muestra. Con
-                una condición acá, entregar lo último lo desmonta —y se lleva
-                puesto el mensaje para el cliente, justo cuando hace falta—. Ya
-                había pasado en el árbol. */}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Calendario
+              carpetaId={c.carpetaId}
+              carpeta={c.carpeta}
+              vista={c.vista}
+              alGuardar={() => setVuelta((n) => n + 1)}
+            />
             <Entregar
               carpetaId={c.carpetaId}
               carpeta={c.carpeta}
@@ -235,71 +236,20 @@ export function ResumenDeTrabajo({
             />
             <Link
               href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
-              className="min-h-toque inline-flex items-center border-2 border-tinta px-4
-                         text-normal font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
+              className="min-h-toque inline-flex items-center border-2 border-tinta px-3
+                         text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
             >
               Abrir la carpeta
             </Link>
             {sinLeer > 0 && (
               <Link
                 href="/gestion/chats"
-                className="min-h-toque inline-flex items-center bg-acento px-4 text-normal
+                className="min-h-toque inline-flex items-center bg-acento px-3 text-menudo
                            font-bold tracking-tight text-white transition-colors hover:bg-acento-hover"
               >
                 {sinLeer} sin leer
               </Link>
             )}
-          </div>
-
-          {/*
-            **La configuración, acá adentro.** Lo que más se cambia de un
-            trabajo mirándolo es quién lo lleva, cuántos días tiene el cliente
-            y si lo ve: las tres cosas estaban en otra pantalla, y para tocar
-            una había que cerrar esto, buscar el cliente, abrir el árbol y
-            encontrar la carpeta.
-
-            Plegado, porque se mira mucho más de lo que se cambia.
-          */}
-          <div className="mt-3 border-t border-linea pt-3">
-            <Plegable titulo={<span className="text-normal">Configurar</span>}>
-              <div className="mt-3 flex flex-wrap items-start gap-x-8 gap-y-4">
-                <Visibilidad
-                  ids={[c.carpetaId]}
-                  visible={c.visible}
-                  que="carpeta"
-                  alGuardar={() => setVuelta((n) => n + 1)}
-                />
-                <section>
-                  <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-                    Quién lo lleva
-                  </h4>
-                  <div className="mt-2">
-                    <Responsable
-                      nivel="carpeta"
-                      id={c.carpetaId}
-                      quien={c.responsableQueCorre}
-                      propio={false}
-                      equipo={equipo}
-                      alGuardar={() => setVuelta((n) => n + 1)}
-                    />
-                  </div>
-                </section>
-                <section>
-                  <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-                    Tiempo de revisión
-                  </h4>
-                  <div className="mt-2">
-                    <DiasDeRevision
-                      nivel="carpeta"
-                      id={c.carpetaId}
-                      dias={diasQueCorren}
-                      propio={false}
-                      alGuardar={() => setVuelta((n) => n + 1)}
-                    />
-                  </div>
-                </section>
-              </div>
-            </Plegable>
           </div>
         </div>
 
@@ -316,7 +266,14 @@ export function ResumenDeTrabajo({
 
           {piezas && piezas.length > 0 && (
             <>
-              {enJuego.length > 0 && <Lista piezas={enJuego} historia={historia} onCambio={() => setVuelta((n) => n + 1)} />}
+              {enJuego.length > 0 && (
+                <Lista
+                  piezas={enJuego}
+                  historia={historia}
+                  equipo={equipo}
+                  onCambio={() => setVuelta((n) => n + 1)}
+                />
+              )}
 
               {/*
                 **Lo aprobado va abajo y bajo su propio título.** Mezclado
@@ -332,7 +289,12 @@ export function ResumenDeTrabajo({
                       Ya aprobadas
                     </h3>
                   )}
-                  <Lista piezas={terminadas} historia={historia} onCambio={() => setVuelta((n) => n + 1)} />
+                  <Lista
+                    piezas={terminadas}
+                    historia={historia}
+                    equipo={equipo}
+                    onCambio={() => setVuelta((n) => n + 1)}
+                  />
                 </>
               )}
             </>
@@ -346,10 +308,12 @@ export function ResumenDeTrabajo({
 function Lista({
   piezas,
   historia,
+  equipo,
   onCambio,
 }: {
   piezas: NodoArchivo[];
   historia: PiezaConHistoria[] | null;
+  equipo: Persona[];
   onCambio: () => void;
 }) {
   return (
@@ -359,6 +323,7 @@ function Lista({
           key={p.id}
           pieza={p}
           detalle={historia?.find((h) => h.id === p.id)}
+          equipo={equipo}
           onCambio={onCambio}
         />
       ))}
@@ -380,14 +345,22 @@ function Lista({
 function Pieza({
   pieza: p,
   detalle,
+  equipo,
   onCambio,
 }: {
   pieza: NodoArchivo;
   detalle?: PiezaConHistoria;
+  equipo: Persona[];
   onCambio: () => void;
 }) {
   // La última vuelta es la que se está mirando, y es la que tiene imagen.
   const archivo = p.archivos[p.archivos.length - 1];
+  const anterior = p.archivos[p.archivos.length - 2];
+
+  // **Comparar es la pregunta de la agencia, no solo la del cliente.** Antes
+  // de entregar una vuelta nueva, lo que se quiere ver es qué cambió respecto
+  // de la anterior; el cliente ya podía y nosotros no.
+  const [comparando, setComparando] = useState(false);
 
   return (
     // **La misma forma que la ventana del cliente**: la pieza grande de un
@@ -396,21 +369,39 @@ function Pieza({
     // es el trabajo.
     <li className="border-b border-linea py-4">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <a
-          href={`/api/archivo/${archivo}?ver=1`}
-          target="_blank"
-          rel="noreferrer noopener"
-          title={`Abrir ${p.nombre}`}
-          className="relative block h-56 w-full overflow-hidden border border-linea bg-hueco
-                     transition-colors hover:border-tinta"
-        >
-          <Miniatura
-            src={urlDeMiniatura(archivo, 800, p.modificado)}
-            alt={p.nombre}
-            nombre={p.nombre}
-            className="absolute inset-0 h-full w-full object-contain p-1"
-          />
-        </a>
+        <div className="flex flex-col gap-2">
+          <div className={`grid gap-1 ${comparando && anterior ? "grid-cols-2" : ""}`}>
+            {comparando && anterior && (
+              <Vuelta
+                archivo={anterior}
+                nombre={p.nombre}
+                rotulo={`v${p.vueltas - 1}`}
+              />
+            )}
+            <Vuelta
+              archivo={archivo}
+              nombre={p.nombre}
+              modificado={p.modificado}
+              rotulo={comparando && anterior ? `v${p.vueltas}` : undefined}
+            />
+          </div>
+
+          {anterior && (
+            <button
+              type="button"
+              onClick={() => setComparando(!comparando)}
+              aria-pressed={comparando}
+              className={`min-h-toque border-2 border-tinta px-3 text-menudo font-bold
+                          tracking-tight transition-colors ${
+                            comparando
+                              ? "bg-tinta text-lienzo"
+                              : "text-tinta hover:bg-hueco"
+                          }`}
+            >
+              {comparando ? "Ver solo la última" : `Comparar con la v${p.vueltas - 1}`}
+            </button>
+          )}
+        </div>
 
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -443,7 +434,9 @@ function Pieza({
           {detalle && (
             <DetalleDePieza
               pieza={detalle}
+              archivo={p}
               carpetaId={p.id.split("::")[0]}
+              equipo={equipo}
               onCambio={onCambio}
             />
           )}
@@ -453,28 +446,95 @@ function Pieza({
   );
 }
 
-function Dato({
-  que,
-  es,
-  tono,
+
+/**
+ * Cómo ve el cliente esta carpeta: una lista o un calendario.
+ *
+ * **Es de la carpeta y no de la pieza**, por eso vive arriba y no al lado de
+ * cada imagen. Estaba solo en el engranaje del árbol, a tres pantallas de acá.
+ */
+function Calendario({
+  carpetaId,
+  carpeta,
+  vista,
+  alGuardar,
 }: {
-  que: string;
-  es: string;
-  /** Rojo cuando ya pasó, naranja cuando está por pasar. */
-  tono?: "alerta" | "espera";
+  carpetaId: string;
+  carpeta: string;
+  vista: "lista" | "calendario";
+  alGuardar: () => void;
+}) {
+  const [estado, guardar, yendo] = useActionState(guardarCarpeta, null);
+
+  useEffect(() => {
+    if (estado?.ok) alGuardar();
+  }, [estado, alGuardar]);
+
+  const calendario = vista === "calendario";
+
+  return (
+    <form action={guardar} className="flex items-center gap-2">
+      <input type="hidden" name="carpetaId" value={carpetaId} />
+      <input type="hidden" name="nombre" value={carpeta} />
+      <input type="hidden" name="vista" value={calendario ? "lista" : "calendario"} />
+      <button
+        type="submit"
+        disabled={yendo}
+        aria-pressed={calendario}
+        title={
+          calendario
+            ? "El cliente lo ve como calendario. Tocá para volverlo una lista."
+            : "El cliente lo ve como una lista. Tocá para mostrarlo como calendario."
+        }
+        className={`min-h-toque inline-flex items-center border-2 border-tinta px-3
+                    text-menudo font-bold tracking-tight transition-colors
+                    disabled:opacity-40 ${
+                      calendario ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
+                    }`}
+      >
+        Calendario
+      </button>
+    </form>
+  );
+}
+
+/**
+ * Una vuelta de la pieza: la imagen, y tocándola se abre el archivo.
+ *
+ * Lleva su número cuando hay dos al lado: sin eso, comparar es mirar dos
+ * imágenes parecidas sin saber cuál es cuál.
+ */
+function Vuelta({
+  archivo,
+  nombre,
+  modificado,
+  rotulo,
+}: {
+  archivo: string;
+  nombre: string;
+  modificado?: string;
+  rotulo?: string;
 }) {
   return (
-    <span className="flex flex-col">
-      <span className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-        {que}
-      </span>
-      <span
-        className={`text-normal font-bold tracking-tight ${
-          tono === "alerta" ? "text-alerta" : tono === "espera" ? "text-espera" : ""
-        }`}
-      >
-        {es}
-      </span>
-    </span>
+    <a
+      href={`/api/archivo/${archivo}?ver=1`}
+      target="_blank"
+      rel="noreferrer noopener"
+      title={`Abrir ${nombre}`}
+      className="relative block h-56 w-full overflow-hidden border border-linea bg-hueco
+                 transition-colors hover:border-tinta"
+    >
+      <Miniatura
+        src={urlDeMiniatura(archivo, 800, modificado)}
+        alt={nombre}
+        nombre={nombre}
+        className="absolute inset-0 h-full w-full object-contain p-1"
+      />
+      {rotulo && (
+        <span className="absolute left-0 top-0 bg-tinta px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+          {rotulo}
+        </span>
+      )}
+    </a>
   );
 }

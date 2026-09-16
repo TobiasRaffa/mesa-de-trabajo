@@ -18,7 +18,13 @@
 import { useState, useTransition } from "react";
 import { habilitarExtraDePieza } from "@/app/(admin)/gestion/acciones";
 import { EN_PALABRAS } from "@/dominio/historia";
+import { Plegable } from "@/admin/Plegable";
+import { Visibilidad } from "@/admin/Visibilidad";
+import { Responsable } from "@/admin/Responsable";
+import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
+import type { NodoArchivo } from "@/admin/datos/arbol";
+import type { Persona } from "@/lib/equipo";
 
 const cuando = new Intl.DateTimeFormat("es-AR", {
   day: "numeric",
@@ -35,25 +41,21 @@ const enPalabras = (iso: string) => {
 
 export function DetalleDePieza({
   pieza,
+  archivo,
   carpetaId,
+  equipo,
   onCambio,
 }: {
+  /** Lo anotado: qué pidió el cliente, qué se comentó en Drive, qué pasó. */
   pieza: PiezaConHistoria;
+  /** Lo que se puede cambiar de la pieza: visible, quién la lleva, su plazo. */
+  archivo: NodoArchivo;
   carpetaId: string;
+  equipo: Persona[];
   onCambio: () => void;
 }) {
-  const [abierta, setAbierta] = useState(false);
-
-  const hayAlgo =
-    pieza.estado === "extra_pedida" ||
-    pieza.cambios.length > 0 ||
-    pieza.comentarios.length > 0 ||
-    pieza.historia.length > 0;
-
-  if (!hayAlgo) return null;
-
   return (
-    <div className="mt-2 flex flex-col gap-2">
+    <div className="mt-3 flex flex-col gap-3">
       {pieza.estado === "extra_pedida" && (
         <VueltaExtra carpetaId={carpetaId} piezaId={pieza.id} onHecho={onCambio} />
       )}
@@ -93,36 +95,82 @@ export function DetalleDePieza({
         </div>
       )}
 
-      {pieza.historia.length > 0 && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setAbierta(!abierta)}
-            aria-expanded={abierta}
-            className="text-micro font-extrabold uppercase tracking-widest text-apagado
-                       underline underline-offset-4 transition-colors hover:text-tinta"
-          >
-            {abierta ? "Ocultar lo que pasó" : `Lo que pasó (${pieza.historia.length})`}
-          </button>
+      {/*
+        **Lo que se puede cambiar de esta pieza, y lo que ya le pasó.**
+        Estaban en dos pantallas distintas: la configuración en el engranaje
+        del árbol y la historia en la pantalla de la carpeta. Van juntas y
+        plegadas: se miran mucho menos de lo que se mira el trabajo, pero
+        cuando se necesitan se necesitan acá.
+      */}
+      <Plegable
+        titulo={<span className="text-menudo">Configurar</span>}
+        resumen={
+          pieza.historia.length > 0 ? `${pieza.historia.length} cosas pasaron` : undefined
+        }
+      >
+        <div className="mt-3 flex flex-col gap-4 border-l-2 border-linea pl-3">
+          <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+            <Visibilidad
+              ids={archivo.archivos}
+              visible={archivo.visible}
+              que="archivo"
+              alGuardar={onCambio}
+            />
+            <section>
+              <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+                Quién la lleva
+              </h4>
+              <div className="mt-2">
+                <Responsable
+                  nivel="archivo"
+                  id={archivo.id}
+                  carpetaId={carpetaId}
+                  quien={archivo.responsableQueCorre}
+                  propio={archivo.responsable !== undefined}
+                  equipo={equipo}
+                  alGuardar={onCambio}
+                />
+              </div>
+            </section>
+            <section>
+              <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+                Tiempo de revisión
+              </h4>
+              <div className="mt-2">
+                <DiasDeRevision
+                  nivel="archivo"
+                  id={archivo.id}
+                  carpetaId={carpetaId}
+                  dias={archivo.diasQueCorren}
+                  propio={archivo.dias !== undefined}
+                  alGuardar={onCambio}
+                />
+              </div>
+            </section>
+          </div>
 
-          {/* Plegado por omisión: se consulta el día que alguien discute qué
-              se aprobó, no todas las veces que se abre una ventana. */}
-          {abierta && (
-            <ol className="mt-1.5 flex flex-col gap-1 border-l border-linea pl-3">
-              {[...pieza.historia].reverse().map((h) => (
-                <li key={h.id} className="text-micro text-apagado">
-                  <span className="cifras">{enPalabras(h.cuando)}</span>
-                  {" · "}
-                  <span className="font-bold text-tinta-suave">{h.quien}</span>
-                  {": "}
-                  {EN_PALABRAS[h.que]}
-                  {h.detalle && <span className="block pl-2">{h.detalle}</span>}
-                </li>
-              ))}
-            </ol>
+          {pieza.historia.length > 0 && (
+            <section>
+              <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+                Lo que pasó
+              </h4>
+              <ol className="mt-1.5 flex flex-col gap-1">
+                {[...pieza.historia].reverse().map((h) => (
+                  <li key={h.id} className="text-micro text-apagado">
+                    <span className="cifras">{enPalabras(h.cuando)}</span>
+                    {" · "}
+                    <span className="font-bold text-tinta-suave">{h.quien}</span>
+                    {": "}
+                    {EN_PALABRAS[h.que]}
+                    {h.detalle && <span className="block pl-2">{h.detalle}</span>}
+                  </li>
+                ))}
+              </ol>
+            </section>
           )}
         </div>
-      )}
+      </Plegable>
+
     </div>
   );
 }
