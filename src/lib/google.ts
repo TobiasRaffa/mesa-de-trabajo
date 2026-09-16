@@ -268,6 +268,14 @@ export type ComentarioDeDrive = {
   id: string;
   /** Quién lo escribió, como lo muestra Google. */
   quien: string;
+  /**
+   * Su dirección, si Google la da.
+   *
+   * **Suele no darla.** Drive la omite salvo que quien pregunta ya la pueda
+   * ver por otro lado, así que esto no se puede dar por hecho: lo único
+   * seguro es el nombre.
+   */
+  correo?: string;
   texto: string;
   /** ISO. */
   cuando: string;
@@ -327,7 +335,8 @@ export async function leerComentarios(
     const token = await tokenDeGoogle();
     // Drive v3 obliga a pedir los campos: sin esto contesta comentarios vacíos.
     const fields = encodeURIComponent(
-      "comments(id,content,createdTime,resolved,anchor,author/displayName," +
+      "comments(id,content,createdTime,resolved,anchor," +
+        "author(displayName,emailAddress)," +
         "quotedFileContent/value,replies(content,createdTime,author/displayName))"
     );
     const url =
@@ -345,7 +354,7 @@ export async function leerComentarios(
 
     // Lo que contesta Google es tan poco confiable como cualquier cosa que
     // llegue por la red: se lee campo por campo y lo que no esté se completa.
-    type Autor = { displayName?: unknown };
+    type Autor = { displayName?: unknown; emailAddress?: unknown };
     type Crudo = {
       id?: unknown;
       content?: unknown;
@@ -364,6 +373,10 @@ export async function leerComentarios(
     const comentarios = crudos.map((x) => ({
       id: String(x.id ?? ""),
       quien: quienEs(x.author),
+      correo:
+        typeof x.author?.emailAddress === "string" && x.author.emailAddress
+          ? x.author.emailAddress
+          : undefined,
       texto: String(x.content ?? ""),
       cuando: String(x.createdTime ?? ""),
       resuelto: x.resolved === true,

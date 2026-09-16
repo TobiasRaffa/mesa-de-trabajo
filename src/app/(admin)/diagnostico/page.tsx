@@ -70,7 +70,7 @@ export default async function Diagnostico() {
      * forma, la hoja va a dejar de aparecer **en silencio**. Esta lista es el
      * único lugar donde eso se ve.
      */
-    anclas: Array<{ quien: string; hoja?: number; ancla?: string }>;
+    anclas: Array<{ quien: string; correo?: string; hoja?: number; ancla?: string }>;
   } | null = null;
   // El primer archivo de verdad que se encuentre. La carpeta de un cliente
   // suele tener solo carpetas adentro, así que hay que bajar un escalón.
@@ -84,7 +84,12 @@ export default async function Diagnostico() {
         ? `${r.comentarios.length} ${r.comentarios.length === 1 ? "comentario" : "comentarios"}`
         : r.motivo,
       anclas: r.ok
-        ? r.comentarios.map((c) => ({ quien: c.quien, hoja: c.hoja, ancla: c.ancla }))
+        ? r.comentarios.map((c) => ({
+            quien: c.quien,
+            correo: c.correo,
+            hoja: c.hoja,
+            ancla: c.ancla,
+          }))
         : [],
     };
   }
@@ -195,7 +200,9 @@ export default async function Diagnostico() {
               {comentarios.anclas.map((a, i) => (
                 <li key={i} className="break-all">
                   <span className="font-semibold">{a.quien}</span>
-                  {" · hoja: "}
+                  {" <"}
+                  {a.correo ?? "Google no da el mail"}
+                  {"> · hoja: "}
                   <span className={a.hoja === undefined ? "text-red-700" : ""}>
                     {a.hoja ?? "no se pudo leer"}
                   </span>
