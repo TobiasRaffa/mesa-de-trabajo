@@ -27,6 +27,13 @@
 import { useState } from "react";
 import { Plegable } from "@/admin/Plegable";
 import { ResumenDeTrabajo } from "@/admin/ResumenDeTrabajo";
+import {
+  FiltrosDelTablero,
+  filtrar,
+  hayFiltros,
+  SIN_FILTROS,
+  type Filtros,
+} from "@/admin/FiltrosDelTablero";
 import type { Cancha, CarpetaEnElTablero } from "@/admin/datos/tablero";
 
 const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
@@ -35,6 +42,13 @@ const CANCHAS: Record<
   Cancha,
   { titulo: string; explica: string; filo: string; punto: string; comoEsta: string }
 > = {
+  sin_entregar: {
+    titulo: "Sin entregar",
+    explica: "Ya está hecho y el cliente todavía no lo vio.",
+    filo: "border-alerta",
+    punto: "bg-alerta",
+    comoEsta: "Sin entregar",
+  },
   agencia: {
     titulo: "Lo tenemos nosotros",
     explica: "El cliente ya habló. Falta hacerlo.",
@@ -61,8 +75,14 @@ const CANCHAS: Record<
   },
 };
 
-/** De más urgente a menos: primero lo que se puede hacer algo hoy. */
-const ORDEN: Cancha[] = ["agencia", "cliente", "listo"];
+/**
+ * De más urgente a menos.
+ *
+ * Primero lo que se resuelve en un clic —está hecho y falta mandarlo—, después
+ * lo que hay que hacer, después lo que espera al cliente, y al final lo
+ * cerrado. Es el orden en que conviene gastar la mañana.
+ */
+const ORDEN: Cancha[] = ["sin_entregar", "agencia", "cliente", "listo"];
 
 type PorCliente = {
   clienteId: string;
@@ -102,6 +122,9 @@ export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[]
   // Cuál se está mirando en grande. Vive acá arriba y no en cada ficha: la
   // ventana tapa la pantalla entera, así que solo puede haber una.
   const [mirando, setMirando] = useState<CarpetaEnElTablero | null>(null);
+  const [filtros, setFiltros] = useState<Filtros>(SIN_FILTROS);
+
+  const aLaVista = filtrar(carpetas, filtros);
 
   if (carpetas.length === 0) {
     return (
@@ -113,17 +136,30 @@ export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[]
 
   return (
     <>
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
-        {ORDEN.map((cual) => (
-          <Columna
-            key={cual}
-            cual={cual}
-            clientes={porCliente(carpetas.filter((c) => c.cancha === cual))}
-            hayVentana={mirando !== null}
-            onMirar={setMirando}
-          />
-        ))}
-      </div>
+      <FiltrosDelTablero
+        carpetas={carpetas}
+        filtros={filtros}
+        onCambiar={setFiltros}
+        cuantos={aLaVista.length}
+      />
+
+      {hayFiltros(filtros) && aLaVista.length === 0 ? (
+        <p className="mt-8 border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-normal text-espera">
+          Ningún trabajo pasa ese filtro.
+        </p>
+      ) : (
+        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {ORDEN.map((cual) => (
+            <Columna
+              key={cual}
+              cual={cual}
+              clientes={porCliente(aLaVista.filter((c) => c.cancha === cual))}
+              hayVentana={mirando !== null}
+              onMirar={setMirando}
+            />
+          ))}
+        </div>
+      )}
 
       {mirando && (
         <ResumenDeTrabajo carpeta={mirando} onCerrar={() => setMirando(null)} />

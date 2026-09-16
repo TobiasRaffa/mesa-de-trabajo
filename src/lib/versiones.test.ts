@@ -207,6 +207,16 @@ describe("la marca adelante no desordena nada", () => {
   // pieza colgaría del archivo equivocado.
   const comoLosDaDrive = [{ name: "V2 banner.pdf" }, { name: "banner.pdf" }];
 
+  it("«v2_stickers.pdf» es la segunda vuelta de «stickers.pdf»", () => {
+    // Con guion bajo, que es como lo escriben.
+    const piezas = agruparVersiones([{ name: "stickers.pdf" }, { name: "v2_stickers.pdf" }]);
+    expect(piezas).toHaveLength(1);
+    expect(piezas[0].titulo).toBe("stickers");
+    expect(piezas[0].versiones.map((v) => v.numero)).toEqual([1, 2]);
+    // La última es la que se muestra; las dos quedan, para comparar.
+    expect(piezas[0].versiones[1].archivo.name).toBe("v2_stickers.pdf");
+  });
+
   it("agrupa las dos en una sola pieza", () => {
     expect(agruparVersiones(comoLosDaDrive)).toHaveLength(1);
   });

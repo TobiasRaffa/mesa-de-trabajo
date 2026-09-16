@@ -10,7 +10,7 @@
 //
 // Todo sale de datos que ya existen: no hay un estado nuevo que mantener.
 
-import { esCarpetaReservada } from "@/lib/ajustes";
+import { ajustesDe, esCarpetaReservada } from "@/lib/ajustes";
 import { losAvisos, type Aviso } from "@/lib/avisos";
 import { clientesHabilitados } from "@/lib/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
@@ -35,8 +35,15 @@ import { sigueEnJuego } from "@/dominio/pieza";
  * Cuando hay de las dos, manda la agencia: si algo espera trabajo nuestro, la
  * carpeta está en nuestra cancha aunque además falte que el cliente mire otra
  * pieza.
+ *
+ * **«Sin entregar» se separó de «lo tenemos nosotros».** Las dos son nuestras,
+ * pero no piden lo mismo: una pide diseñar y la otra pide apretar un botón.
+ * Mezcladas, lo que está listo y sin mandar se perdía entre lo que todavía hay
+ * que hacer, que es la peor forma de perderlo: el cliente espera algo que ya
+ * está hecho. Manda «sin entregar» cuando hay de las dos, porque es lo que se
+ * resuelve en un clic.
  */
-export type Cancha = "agencia" | "cliente" | "listo";
+export type Cancha = "sin_entregar" | "agencia" | "cliente" | "listo";
 
 export type CarpetaEnElTablero = {
   clienteId: string;
@@ -44,6 +51,15 @@ export type CarpetaEnElTablero = {
   carpetaId: string;
   carpeta: string;
   asignadaA: string | null;
+  /**
+   * Quién lo lleva, por identificador.
+   *
+   * Hace falta además del nombre porque la ventana del tablero vuelve a pedir
+   * la carpeta, y lo que se hereda hacia cada pieza es el identificador. Sin
+   * esto la ventana pedía con la herencia en blanco y cada pieza decía «sin
+   * asignar» al lado de una carpeta que tiene dueño.
+   */
+  responsableQueCorre: string | null;
   /** Cuándo vence la revisión de esta carpeta. */
   vence: Date | null;
   /** Está vencida y todavía falta que el cliente decida. */
@@ -73,6 +89,8 @@ export type CarpetaEnElTablero = {
   cancha: Cancha;
   /** Los días de revisión que corren acá, ya heredados. */
   diasQueCorren: number;
+  /** Si el cliente ve esta carpeta en su portal. */
+  visible: boolean;
 };
 
 export type Tablero = {
@@ -99,11 +117,13 @@ export async function elTablero(): Promise<Tablero> {
         carpetas
           .filter((c) => !esCarpetaReservada(c.name))
           .map(async (carpeta): Promise<CarpetaEnElTablero> => {
-            const [archivos, diasDeLaCarpeta, deQuienEsLaCarpeta] = await Promise.all([
-              piezasDeLaCarpeta(carpeta.id),
-              plazoDe(carpeta.id),
-              responsableDe(carpeta.id),
-            ]);
+            const [archivos, diasDeLaCarpeta, deQuienEsLaCarpeta, ajustes] =
+              await Promise.all([
+                piezasDeLaCarpeta(carpeta.id),
+                plazoDe(carpeta.id),
+                responsableDe(carpeta.id),
+                ajustesDe(carpeta.id),
+              ]);
 
             const agrupadas = agruparVersiones(archivos);
             const identidades = agrupadas.map((p) =>
@@ -140,8 +160,20 @@ export async function elTablero(): Promise<Tablero> {
             // no es trabajo pendiente de nadie.
             const terminadas = piezas.filter((p) => !sigueEnJuego(p.estado)).length;
 
+            // Una carpeta **vacía** no está aprobada: no hay nada que aprobar.
+            // Caía en «Aprobado» porque no esperaba nada de nadie, y con ese
+            // título puesto se leía como un trabajo terminado. Lo que le falta
+            // es que alguien suba algo, así que es nuestra.
+            const vacia = piezas.length === 0;
+
             const cancha: Cancha =
-              enAgencia > 0 ? "agencia" : sinRevisar > 0 ? "cliente" : "listo";
+              sinEntregar > 0
+                ? "sin_entregar"
+                : enAgencia > 0 || vacia
+                  ? "agencia"
+                  : sinRevisar > 0
+                    ? "cliente"
+                    : "listo";
 
 
             // **El reloj arranca cuando se entrega, no cuando se sube.**
@@ -186,6 +218,7 @@ export async function elTablero(): Promise<Tablero> {
               carpetaId: carpeta.id,
               carpeta: carpeta.name,
               asignadaA: persona?.nombre ?? null,
+              responsableQueCorre: quien ?? null,
               vence,
               // Vencida solo cuenta si todavía falta que el cliente decida:
               // una carpeta terminada con fecha vieja no es un problema.
@@ -195,6 +228,7 @@ export async function elTablero(): Promise<Tablero> {
               sinRevisar,
               terminadas,
               sinLeer: sinLeer[cliente.id] ?? 0,
+              visible: ajustes.visible,
             };
           })
       );

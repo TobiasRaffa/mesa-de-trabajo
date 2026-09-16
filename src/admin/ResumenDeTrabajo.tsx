@@ -18,6 +18,8 @@ import Link from "next/link";
 import { abrirCarpeta } from "@/app/(admin)/gestion/acciones";
 import { Entregar } from "@/admin/Entregar";
 import { Estado } from "@/ui/Estado";
+import { Miniatura } from "@/ui/Miniatura";
+import { urlDeMiniatura } from "@/lib/miniaturas";
 import { sigueEnJuego } from "@/dominio/pieza";
 import { IconoCerrar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
@@ -50,7 +52,7 @@ export function ResumenDeTrabajo({
     let vivo = true;
     abrirCarpeta(c.carpetaId, {
       dias: c.diasQueCorren,
-      responsable: null,
+      responsable: c.responsableQueCorre,
     })
       .then((r) => {
         if (!vivo) return;
@@ -61,7 +63,7 @@ export function ResumenDeTrabajo({
     return () => {
       vivo = false;
     };
-  }, [c.carpetaId, c.diasQueCorren, vuelta]);
+  }, [c.carpetaId, c.diasQueCorren, c.responsableQueCorre, vuelta]);
 
   // Lo que ya no está en juego, aparte. El estado es de cada pieza: un trabajo
   // no está «aprobado», lo están algunas de sus piezas.
@@ -136,6 +138,10 @@ export function ResumenDeTrabajo({
                 alerta={c.vencida}
               />
             )}
+            <Dato
+              que="Plazo"
+              es={`${c.diasQueCorren} ${c.diasQueCorren === 1 ? "día" : "días"}`}
+            />
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -218,23 +224,62 @@ function Lista({ piezas }: { piezas: NodoArchivo[] }) {
   return (
     <ul className="mt-2 border-t border-linea">
       {piezas.map((p) => (
-        <li
-          key={p.id}
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-linea py-3"
-        >
-          <span className="min-w-0 flex-1 font-bold tracking-tight">{p.nombre}</span>
-          {p.vueltas > 1 && (
-            <span className="shrink-0 text-micro text-apagado">{p.vueltas} vueltas</span>
-          )}
-          {p.publicaEl && (
-            <span className="cifras shrink-0 text-micro text-apagado">
-              sale el {comoFecha(p.publicaEl)}
-            </span>
-          )}
-          <Estado estado={p.estado} />
-        </li>
+        <Pieza key={p.id} pieza={p} />
       ))}
     </ul>
+  );
+}
+
+/**
+ * Una pieza, con lo que hace falta para no tener que abrir la carpeta.
+ *
+ * **La miniatura importa más de lo que parece.** Una lista de nombres obliga a
+ * acordarse de qué era «9312»; con la imagen al lado se reconoce sin leer, que
+ * es la diferencia entre mirar el tablero y tener que ir a buscar.
+ *
+ * Debajo del nombre va lo que cambia decisiones: quién lo lleva, cuándo vence,
+ * cuándo sale publicado. Arriba, lo que lo identifica: la vuelta en la que va y
+ * si el cliente lo ve.
+ */
+function Pieza({ pieza: p }: { pieza: NodoArchivo }) {
+  // La última vuelta es la que se está mirando, y es la que tiene imagen.
+  const archivo = p.archivos[p.archivos.length - 1];
+
+  return (
+    <li className="flex items-start gap-3 border-b border-linea py-3">
+      <span className="relative h-11 w-11 shrink-0 overflow-hidden bg-hueco">
+        <Miniatura
+          src={urlDeMiniatura(archivo, 220, p.modificado)}
+          alt=""
+          nombre={p.nombre}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="min-w-0 font-bold tracking-tight">{p.nombre}</span>
+          {p.vueltas > 1 && (
+            <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
+              v{p.vueltas}
+            </span>
+          )}
+          {!p.visible && (
+            <span className="bg-tinta px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+              Oculta
+            </span>
+          )}
+        </div>
+
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-micro text-apagado">
+          <span>{p.responsableA ?? "sin asignar"}</span>
+          {p.vence && <span className="cifras">· vence {comoFecha(p.vence)}</span>}
+          {p.publicaEl && <span className="cifras">· sale el {comoFecha(p.publicaEl)}</span>}
+        </p>
+      </div>
+
+      <Estado estado={p.estado} />
+    </li>
   );
 }
 
