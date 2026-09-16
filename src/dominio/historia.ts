@@ -49,3 +49,87 @@ export const EN_PALABRAS: Record<Hito, string> = {
   archivo_reemplazado:
     "Se borró el archivo y se subió otro con el mismo nombre: la pieza vuelve a empezar",
 };
+
+/** Lo mínimo de un hito para poder leerlo. */
+export type HitoLeido = { que: Hito; detalle?: string };
+
+export type CambiosDeUnaVuelta = {
+  /** 1 es la primera, la que no lleva marca en el nombre del archivo. */
+  version: number;
+  /** Lo que el cliente escribió, ya separado en puntos. */
+  puntos: string[];
+  /** Todavía no los mandó: puede seguir escribiendo. */
+  abierta: boolean;
+};
+
+/**
+ * Lo que el cliente pidió en cada vuelta, reconstruido de la historia.
+ *
+ * **Lo pedido no vive en la pieza: vive en su historia.** La lista de cambios
+ * se vacía al entregar la vuelta siguiente —es lo correcto, la revisión nueva
+ * empieza limpia— así que lo único que queda de la V1 es lo que se anotó
+ * cuando el cliente la cerró. Sin esto, «¿por qué la v2 salió así?» no tiene
+ * respuesta a los dos meses.
+ *
+ * Lee dos formas, porque hay piezas guardadas de antes: la de ahora, donde el
+ * envío lleva escrito «V1: 1) …», y la vieja, donde eso quedó del lado de la
+ * entrega que lo contestó, como «Responde a: 1) …».
+ */
+export function cambiosPorVuelta(
+  historia: HitoLeido[],
+  /** Lo que está pedido ahora y todavía no se contestó. */
+  ahora: string[] = [],
+  /** En qué vuelta está la pieza hoy. */
+  vueltaActual = 1,
+  /** Si lo de ahora ya se mandó. */
+  enviada = false
+): CambiosDeUnaVuelta[] {
+  const salida: CambiosDeUnaVuelta[] = [];
+  let version = 1;
+
+  for (let i = 0; i < historia.length; i++) {
+    const h = historia[i];
+    if (h.que !== "revision_enviada") continue;
+
+    // La forma de ahora dice la versión adelante; la vieja la deja en la
+    // entrega que vino después.
+    const propio = leerPedido(h.detalle);
+    const enLaEntrega = leerPedido(
+      historia.slice(i + 1).find((x) => x.que === "entregada")?.detalle
+    );
+    const puntos = propio.puntos.length > 0 ? propio.puntos : enLaEntrega.puntos;
+
+    if (puntos.length > 0) {
+      salida.push({ version: propio.version ?? version, puntos, abierta: false });
+    }
+    version++;
+  }
+
+  if (ahora.length > 0) {
+    salida.push({ version: vueltaActual, puntos: ahora, abierta: !enviada });
+  }
+
+  return salida;
+}
+
+/** Saca la versión y los puntos de un detalle escrito a mano. */
+function leerPedido(detalle?: string): { version?: number; puntos: string[] } {
+  if (!detalle) return { puntos: [] };
+
+  // `[\s\S]` en vez de la bandera `s`: la configuración de TypeScript de este
+  // proyecto apunta a una versión anterior a donde esa bandera existe, y el
+  // error que da no nombra el archivo.
+  const conVersion = detalle.match(/^V(\d+):\s*([\s\S]*)$/);
+  const cuerpo = conVersion ? conVersion[2] : detalle.replace(/^Responde a:\s*/, "");
+  if (cuerpo === detalle && !conVersion && !detalle.startsWith("Responde a:")) {
+    return { puntos: [] };
+  }
+
+  // Los puntos se escribieron como «1) … 2) …»: se parten por esa marca.
+  const puntos = cuerpo
+    .split(/\s*\d+\)\s*/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  return { version: conVersion ? Number(conVersion[1]) : undefined, puntos };
+}

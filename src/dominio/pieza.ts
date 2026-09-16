@@ -139,6 +139,36 @@ export function hayAlgoParaEntregar(
   return estado === "en_curso" && vueltas > ronda;
 }
 
+/**
+ * Hace cuántos días lo tenemos nosotros.
+ *
+ * **No es un plazo: es una cuenta.** El cliente tiene días para revisar y se le
+ * vencen; nosotros no tenemos límite, pero saber que algo lleva cuatro días
+ * quieto de nuestro lado es la mitad de lo que se mira en un tablero por la
+ * mañana. Sin esto, un trabajo podía estar dos semanas esperando sin que nada
+ * lo dijera.
+ *
+ * Cuenta desde lo último que le pasó a la pieza, que es cuando volvió a
+ * nuestras manos. Devuelve `null` cuando la pelota no es nuestra: ahí el reloj
+ * que corre es el del cliente, y son dos cuentas distintas.
+ */
+export function diasConNosotros(
+  estado: Estado,
+  ultimoMovimiento: string | undefined,
+  ahora: Date
+): number | null {
+  if (deQuienEsLaPelota({ estado, ronda: 0, rondasIncluidas: 0, rondasExtra: 0 }) !== "agencia") {
+    return null;
+  }
+  if (!ultimoMovimiento) return null;
+
+  const desde = new Date(ultimoMovimiento);
+  if (Number.isNaN(desde.getTime())) return null;
+
+  const dia = 24 * 60 * 60 * 1000;
+  return Math.max(0, Math.floor((ahora.getTime() - desde.getTime()) / dia));
+}
+
 /** ¿De quién se está esperando algo? Es la pregunta que contesta el tablero. */
 export function deQuienEsLaPelota(p: Pieza): "agencia" | "cliente" | "nadie" {
   switch (p.estado) {

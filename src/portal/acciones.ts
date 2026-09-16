@@ -314,6 +314,16 @@ export async function guardarCambiosDePieza(
 }
 
 /**
+ * Los cambios de una vuelta, escritos para leer.
+ *
+ * Empieza por la versión —«V1: …»— porque lo que se lee después es una lista
+ * de vueltas, y sin el número no se sabe cuál de todas pidió qué.
+ */
+function cambiosEnPalabras(version: number, cambios: Cambio[]): string {
+  return `V${version}: ${cambios.map((c, i) => `${i + 1}) ${c.texto}`).join("  ")}`;
+}
+
+/**
  * Cierra la revisión: la agencia recibe todo junto.
  *
  * Es el único acto de esta pantalla que la agencia ve, y no se deshace.
@@ -376,7 +386,13 @@ export async function enviarRevision(
         enviada: true,
       },
       "revision_enviada",
-      CLIENTE
+      CLIENTE,
+      // **Qué pidió, y sobre qué versión.** Sin esto lo pedido se perdía al
+      // entregar la vuelta siguiente: la lista se vacía —es lo correcto, la
+      // revisión nueva empieza limpia— y lo único que quedaba era un renglón
+      // diciendo que hubo cambios, sin decir cuáles. Dentro de un mes, «¿por
+      // qué la v2 salió así?» no tenía respuesta.
+      cambiosEnPalabras(guardada.ronda + 1, guardada.cambios)
     );
   }
 

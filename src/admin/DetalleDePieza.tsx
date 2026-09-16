@@ -17,7 +17,8 @@
 
 import { useState, useTransition } from "react";
 import { habilitarExtraDePieza } from "@/app/(admin)/gestion/acciones";
-import { EN_PALABRAS } from "@/dominio/historia";
+import { cambiosPorVuelta, EN_PALABRAS } from "@/dominio/historia";
+import { IconoDrive } from "@/ui/Icono";
 import { Plegable } from "@/admin/Plegable";
 import { Visibilidad } from "@/admin/Visibilidad";
 import { Responsable } from "@/admin/Responsable";
@@ -54,25 +55,46 @@ export function DetalleDePieza({
   equipo: Persona[];
   onCambio: () => void;
 }) {
+  const vueltas = cambiosPorVuelta(
+    pieza.historia,
+    pieza.cambios.map((c) => c.texto),
+    archivo.vueltas,
+    pieza.enviada
+  );
+
   return (
     <div className="mt-3 flex flex-col gap-3">
-      {pieza.estado === "extra_pedida" && (
-        <VueltaExtra carpetaId={carpetaId} piezaId={pieza.id} onHecho={onCambio} />
-      )}
-
-      {pieza.cambios.length > 0 && (
-        <div className="border-l-4 border-acento bg-acento-tenue/40 py-1.5 pl-3">
-          <p className="text-micro font-extrabold uppercase tracking-widest text-acento">
-            {pieza.enviada ? "Lo que pidió" : "Está escribiendo"}
-          </p>
-          <ol className="mt-1 flex flex-col gap-1">
-            {pieza.cambios.map((cambio, i) => (
-              <li key={cambio.id} className="flex gap-2 text-menudo text-tinta-suave">
-                <span className="shrink-0 font-extrabold text-apagado">{i + 1}.</span>
-                <span className="min-w-0 whitespace-pre-wrap">{cambio.texto}</span>
-              </li>
-            ))}
-          </ol>
+      {/*
+        **Lo que pidió el cliente, vuelta por vuelta.** Estaba todo junto en
+        una lista sin decir de cuál versión era cada cosa: con tres vueltas
+        encima, eso es un párrafo del que no se puede sacar por qué salió así
+        la V2.
+      */}
+      {vueltas.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {vueltas.map((v) => (
+            <div
+              key={v.version}
+              className="border-l-4 border-acento bg-acento-tenue/40 py-1.5 pl-3"
+            >
+              <p className="text-micro font-extrabold uppercase tracking-widest text-acento">
+                Cambios v{v.version}
+                {v.abierta && (
+                  <span className="ml-2 font-bold text-apagado">
+                    los está escribiendo
+                  </span>
+                )}
+              </p>
+              <ol className="mt-1 flex flex-col gap-1">
+                {v.puntos.map((texto, i) => (
+                  <li key={i} className="flex gap-2 text-menudo text-tinta-suave">
+                    <span className="shrink-0 font-extrabold text-apagado">{i + 1}.</span>
+                    <span className="min-w-0 whitespace-pre-wrap">{texto}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))}
         </div>
       )}
 
@@ -96,81 +118,97 @@ export function DetalleDePieza({
       )}
 
       {/*
-        **Lo que se puede cambiar de esta pieza, y lo que ya le pasó.**
-        Estaban en dos pantallas distintas: la configuración en el engranaje
-        del árbol y la historia en la pantalla de la carpeta. Van juntas y
-        plegadas: se miran mucho menos de lo que se mira el trabajo, pero
-        cuando se necesitan se necesitan acá.
+        **Los botones, al final.** Arriba competían con el nombre y el estado,
+        que es lo que se mira primero; y lo que se hace con una pieza se decide
+        después de haberla mirado, no antes.
       */}
-      <Plegable
-        titulo={<span className="text-menudo">Configurar</span>}
-        resumen={
-          pieza.historia.length > 0 ? `${pieza.historia.length} cosas pasaron` : undefined
-        }
-      >
-        <div className="mt-3 flex flex-col gap-4 border-l-2 border-linea pl-3">
-          <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
-            <Visibilidad
-              ids={archivo.archivos}
-              visible={archivo.visible}
-              que="archivo"
-              alGuardar={onCambio}
-            />
-            <section>
-              <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-                Quién la lleva
-              </h4>
-              <div className="mt-2">
-                <Responsable
-                  nivel="archivo"
-                  id={archivo.id}
-                  carpetaId={carpetaId}
-                  quien={archivo.responsableQueCorre}
-                  propio={archivo.responsable !== undefined}
-                  equipo={equipo}
-                  alGuardar={onCambio}
-                />
-              </div>
-            </section>
-            <section>
-              <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-                Tiempo de revisión
-              </h4>
-              <div className="mt-2">
-                <DiasDeRevision
-                  nivel="archivo"
-                  id={archivo.id}
-                  carpetaId={carpetaId}
-                  dias={archivo.diasQueCorren}
-                  propio={archivo.dias !== undefined}
-                  alGuardar={onCambio}
-                />
-              </div>
-            </section>
+      <div className="flex flex-wrap items-center gap-2 border-t border-linea pt-3">
+        {pieza.estado === "extra_pedida" && (
+          <VueltaExtra carpetaId={carpetaId} piezaId={pieza.id} onHecho={onCambio} />
+        )}
+        {archivo.enlaceDrive && (
+          <a
+            href={archivo.enlaceDrive}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="min-h-toque inline-flex items-center gap-2 border-2 border-tinta px-3
+                       text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
+          >
+            <IconoDrive />
+            Abrir en Drive
+          </a>
+        )}
+        <Plegable
+          titulo={<span className="text-menudo">Configurar</span>}
+          resumen={
+            pieza.historia.length > 0
+              ? `${pieza.historia.length} cosas pasaron`
+              : undefined
+          }
+        >
+          <div className="mt-3 flex flex-col gap-4 border-l-2 border-linea pl-3">
+            <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+              <Visibilidad
+                ids={archivo.archivos}
+                visible={archivo.visible}
+                que="archivo"
+                alGuardar={onCambio}
+              />
+              <section>
+                <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+                  Quién la lleva
+                </h4>
+                <div className="mt-2">
+                  <Responsable
+                    nivel="archivo"
+                    id={archivo.id}
+                    carpetaId={carpetaId}
+                    quien={archivo.responsableQueCorre}
+                    propio={archivo.responsable !== undefined}
+                    equipo={equipo}
+                    alGuardar={onCambio}
+                  />
+                </div>
+              </section>
+              <section>
+                <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+                  Tiempo de revisión
+                </h4>
+                <div className="mt-2">
+                  <DiasDeRevision
+                    nivel="archivo"
+                    id={archivo.id}
+                    carpetaId={carpetaId}
+                    dias={archivo.diasQueCorren}
+                    propio={archivo.dias !== undefined}
+                    alGuardar={onCambio}
+                  />
+                </div>
+              </section>
+            </div>
+
+            {pieza.historia.length > 0 && (
+              <section>
+                <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+                  Lo que pasó
+                </h4>
+                <ol className="mt-1.5 flex flex-col gap-1">
+                  {[...pieza.historia].reverse().map((h) => (
+                    <li key={h.id} className="text-micro text-apagado">
+                      <span className="cifras">{enPalabras(h.cuando)}</span>
+                      {" · "}
+                      <span className="font-bold text-tinta-suave">{h.quien}</span>
+                      {": "}
+                      {EN_PALABRAS[h.que]}
+                      {h.detalle && <span className="block pl-2">{h.detalle}</span>}
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
           </div>
-
-          {pieza.historia.length > 0 && (
-            <section>
-              <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-                Lo que pasó
-              </h4>
-              <ol className="mt-1.5 flex flex-col gap-1">
-                {[...pieza.historia].reverse().map((h) => (
-                  <li key={h.id} className="text-micro text-apagado">
-                    <span className="cifras">{enPalabras(h.cuando)}</span>
-                    {" · "}
-                    <span className="font-bold text-tinta-suave">{h.quien}</span>
-                    {": "}
-                    {EN_PALABRAS[h.que]}
-                    {h.detalle && <span className="block pl-2">{h.detalle}</span>}
-                  </li>
-                ))}
-              </ol>
-            </section>
-          )}
-        </div>
-      </Plegable>
-
+        </Plegable>
+      </div>
     </div>
   );
 }

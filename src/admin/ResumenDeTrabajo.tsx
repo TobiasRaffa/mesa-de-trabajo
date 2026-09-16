@@ -13,20 +13,16 @@
 // una ventana que se abre de a una sería pagar por adelantado algo que casi
 // nunca se mira.
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  abrirCarpeta,
-  guardarCarpeta,
-  historiaDeCarpeta,
-} from "@/app/(admin)/gestion/acciones";
+import { abrirCarpeta, historiaDeCarpeta } from "@/app/(admin)/gestion/acciones";
 import { DetalleDePieza } from "@/admin/DetalleDePieza";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { Entregar } from "@/admin/Entregar";
 import { Estado } from "@/ui/Estado";
 import { Miniatura } from "@/ui/Miniatura";
 import { urlDeMiniatura } from "@/lib/miniaturas";
-import { hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
+import { diasConNosotros, hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
 import { IconoCerrar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import type { NodoArchivo } from "@/admin/datos/arbol";
@@ -218,12 +214,6 @@ export function ResumenDeTrabajo({
           </p>
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Calendario
-              carpetaId={c.carpetaId}
-              carpeta={c.carpeta}
-              vista={c.vista}
-              alGuardar={() => setVuelta((n) => n + 1)}
-            />
             <Entregar
               carpetaId={c.carpetaId}
               carpeta={c.carpeta}
@@ -362,6 +352,10 @@ function Pieza({
   // de la anterior; el cliente ya podía y nosotros no.
   const [comparando, setComparando] = useState(false);
 
+  const nuestros = detalle
+    ? diasConNosotros(detalle.estado, detalle.historia.at(-1)?.cuando, new Date())
+    : null;
+
   return (
     // **La misma forma que la ventana del cliente**: la pieza grande de un
     // lado y todo lo que se sabe de ella del otro. Era una lista de renglones
@@ -404,30 +398,39 @@ function Pieza({
         </div>
 
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="min-w-0 text-guia font-extrabold tracking-tight">
-              {p.nombre}
-            </span>
+          {/*
+            **El nombre manda.** Estaba del mismo tamaño que la etiqueta de
+            estado, y esa etiqueta es un detalle del trabajo —como quién lo
+            lleva o hace cuánto que lo tenemos—, no su título. Así había que
+            buscar cuál pieza se estaba mirando.
+          */}
+          <h3 className="text-titulo font-extrabold leading-tight tracking-tight">
+            {p.nombre}
             {p.vueltas > 1 && (
-              <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
+              <span className="ml-2 align-middle text-menudo font-extrabold uppercase tracking-wider text-apagado">
                 v{p.vueltas}
               </span>
             )}
+          </h3>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-apagado">
+            <Estado estado={p.estado} />
+            <span>{p.responsableA ?? "sin asignar"}</span>
+            {/* Hace cuánto que la tenemos nosotros: un detalle más de la
+                pieza, como quién la lleva. No es un plazo; es una cuenta. */}
+            {nuestros !== null && (
+              <span className={`cifras font-extrabold ${tonoDeEspera(nuestros)}`}>
+                {nuestros} {nuestros === 1 ? "día" : "días"} con nosotros
+              </span>
+            )}
+            {p.vence && <span className="cifras">vence {comoFecha(p.vence)}</span>}
+            {p.publicaEl && <span className="cifras">sale el {comoFecha(p.publicaEl)}</span>}
             {!p.visible && (
-              <span className="bg-tinta px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+              <span className="bg-tinta px-1.5 py-0.5 font-extrabold uppercase tracking-wider text-lienzo">
                 Oculta
               </span>
             )}
-            <Estado estado={p.estado} />
           </div>
-
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-micro text-apagado">
-            <span>{p.responsableA ?? "sin asignar"}</span>
-            {p.vence && <span className="cifras">· vence {comoFecha(p.vence)}</span>}
-            {p.publicaEl && (
-              <span className="cifras">· sale el {comoFecha(p.publicaEl)}</span>
-            )}
-          </p>
 
           {/* Todo lo que pasó con esta pieza: lo que pidió el cliente, lo que
               escribieron en Drive, y qué se puede hacer. */}
@@ -443,58 +446,6 @@ function Pieza({
         </div>
       </div>
     </li>
-  );
-}
-
-
-/**
- * Cómo ve el cliente esta carpeta: una lista o un calendario.
- *
- * **Es de la carpeta y no de la pieza**, por eso vive arriba y no al lado de
- * cada imagen. Estaba solo en el engranaje del árbol, a tres pantallas de acá.
- */
-function Calendario({
-  carpetaId,
-  carpeta,
-  vista,
-  alGuardar,
-}: {
-  carpetaId: string;
-  carpeta: string;
-  vista: "lista" | "calendario";
-  alGuardar: () => void;
-}) {
-  const [estado, guardar, yendo] = useActionState(guardarCarpeta, null);
-
-  useEffect(() => {
-    if (estado?.ok) alGuardar();
-  }, [estado, alGuardar]);
-
-  const calendario = vista === "calendario";
-
-  return (
-    <form action={guardar} className="flex items-center gap-2">
-      <input type="hidden" name="carpetaId" value={carpetaId} />
-      <input type="hidden" name="nombre" value={carpeta} />
-      <input type="hidden" name="vista" value={calendario ? "lista" : "calendario"} />
-      <button
-        type="submit"
-        disabled={yendo}
-        aria-pressed={calendario}
-        title={
-          calendario
-            ? "El cliente lo ve como calendario. Tocá para volverlo una lista."
-            : "El cliente lo ve como una lista. Tocá para mostrarlo como calendario."
-        }
-        className={`min-h-toque inline-flex items-center border-2 border-tinta px-3
-                    text-menudo font-bold tracking-tight transition-colors
-                    disabled:opacity-40 ${
-                      calendario ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
-                    }`}
-      >
-        Calendario
-      </button>
-    </form>
   );
 }
 
@@ -537,4 +488,11 @@ function Vuelta({
       )}
     </a>
   );
+}
+
+/** El mismo semáforo que el tablero: dos días avisa, tres alarma. */
+function tonoDeEspera(dias: number): string {
+  if (dias >= 3) return "text-alerta";
+  if (dias >= 2) return "text-espera";
+  return "text-apagado";
 }

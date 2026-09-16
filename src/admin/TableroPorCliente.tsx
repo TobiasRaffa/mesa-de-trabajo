@@ -310,6 +310,19 @@ function Senales({ cliente }: { cliente: PorCliente }) {
   );
 }
 
+/**
+ * De qué color va la cuenta de días de nuestro lado.
+ *
+ * Dos días es el aviso y tres el problema. Son números y no porcentajes porque
+ * no hay plazo del que sacar un porcentaje: acá lo que se mide es cuánto hace
+ * que algo no se mueve.
+ */
+function tonoDeEspera(dias: number): string {
+  if (dias >= 3) return "text-alerta";
+  if (dias >= 2) return "text-espera";
+  return "text-apagado";
+}
+
 const TONOS = {
   alerta: "bg-alerta-tenue text-alerta",
   espera: "bg-espera-tenue text-espera",
@@ -391,6 +404,22 @@ function Trabajo({
         <span className="min-w-0 flex-1 truncate font-bold tracking-tight">
           {c.carpeta}
         </span>
+        {/* **Hace cuánto que lo tenemos nosotros.** No es un plazo —no
+            tenemos límite— pero es lo que dice si algo se está quedando
+            quieto. Chico y al lado del nombre; el color hace el trabajo. */}
+        {c.diasConNosotros !== null && (
+          <span
+            className={`cifras shrink-0 text-micro font-extrabold ${tonoDeEspera(
+              c.diasConNosotros
+            )}`}
+            title={`Lo tenemos nosotros hace ${c.diasConNosotros} ${
+              c.diasConNosotros === 1 ? "día" : "días"
+            }`}
+          >
+            {c.diasConNosotros}d
+          </span>
+        )}
+
         {/* **La fecha va en el renglón y no solo al apoyar el mouse.** Es lo
             primero que se pregunta de un trabajo abierto, y en un teléfono no
             hay dónde apoyar nada. */}
@@ -489,6 +518,12 @@ function Trabajo({
           )}
           <span className="text-apagado">
             {c.asignadaA ?? "sin asignar"}
+            {c.diasConNosotros !== null && (
+              <span className={`font-extrabold ${tonoDeEspera(c.diasConNosotros)}`}>
+                {" · "}
+                {c.diasConNosotros} {c.diasConNosotros === 1 ? "día" : "días"} con nosotros
+              </span>
+            )}
             {c.enJuego > 0 && ` · ${c.enJuego} ${unaPieza ? "pieza" : "piezas"}`}
             {c.vence && (
               <span

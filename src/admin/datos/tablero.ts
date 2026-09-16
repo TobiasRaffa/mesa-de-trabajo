@@ -22,7 +22,7 @@ import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { calcularVencimiento } from "@/lib/fechas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
-import { hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
+import { diasConNosotros, hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
 
 /**
  * De quién es el próximo movimiento.
@@ -116,6 +116,14 @@ export type CarpetaEnElTablero = {
   cancha: Cancha;
   /** Los días de revisión que corren acá, ya heredados. */
   diasQueCorren: number;
+  /**
+   * Hace cuántos días lo tenemos nosotros, contando la pieza más vieja.
+   *
+   * `null` cuando no hay nada de nuestro lado. No es un plazo —nosotros no
+   * tenemos límite— pero es lo que ordena el tablero: lo que más tiempo lleva
+   * quieto de nuestro lado va arriba.
+   */
+  diasConNosotros: number | null;
   /** Si el cliente ve esta carpeta en su portal. */
   visible: boolean;
   /** Si el cliente la ve como lista o como calendario. */
@@ -204,6 +212,15 @@ export async function elTablero(): Promise<Tablero> {
             // no es trabajo pendiente de nadie.
             const terminadas = piezas.filter((p) => !sigueEnJuego(p.estado)).length;
 
+            // Lo que más tiempo lleva de nuestro lado manda: es lo que hay que
+            // mirar primero cuando algo se está quedando quieto.
+            const ahora = new Date();
+            const esperas = piezas
+              .map((p) =>
+                diasConNosotros(p.estado, p.historia.at(-1)?.cuando, ahora)
+              )
+              .filter((d): d is number => d !== null);
+
             // Una carpeta **vacía** no está aprobada: no hay nada que aprobar.
             // Caía en «Aprobado» porque no esperaba nada de nadie, y con ese
             // título puesto se leía como un trabajo terminado. Lo que le falta
@@ -255,6 +272,7 @@ export async function elTablero(): Promise<Tablero> {
             return {
               cancha,
               diasQueCorren: plazoQueCorre(undefined, diasDeLaCarpeta, diasDelCliente),
+              diasConNosotros: esperas.length > 0 ? Math.max(...esperas) : null,
               enAgencia,
               sinEntregar,
               clienteId: cliente.id,
@@ -307,7 +325,14 @@ export async function elTablero(): Promise<Tablero> {
     // Vacía de verdad: sin piezas **y** sin carpetas adentro. Una que guarda
     // su trabajo un nivel más abajo también da cero piezas, y esconderla sería
     // esconder trabajo.
-    carpetas: porCliente.flat().filter((c) => c.piezas > 0 || c.subcarpetas > 0),
+    // **Primero lo que más tiempo lleva de nuestro lado.** Un tablero ordenado
+    // por como Drive devuelve las carpetas no dice nada; ordenado por cuánto
+    // hace que algo está quieto, lo primero que se ve es lo que se está
+    // atrasando. Lo que no está de nuestro lado va después, en su orden.
+    carpetas: porCliente
+      .flat()
+      .filter((c) => c.piezas > 0 || c.subcarpetas > 0)
+      .sort((a, b) => (b.diasConNosotros ?? -1) - (a.diasConNosotros ?? -1)),
     correoConfigurado: correoConfigurado(),
   };
 }

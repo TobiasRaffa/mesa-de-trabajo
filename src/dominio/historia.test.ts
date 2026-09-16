@@ -1,0 +1,68 @@
+import { describe, expect, it } from "vitest";
+import { cambiosPorVuelta, type HitoLeido } from "@/dominio/historia";
+
+const enviada = (detalle?: string): HitoLeido => ({ que: "revision_enviada", detalle });
+const entregada = (detalle?: string): HitoLeido => ({ que: "entregada", detalle });
+
+describe("qué pidió el cliente en cada vuelta", () => {
+  // Lo pedido no vive en la pieza: la lista se vacía al entregar la vuelta
+  // siguiente. Lo único que queda de la V1 es lo que se anotó al cerrarla, y
+  // sin esto «¿por qué la v2 salió así?» no tiene respuesta a los dos meses.
+  it("lee la forma de ahora, con la versión adelante", () => {
+    const r = cambiosPorVuelta([
+      entregada(),
+      enviada("V1: 1) cambiar el color  2) agrandar el logo"),
+      entregada("Responde a: 1) cambiar el color  2) agrandar el logo"),
+    ]);
+
+    expect(r).toEqual([
+      { version: 1, puntos: ["cambiar el color", "agrandar el logo"], abierta: false },
+    ]);
+  });
+
+  it("lee la forma vieja, donde quedó del lado de la entrega", () => {
+    // Piezas guardadas antes de que el envío lo anotara. Si esto no se leyera,
+    // toda la conversación de los trabajos que ya existen desaparecería.
+    const r = cambiosPorVuelta([
+      entregada(),
+      enviada(),
+      entregada("Responde a: 1) camiba el color"),
+    ]);
+
+    expect(r).toEqual([{ version: 1, puntos: ["camiba el color"], abierta: false }]);
+  });
+
+  it("separa vuelta por vuelta", () => {
+    const r = cambiosPorVuelta([
+      enviada("V1: 1) el color"),
+      entregada("Responde a: 1) el color"),
+      enviada("V2: 1) el tamaño  2) la tipografía"),
+      entregada("Responde a: 1) el tamaño  2) la tipografía"),
+    ]);
+
+    expect(r.map((v) => v.version)).toEqual([1, 2]);
+    expect(r[1].puntos).toEqual(["el tamaño", "la tipografía"]);
+  });
+
+  it("lo que está pidiendo ahora va al final, marcado abierto", () => {
+    // Mientras no lo mande, puede seguir escribiendo: la agencia lo ve pero no
+    // es una devolución cerrada.
+    const r = cambiosPorVuelta([enviada("V1: 1) el color")], ["y el fondo"], 2, false);
+
+    expect(r[1]).toEqual({ version: 2, puntos: ["y el fondo"], abierta: true });
+  });
+
+  it("una pieza sin vueltas no inventa ninguna", () => {
+    expect(cambiosPorVuelta([entregada()])).toEqual([]);
+  });
+
+  it("un detalle que no es una lista de cambios se ignora", () => {
+    // «Se borró el archivo y se subió otro» también lleva detalle, y no es
+    // algo que haya pedido el cliente.
+    const r = cambiosPorVuelta([
+      enviada(),
+      entregada("cualquier otra cosa escrita acá"),
+    ]);
+    expect(r).toEqual([]);
+  });
+});
