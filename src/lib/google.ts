@@ -256,6 +256,123 @@ async function pedirMetadatos(fileId: string): Promise<MetadatosArchivo> {
   return data;
 }
 
+/**
+ * Un comentario dejado en Drive, encima del archivo.
+ *
+ * Es lo que pasa de verdad: alguien abre el PDF en Drive y escribe ahí, con
+ * las herramientas de Google, señalando un pedazo del diseño. Eso existía y la
+ * aplicación no se enteraba, así que la mitad de las devoluciones vivía en un
+ * lado y la otra mitad en el otro.
+ */
+export type ComentarioDeDrive = {
+  id: string;
+  /** Quién lo escribió, como lo muestra Google. */
+  quien: string;
+  texto: string;
+  /** ISO. */
+  cuando: string;
+  /** Alguien lo marcó como resuelto en Drive. */
+  resuelto: boolean;
+  /** El pedazo del archivo sobre el que se escribió, si lo hay. */
+  sobre?: string;
+  /** Las respuestas, en orden. */
+  respuestas: Array<{ quien: string; texto: string; cuando: string }>;
+};
+
+/**
+ * Los comentarios de un archivo de Drive.
+ *
+ * **Se leen, no se escriben.** La aplicación no contesta comentarios: si hay
+ * que contestar, contesta una persona, en Drive o por el chat del portal.
+ *
+ * No se recuerdan: un comentario nuevo aparece en el momento en que alguien
+ * lo escribe, y esperar medio minuto para ver lo que el cliente acaba de
+ * dejar sería justo lo que esto viene a resolver.
+ *
+ * Nunca lanza: un archivo sin comentarios, uno que Google no deja leer, o
+ * Drive caído, devuelven una lista vacía. Esto acompaña a una pantalla que
+ * tiene otras cosas para mostrar.
+ */
+export async function comentariosDeArchivo(
+  fileId: string
+): Promise<ComentarioDeDrive[]> {
+  const r = await leerComentarios(fileId);
+  return r.ok ? r.comentarios : [];
+}
+
+/**
+ * Lo mismo, pero diciendo por qué falló.
+ *
+ * **«Ninguno» y «no me dejaron leer» se ven igual** desde afuera, y esa es la
+ * peor clase de silencio: la pantalla queda idéntica y nadie se entera de que
+ * el permiso está mal. Esta versión existe para el diagnóstico, que es el
+ * lugar donde esa diferencia se tiene que poder ver.
+ */
+export async function leerComentarios(
+  fileId: string
+): Promise<
+  { ok: true; comentarios: ComentarioDeDrive[] } | { ok: false; motivo: string }
+> {
+  try {
+    const token = await tokenDeGoogle();
+    // Drive v3 obliga a pedir los campos: sin esto contesta comentarios vacíos.
+    const fields = encodeURIComponent(
+      "comments(id,content,createdTime,resolved,author/displayName," +
+        "quotedFileContent/value,replies(content,createdTime,author/displayName))"
+    );
+    const url =
+      `${DRIVE}/files/${encodeURIComponent(fileId)}/comments` +
+      `?fields=${fields}&pageSize=100&includeDeleted=false`;
+
+    const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return {
+        ok: false,
+        motivo: String(data?.error?.message ?? `Google contestó ${r.status}`),
+      };
+    }
+
+    // Lo que contesta Google es tan poco confiable como cualquier cosa que
+    // llegue por la red: se lee campo por campo y lo que no esté se completa.
+    type Autor = { displayName?: unknown };
+    type Crudo = {
+      id?: unknown;
+      content?: unknown;
+      createdTime?: unknown;
+      resolved?: unknown;
+      author?: Autor;
+      quotedFileContent?: { value?: unknown };
+      replies?: unknown;
+    };
+
+    const quienEs = (a?: Autor) =>
+      typeof a?.displayName === "string" && a.displayName ? a.displayName : "Alguien";
+
+    const crudos: Crudo[] = Array.isArray(data?.comments) ? data.comments : [];
+    const comentarios = crudos.map((x) => ({
+      id: String(x.id ?? ""),
+      quien: quienEs(x.author),
+      texto: String(x.content ?? ""),
+      cuando: String(x.createdTime ?? ""),
+      resuelto: x.resolved === true,
+      sobre:
+        typeof x.quotedFileContent?.value === "string" && x.quotedFileContent.value
+          ? x.quotedFileContent.value
+          : undefined,
+      respuestas: (Array.isArray(x.replies) ? (x.replies as Crudo[]) : []).map((r2) => ({
+        quien: quienEs(r2.author),
+        texto: String(r2.content ?? ""),
+        cuando: String(r2.createdTime ?? ""),
+      })),
+    }));
+
+    return { ok: true, comentarios };
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : "Drive no contestó." };
+  }
+}
+
 // Trae los bytes de una miniatura.
 //
 // Tiene que pasar por acá y no ir directo al navegador: Google devuelve 429

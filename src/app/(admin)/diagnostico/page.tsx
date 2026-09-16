@@ -8,11 +8,34 @@ import { clientesHabilitados } from "@/lib/clientes";
 // Acá sí corresponde preguntarle a Drive directamente: esta pantalla existe
 // para mirar la conexión con Drive, no el estado del trabajo.
 // eslint-disable-next-line no-restricted-imports
-import { listarCarpeta, type ArchivoDrive } from "@/lib/google";
+import { leerComentarios, listarCarpeta, type ArchivoDrive } from "@/lib/google";
 
 // Sin esto Next intentaría resolver la página al compilar, y queremos
 // que pregunte a Drive cada vez que alguien entra.
 export const dynamic = "force-dynamic";
+
+const ES_CARPETA = "application/vnd.google-apps.folder";
+
+/** El primer archivo que no sea una carpeta, mirando un nivel hacia adentro. */
+async function primerArchivo(
+  archivos: ArchivoDrive[] | null
+): Promise<ArchivoDrive | null> {
+  if (!archivos) return null;
+
+  const suelto = archivos.find((a) => a.mimeType !== ES_CARPETA);
+  if (suelto) return suelto;
+
+  for (const carpeta of archivos.filter((a) => a.mimeType === ES_CARPETA)) {
+    try {
+      const adentro = await listarCarpeta(carpeta.id);
+      const hay = adentro.find((a) => a.mimeType !== ES_CARPETA);
+      if (hay) return hay;
+    } catch {
+      // Una carpeta que no se deja leer no es motivo para no probar la próxima.
+    }
+  }
+  return null;
+}
 
 export default async function Diagnostico() {
   const faltantes = variablesFaltantes();
@@ -26,6 +49,27 @@ export default async function Diagnostico() {
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
+  }
+
+  // **¿El robot puede leer los comentarios de Drive?**
+  //
+  // Se pregunta acá porque en el resto de la aplicación no se distingue: una
+  // pieza sin comentarios y una pieza cuyos comentarios Google no nos deja
+  // leer se ven exactamente igual —vacías—, y ese silencio es el que hace que
+  // un permiso mal puesto pase meses sin que nadie lo note.
+  let comentarios: { archivo: string; ok: boolean; detalle: string } | null = null;
+  // El primer archivo de verdad que se encuentre. La carpeta de un cliente
+  // suele tener solo carpetas adentro, así que hay que bajar un escalón.
+  const primero = await primerArchivo(archivos);
+  if (primero) {
+    const r = await leerComentarios(primero.id);
+    comentarios = {
+      archivo: primero.name,
+      ok: r.ok,
+      detalle: r.ok
+        ? `${r.comentarios.length} ${r.comentarios.length === 1 ? "comentario" : "comentarios"}`
+        : r.motivo,
+    };
   }
 
   const anduvo = faltantes.length === 0 && !error;
@@ -99,6 +143,34 @@ export default async function Diagnostico() {
           </p>
           <p className="mt-1 text-sm text-emerald-800">
             La cuenta de servicio, las variables de entorno y la conexión con Drive funcionan.
+          </p>
+        </div>
+      )}
+
+      {comentarios && (
+        <div
+          className={`mt-4 border-l-2 p-5 ${
+            comentarios.ok
+              ? "border-emerald-600 bg-emerald-50"
+              : "border-red-600 bg-red-50"
+          }`}
+        >
+          <p
+            className={`font-semibold ${
+              comentarios.ok ? "text-emerald-900" : "text-red-900"
+            }`}
+          >
+            {comentarios.ok
+              ? `Comentarios de Drive: se pueden leer (${comentarios.detalle} en «${comentarios.archivo}»).`
+              : `Comentarios de Drive: no se pudieron leer. ${comentarios.detalle}`}
+          </p>
+          <p
+            className={`mt-1 text-sm ${
+              comentarios.ok ? "text-emerald-800" : "text-red-800"
+            }`}
+          >
+            Es lo que hace que lo escrito encima de un PDF en Drive aparezca en
+            la pantalla de la carpeta, junto a lo que el cliente marcó en el portal.
           </p>
         </div>
       )}

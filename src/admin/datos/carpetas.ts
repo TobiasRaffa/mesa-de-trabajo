@@ -8,7 +8,7 @@
 import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustes";
 import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
-import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
+import { comentariosDeArchivo, datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { plazosDe } from "@/lib/plazos";
 import { responsablesDe } from "@/lib/responsables";
@@ -73,12 +73,28 @@ export async function carpetaParaFechar(
     estadosDe(carpetaId, identidades),
   ]);
 
+  // **Lo que escribieron encima del archivo, en Drive.**
+  //
+  // Pasa de verdad: alguien abre el PDF en Drive y comenta ahí, señalando un
+  // pedazo del diseño. Eso existía y la aplicación no se enteraba, así que la
+  // mitad de la devolución vivía en un lado y la mitad en el otro, y la
+  // pantalla que dice «qué pasó con cada pieza» contaba la mitad.
+  //
+  // Se piden en paralelo y nunca rompen: una carpeta con diez piezas son diez
+  // preguntas a Drive, y ninguna de ellas puede tumbar la pantalla.
+  const comentarios = await Promise.all(
+    agrupadas.map((pieza) =>
+      comentariosDeArchivo(pieza.versiones[pieza.versiones.length - 1].archivo.id)
+    )
+  );
+
   return {
     cliente,
     historia: agrupadas.map((pieza, i) => ({
       ...estados[identidades[i]],
       id: identidades[i],
       nombre: pieza.titulo,
+      comentarios: comentarios[i],
     })),
     carpeta: {
       id: carpetaId,

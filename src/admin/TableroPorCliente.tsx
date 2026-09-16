@@ -126,16 +126,23 @@ export function TableroPorCliente({ carpetas }: { carpetas: CarpetaEnElTablero[]
 
   const aLaVista = filtrar(carpetas, filtros);
 
-  if (carpetas.length === 0) {
-    return (
-      <p className="mt-8 border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-normal text-espera">
-        No hay carpetas de trabajo en ningún cliente habilitado.
-      </p>
-    );
-  }
-
   return (
     <>
+      {/*
+        **El tablero se dibuja aunque no haya nada.** Antes, sin un solo
+        trabajo, la pantalla entera se reemplazaba por un cartel: se iban las
+        cuatro columnas, los filtros y cualquier idea de dónde estaba uno
+        parado. Un tablero vacío sigue siendo el tablero —cuatro canchas que
+        dicen «nada por acá»— y eso es una pantalla que se entiende; el cartel
+        solo era un error que no lo era.
+      */}
+      {carpetas.length === 0 && (
+        <p className="mt-6 border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-normal text-espera">
+          Todavía no hay trabajos. Aparecen solos cuando subís archivos a una
+          carpeta adentro de la carpeta de un cliente, en Drive.
+        </p>
+      )}
+
       <FiltrosDelTablero
         carpetas={carpetas}
         filtros={filtros}

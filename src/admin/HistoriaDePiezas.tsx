@@ -10,6 +10,7 @@
 
 import { EN_PALABRAS, type EstadoDePieza } from "@/lib/piezas";
 import { Estado } from "@/ui/Estado";
+import type { ComentarioDeDrive } from "@/lib/google";
 
 const cuando = new Intl.DateTimeFormat("es-AR", {
   day: "numeric",
@@ -27,10 +28,14 @@ function enPalabras(iso: string): string {
 export type PiezaConHistoria = EstadoDePieza & {
   id: string;
   nombre: string;
+  /** Lo que escribieron encima del archivo, en Drive. */
+  comentarios: ComentarioDeDrive[];
 };
 
 export function HistoriaDePiezas({ piezas }: { piezas: PiezaConHistoria[] }) {
-  const conAlgo = piezas.filter((p) => p.historia.length > 0);
+  // Una pieza sin historia pero con comentarios en Drive sí tiene algo que
+  // contar: alguien escribió sobre ella aunque nadie haya tocado un botón acá.
+  const conAlgo = piezas.filter((p) => p.historia.length > 0 || p.comentarios.length > 0);
 
   return (
     <section className="mt-12">
@@ -51,6 +56,49 @@ export function HistoriaDePiezas({ piezas }: { piezas: PiezaConHistoria[] }) {
                   </span>
                 )}
               </div>
+
+              {/*
+                **Los comentarios de Drive van con lo demás, no en otra
+                pantalla.** Una devolución partida en dos lugares —lo que el
+                cliente marcó en el portal y lo que alguien escribió encima del
+                PDF— es una devolución que se lee a medias. Van arriba de la
+                historia porque son lo que hay que hacer, no lo que ya pasó.
+              */}
+              {pieza.comentarios.length > 0 && (
+                <div className="mt-3 border-l-4 border-espera-borde bg-espera-tenue py-2 pl-4">
+                  <p className="text-micro font-extrabold uppercase tracking-widest text-espera">
+                    {pieza.comentarios.length === 1
+                      ? "1 comentario en Drive"
+                      : `${pieza.comentarios.length} comentarios en Drive`}
+                  </p>
+                  <ul className="mt-1.5 flex flex-col gap-2">
+                    {pieza.comentarios.map((c) => (
+                      <li key={c.id} className="text-menudo text-tinta-suave">
+                        <span className="font-bold">{c.quien}</span>
+                        <span className="text-apagado"> · {enPalabras(c.cuando)}</span>
+                        {c.resuelto && (
+                          <span className="ml-2 text-micro font-extrabold uppercase tracking-wider text-apagado">
+                            resuelto
+                          </span>
+                        )}
+                        {c.sobre && (
+                          <span className="mt-0.5 block border-l-2 border-linea pl-2 text-micro text-apagado">
+                            {c.sobre}
+                          </span>
+                        )}
+                        <span className="mt-0.5 block whitespace-pre-wrap">{c.texto}</span>
+                        {c.respuestas.map((r, i) => (
+                          <span key={i} className="mt-1 block pl-4 text-micro">
+                            <span className="font-bold">{r.quien}</span>
+                            <span className="text-apagado"> · {enPalabras(r.cuando)}</span>
+                            <span className="block whitespace-pre-wrap">{r.texto}</span>
+                          </span>
+                        ))}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {pieza.cambios.length > 0 && (
                 <ol className="mt-3 flex flex-col gap-1.5 border-l-4 border-acento bg-acento-tenue/40 py-2 pl-4">
