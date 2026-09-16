@@ -10,8 +10,23 @@
 // Final» desde el principio da a entender que va a haber cambios, y muchas
 // veces al cliente le gusta la primera y se termina ahí. El camino se dibuja a
 // medida que se recorre.
+//
+// **Y se dibuja con las versiones que existen, no con las rondas.** Cuando el
+// cliente manda sus cambios la ronda avanza en el acto, pero la versión
+// siguiente todavía no está hecha: el camino decía «V3» encima de un archivo
+// que era la V2. La versión la marca el archivo, no la intención.
 
 type Props = {
+  /**
+   * Cuántas versiones existen de verdad. La que se está mirando es la última.
+   *
+   * **No sale de la ronda.** Cuando el cliente manda sus cambios, la ronda
+   * avanza en el acto —es la cuenta de las vueltas pedidas— pero la versión
+   * siguiente todavía no existe: alguien tiene que hacerla y subirla. Con la
+   * ronda mandando, el cliente veía «V3» encima de un archivo que era la V2, y
+   * la V3 no estaba en ningún lado.
+   */
+  versiones: number;
   ronda: number;
   rondasIncluidas: number;
   rondasExtra: number;
@@ -31,19 +46,28 @@ function nombreDelPaso(n: number, rondasIncluidas: number) {
   return n <= rondasIncluidas ? version : `${version} · adicional`;
 }
 
-export function pasoActual(ronda: number, rondasIncluidas: number, aprobada: boolean) {
-  return aprobada ? "Aprobada" : nombreDelPaso(ronda, rondasIncluidas);
+export function pasoActual(
+  versiones: number,
+  rondasIncluidas: number,
+  aprobada: boolean
+) {
+  // La versión que hay, no la que se va a hacer. Ver abajo por qué importa.
+  return aprobada ? "Aprobada" : nombreDelPaso(Math.max(versiones, 1) - 1, rondasIncluidas);
 }
 
 export function Seguimiento({
+  versiones,
   ronda,
   rondasIncluidas,
   rondasExtra,
   aprobada,
   compacto = false,
 }: Props) {
+  // Las rondas siguen contando las vueltas pedidas: de eso depende si al
+  // cliente le quedan cambios incluidos. Lo que cambia es qué se muestra.
   const quedan = rondasIncluidas + rondasExtra - ronda;
-  const actual = pasoActual(ronda, rondasIncluidas, aprobada);
+  const hasta = Math.max(versiones, 1) - 1;
+  const actual = pasoActual(versiones, rondasIncluidas, aprobada);
 
   if (compacto) {
     return (
@@ -57,7 +81,7 @@ export function Seguimiento({
     );
   }
 
-  const anteriores = Array.from({ length: ronda }, (_, i) =>
+  const anteriores = Array.from({ length: hasta }, (_, i) =>
     nombreDelPaso(i, rondasIncluidas)
   );
 

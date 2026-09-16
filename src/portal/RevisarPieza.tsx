@@ -176,7 +176,11 @@ export function RevisarPieza({
 
           <div className="flex items-center gap-3">
             <span className="hidden bg-white/15 px-3 py-1.5 text-micro font-extrabold uppercase tracking-wider sm:block">
-              {pasoActual(pieza.ronda, pieza.rondasIncluidas, pieza.estado === "final")}
+              {pasoActual(
+                pieza.versiones.length,
+                pieza.rondasIncluidas,
+                pieza.estado === "final"
+              )}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -281,6 +285,7 @@ export function RevisarPieza({
             {/* Las decisiones */}
             <div className="flex flex-col gap-5">
               <Seguimiento
+                versiones={pieza.versiones.length}
                 ronda={pieza.ronda}
                 rondasIncluidas={pieza.rondasIncluidas}
                 rondasExtra={pieza.rondasExtra}
