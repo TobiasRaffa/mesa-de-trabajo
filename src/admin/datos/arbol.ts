@@ -36,7 +36,7 @@ import {
 } from "@/lib/responsables";
 import { diaDe, publicacionesDe } from "@/lib/publicaciones";
 import { calcularVencimiento } from "@/lib/fechas";
-import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
+import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
 import { sigueEnJuego, type Estado } from "@/dominio/pieza";
 
 export type NodoCarpeta = {
@@ -210,10 +210,7 @@ async function subcarpetasDeCarpeta(
       }
 
       const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpeta.id));
-      const identidades = agrupadas.map((p) =>
-        identidadDePieza(carpeta.id, p.versiones[0].archivo.name)
-      );
-      const estados = await estadosDe(carpeta.id, identidades);
+      const estados = await estadosDe(carpeta.id, conSusArchivos(carpeta.id, agrupadas));
 
       const suyas = Object.values(estados);
       const terminadas = suyas.filter((p) => !sigueEnJuego(p.estado)).length;
@@ -243,12 +240,11 @@ async function archivosDeCarpeta(
   // el plazo, quién lo lleva— va por la identidad de la pieza y no por el
   // archivo: si no, subir una vuelta nueva lo dejaba todo guardado bajo un
   // nombre que ya nadie pregunta.
-  const identidades = agrupadas.map((p) =>
-    identidadDePieza(carpetaId, p.versiones[0].archivo.name)
-  );
+  const conArchivos = conSusArchivos(carpetaId, agrupadas);
+  const identidades = conArchivos.map((p) => p.id);
 
   const [estados, dias, propios, responsables, escondidos] = await Promise.all([
-    estadosDe(carpetaId, identidades),
+    estadosDe(carpetaId, conArchivos),
     publicacionesDe(identidades),
     plazosDe(identidades),
     responsablesDe(identidades),

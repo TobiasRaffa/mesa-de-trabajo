@@ -17,7 +17,7 @@
 
 import { cookies } from "next/headers";
 import { aplicar, type Evento } from "@/dominio/pieza";
-import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
+import { agruparVersiones, conSusArchivos, identidadDePieza } from "@/lib/versiones";
 import { entroAlCliente } from "@/lib/acceso";
 import { avisar } from "@/lib/avisar";
 import { clienteDeCarpeta, esCarpetaDelCliente } from "@/lib/carpetas";
@@ -294,10 +294,11 @@ export async function enviarRevision(
   const donde = await quienEntro(carpetaId);
   if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
-  let piezas: string[];
+  let piezas: Array<{ id: string; archivos: string[] }>;
   try {
-    piezas = agruparVersiones(await piezasDeLaCarpeta(carpetaId)).map((p) =>
-      identidadDePieza(carpetaId, p.versiones[0].archivo.name)
+    piezas = conSusArchivos(
+      carpetaId,
+      agruparVersiones(await piezasDeLaCarpeta(carpetaId))
     );
   } catch {
     return { ok: false, motivo: "No pudimos leer la carpeta. Probá de nuevo." };

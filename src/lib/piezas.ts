@@ -32,7 +32,8 @@ export type Hito =
   | "revision_enviada"
   | "reabierta"
   | "movida_a_finales"
-  | "no_se_pudo_mover";
+  | "no_se_pudo_mover"
+  | "archivo_reemplazado";
 
 export type EntradaDeHistoria = {
   id: string;
@@ -73,6 +74,25 @@ export type EstadoDePieza = {
    * carpeta de origen.
    */
   archivoMudado?: string;
+  /**
+   * Los archivos de Drive que eran esta pieza la última vez que se la miró.
+   *
+   * **Es lo que distingue una vuelta nueva de un archivo nuevo.** La pieza se
+   * llama por su nombre —«stickers»—, porque subir la V2 no puede borrar lo
+   * anotado sobre la V1. Pero entonces borrar el archivo y subir otro con el
+   * mismo nombre heredaba una vida ajena: el archivo nuevo nacía aprobado, con
+   * las rondas gastadas y los cambios de otro. Dentro de un año, peor.
+   *
+   * La diferencia está acá. Subir la V2 **agrega** un archivo y deja la V1 en
+   * su lugar: algo de lo conocido sigue estando, es la misma pieza. Borrar y
+   * volver a subir no deja nada: ninguno de los archivos conocidos existe, y
+   * eso ya no es la misma pieza aunque se llame igual.
+   *
+   * Vacío en las piezas guardadas antes de que esto existiera. La primera vez
+   * que se las mira se anota lo que hay y no se decide nada: no se puede
+   * inventar un pasado que nadie guardó.
+   */
+  archivos?: string[];
   historia: EntradaDeHistoria[];
 };
 
@@ -153,20 +173,101 @@ function normalizar(v: EstadoDePieza): EstadoDePieza {
     entregadaEl: typeof crudo.entregadaEl === "string" ? crudo.entregadaEl : undefined,
     archivoMudado:
       typeof crudo.archivoMudado === "string" ? crudo.archivoMudado : undefined,
+    archivos: Array.isArray(crudo.archivos)
+      ? crudo.archivos.filter((a): a is string => typeof a === "string")
+      : undefined,
     historia: Array.isArray(crudo.historia) ? crudo.historia.filter(esHito) : [],
   };
 }
 
 const almacen = coleccion<EstadoDePieza>("piezas", esPieza);
 
-/** El estado de varias piezas de una carpeta. Las que nadie tocó vienen a nuevo. */
+/**
+ * El estado de varias piezas de una carpeta. Las que nadie tocó vienen a nuevo.
+ *
+ * **Pide los archivos de cada pieza y no solo su nombre**, a propósito: es lo
+ * único con lo que se puede distinguir una vuelta nueva de un archivo nuevo
+ * que se llama igual, y pedirlo en la firma hace que ninguna pantalla pueda
+ * olvidarse de preguntarlo. No compila sin decirlo.
+ *
+ * Cuando ninguno de los archivos conocidos sigue en Drive, la pieza **vuelve a
+ * empezar**: el archivo que estaba se borró y el que hay ahora es otro, aunque
+ * se llame igual. No se borra nada —la historia sigue entera y se le anota el
+ * reemplazo—, pero el estado, las rondas y los cambios arrancan de cero. Sin
+ * esto, un archivo subido un año después nacía aprobado.
+ */
 export async function estadosDe(
   carpetaId: string,
-  piezas: string[]
+  piezas: Array<{ id: string; archivos: string[] }>
 ): Promise<Record<string, EstadoDePieza>> {
   const todo = await almacen.todo();
-  return Object.fromEntries(
-    piezas.map((id) => [id, todo[id] ? normalizar(todo[id]) : sinTocar(carpetaId)])
+
+  const salida: Record<string, EstadoDePieza> = {};
+  const aGuardar: Record<string, EstadoDePieza> = {};
+
+  for (const { id, archivos } of piezas) {
+    const guardada = todo[id] ? normalizar(todo[id]) : null;
+
+    if (!guardada) {
+      salida[id] = sinTocar(carpetaId);
+      continue;
+    }
+
+    const conocidos = guardada.archivos ?? [];
+
+    // Guardada antes de que esto existiera: se anota lo que hay y no se decide
+    // nada. Inventar un pasado que nadie guardó sería peor que no tenerlo.
+    if (conocidos.length === 0) {
+      salida[id] = { ...guardada, archivos };
+      aGuardar[id] = salida[id];
+      continue;
+    }
+
+    if (!conocidos.some((a) => archivos.includes(a))) {
+      salida[id] = vuelveAEmpezar(guardada, carpetaId, archivos);
+      aGuardar[id] = salida[id];
+      continue;
+    }
+
+    // Sigue siendo la misma pieza. Si aparecieron o se fueron vueltas, se
+    // anota lo que hay ahora: es lo que se va a comparar la próxima vez.
+    if (distintos(conocidos, archivos)) {
+      salida[id] = { ...guardada, archivos };
+      aGuardar[id] = salida[id];
+    } else {
+      salida[id] = guardada;
+    }
+  }
+
+  // Se escribe solo cuando de verdad cambió algo, y todo junto.
+  if (Object.keys(aGuardar).length > 0) await almacen.guardarVarios(aGuardar);
+
+  return salida;
+}
+
+const distintos = (a: string[], b: string[]) =>
+  a.length !== b.length || a.some((x) => !b.includes(x));
+
+/**
+ * La pieza empieza de nuevo, con su historia intacta.
+ *
+ * Se guarda todo lo que pasó —acá no se borra nada— y se le anota encima que
+ * el archivo se reemplazó. Lo que arranca de cero es lo que describe al
+ * archivo que ya no está: el estado, las rondas, los cambios pedidos.
+ */
+function vuelveAEmpezar(
+  vieja: EstadoDePieza,
+  carpetaId: string,
+  archivos: string[]
+): EstadoDePieza {
+  return anotar(
+    {
+      ...sinTocar(carpetaId),
+      historia: vieja.historia,
+      archivos,
+    },
+    "archivo_reemplazado",
+    "La aplicación"
   );
 }
 
@@ -235,6 +336,7 @@ export const EN_PALABRAS: Record<Hito, string> = {
   no_se_pudo_mover: "No se pudo mover a «Entregas finales»",
   devuelta_a_su_carpeta: "Volvió a su carpeta de trabajo",
   no_se_pudo_devolver: "No se pudo sacar de «Entregas finales»",
+  archivo_reemplazado: "Se borró el archivo y se subió otro con el mismo nombre: la pieza vuelve a empezar",
 };
 
 // ---------------------------------------------------------------------------

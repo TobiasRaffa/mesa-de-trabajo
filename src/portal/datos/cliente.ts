@@ -25,7 +25,7 @@ import {
 } from "@/lib/ajustes";
 import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
-import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
+import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
 import { clientePorId } from "@/lib/clientes";
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 
@@ -206,14 +206,13 @@ export async function portalDelCliente(
       // Todo lo anotado sobre el trabajo va por la identidad de la pieza, no
       // por el archivo: subir una vuelta nueva no puede hacer desaparecer los
       // cambios que el cliente pidió ni la fecha en que sale publicada.
-      const identidades = agrupadas.map((p) =>
-        identidadDePieza(carpeta.id, p.versiones[0].archivo.name)
-      );
+      const conArchivos = conSusArchivos(carpeta.id, agrupadas);
+      const identidades = conArchivos.map((p) => p.id);
       const entregas = esCarpetaDeEntregas(carpeta.name);
 
       const [dias, guardados] = await Promise.all([
         publicacionesDe(identidades),
-        estadosDe(carpeta.id, identidades),
+        estadosDe(carpeta.id, conArchivos),
       ]);
 
       // En «Entregas finales» todo está aprobado por definición: llegó ahí

@@ -68,7 +68,7 @@ import {
  * es donde se negocia de verdad.
  */
 const RONDAS_INCLUIDAS = 2;
-import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
+import { agruparVersiones, conSusArchivos, identidadDePieza } from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
 import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
 import { correoValido } from "@/lib/equipo";
@@ -490,10 +490,7 @@ export async function entregarCarpeta(
     return { ok: false, motivo: "No pude leer la carpeta en Drive." };
   }
 
-  const identidades = agrupadas.map((p) =>
-    identidadDePieza(carpetaId, p.versiones[0].archivo.name)
-  );
-  const estados = await estadosDe(carpetaId, identidades);
+  const estados = await estadosDe(carpetaId, conSusArchivos(carpetaId, agrupadas));
 
   const ahora = new Date().toISOString();
   // Quién lo hizo. Hoy dice «El equipo»; el día que haya login dirá el nombre

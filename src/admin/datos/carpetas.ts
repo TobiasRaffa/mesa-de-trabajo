@@ -15,7 +15,7 @@ import { responsablesDe } from "@/lib/responsables";
 import { DIAS_POR_OMISION } from "@/lib/dias";
 import { publicacionesDe, type DiaSuelto } from "@/lib/publicaciones";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
-import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
+import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
 
 // ---------------------------------------------------------------------------
 
@@ -65,12 +65,11 @@ export async function carpetaParaFechar(
   // porque la historia de una pieza aprobada es justamente la que más se
   // consulta. Lo nuevo no se muda, así que esto solo alcanza a lo de antes.
   const agrupadas = agruparVersiones(archivos);
-  const identidades = agrupadas.map((p) =>
-    identidadDePieza(carpetaId, p.versiones[0].archivo.name)
-  );
+  const conArchivos = conSusArchivos(carpetaId, agrupadas);
+  const identidades = conArchivos.map((p) => p.id);
   const [dias, estados] = await Promise.all([
     publicacionesDe(identidades),
-    estadosDe(carpetaId, identidades),
+    estadosDe(carpetaId, conArchivos),
   ]);
 
   // **Lo que escribieron encima del archivo, en Drive.**

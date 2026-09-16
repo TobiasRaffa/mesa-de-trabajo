@@ -161,3 +161,22 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
 export function identidadDePieza(carpetaId: string, nombreDelArchivo: string): string {
   return `${carpetaId}::${leerNombre(nombreDelArchivo).base}`;
 }
+
+/**
+ * Las piezas de una carpeta, cada una con los archivos de Drive que la forman.
+ *
+ * Es lo que hay que pasarle a `estadosDe`, y existe como una sola función
+ * porque el cálculo tiene dos mitades que **tienen que coincidir**: el nombre
+ * de la pieza sale de su primera vuelta, y los archivos son todas. Escrito
+ * seis veces —una por pantalla—, la séptima se olvida de una mitad, y esa
+ * mitad es la que decide si una pieza vuelve a empezar.
+ */
+export function conSusArchivos<T extends ConNombre & { id: string }>(
+  carpetaId: string,
+  agrupadas: Array<Agrupado<T>>
+): Array<{ id: string; archivos: string[] }> {
+  return agrupadas.map((p) => ({
+    id: identidadDePieza(carpetaId, p.versiones[0].archivo.name),
+    archivos: p.versiones.map((v) => v.archivo.id),
+  }));
+}

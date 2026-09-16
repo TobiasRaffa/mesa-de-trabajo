@@ -21,7 +21,7 @@ import { subcarpetasDe } from "@/lib/google";
 import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { calcularVencimiento } from "@/lib/fechas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
-import { agruparVersiones, identidadDePieza } from "@/lib/versiones";
+import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
 import { sigueEnJuego } from "@/dominio/pieza";
 
 /**
@@ -136,11 +136,10 @@ export async function elTablero(): Promise<Tablero> {
               ]);
 
             const agrupadas = agruparVersiones(archivos);
-            const identidades = agrupadas.map((p) =>
-              identidadDePieza(carpeta.id, p.versiones[0].archivo.name)
-            );
+            const conArchivos = conSusArchivos(carpeta.id, agrupadas);
+            const identidades = conArchivos.map((p) => p.id);
             const [estados, propios] = await Promise.all([
-              estadosDe(carpeta.id, identidades),
+              estadosDe(carpeta.id, conArchivos),
               plazosDe(identidades),
             ]);
 

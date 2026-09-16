@@ -83,9 +83,9 @@ function driveCon(
       modifiedTime: "2026-09-01T10:00:00Z",
     }))
   );
-  vi.mocked(estadosDe).mockImplementation(async (_carpeta: string, ids: string[]) =>
+  vi.mocked(estadosDe).mockImplementation(async (_carpeta, piezas) =>
     Object.fromEntries(
-      ids.map((id) => [
+      piezas.map(({ id }) => [
         id,
         {
           carpetaId: _carpeta,
@@ -259,9 +259,9 @@ describe("subir una vuelta nueva no borra lo anotado", () => {
     // vuelve a poner después de cada `driveCon` porque ese ayudante también
     // repone los estados: el almacén no se borra cuando Drive cambia.
     const loGuardado = () =>
-      vi.mocked(estadosDe).mockImplementation(async (carpeta: string, ids: string[]) =>
+      vi.mocked(estadosDe).mockImplementation(async (carpeta, piezas) =>
         Object.fromEntries(
-          ids.map((id) => [
+          piezas.map(({ id }) => [
             id,
             {
               carpetaId: carpeta,
@@ -378,9 +378,9 @@ describe("entregas finales", () => {
 describe("el cliente ve lo entregado y nada más", () => {
   /** Arma un Drive y fija en qué estado está cada pieza. */
   function conEstados(estados: Record<string, Partial<EstadoDePieza>>) {
-    vi.mocked(estadosDe).mockImplementation(async (carpeta: string, ids: string[]) =>
+    vi.mocked(estadosDe).mockImplementation(async (carpeta, piezas) =>
       Object.fromEntries(
-        ids.map((id) => [
+        piezas.map(({ id }) => [
           id,
           {
             carpetaId: carpeta,
