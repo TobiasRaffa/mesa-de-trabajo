@@ -469,6 +469,34 @@ describe("las puertas", () => {
  * se nota mirando la pantalla: sigue diciendo «El equipo», que es exactamente
  * lo que decía antes.
  */
+describe("las reglas del negocio no se escriben dos veces", () => {
+  it("cuántas rondas entran lo dice el dominio y nadie más", () => {
+    // Estuvo escrito en cinco lugares: las acciones de gestión, dos veces las
+    // del portal, lo que el portal le muestra al cliente, y el dominio. El día
+    // que se pueda poner por cliente —que es donde se negocia de verdad—
+    // cambiar una y olvidar las otras deja al portal dejando pedir un cambio
+    // que el servidor rechaza, o al revés. Y no se nota: no falla nada, le
+    // falla al cliente.
+    const culpables = SIN_PRUEBAS.filter((f) => {
+      if (relativo(f) === "src/dominio/pieza.ts") return false;
+      return readFileSync(f, "utf8")
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"))
+        .some(
+          (l) =>
+            /rondasIncluidas\s*[:=]\s*\d/.test(l) || /RONDAS_INCLUIDAS\s*=\s*\d/.test(l)
+        );
+    }).map(relativo);
+
+    expect(
+      culpables,
+      "Estos archivos escriben a mano cuántas rondas entran. Tiene que salir de " +
+        "RONDAS_INCLUIDAS_POR_DEFECTO en @/dominio/pieza, que es el único lugar " +
+        "que va a cambiar el día que se negocie por cliente."
+    ).toEqual([]);
+  });
+});
+
 describe("quién hizo cada cosa", () => {
   it("ninguna acción escribe el autor a mano", () => {
     const culpables = SIN_PRUEBAS.filter((f) => {

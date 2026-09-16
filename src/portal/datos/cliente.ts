@@ -26,6 +26,7 @@ import {
 import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { RONDAS_INCLUIDAS_POR_DEFECTO } from "@/dominio/pieza";
 import { clientePorId } from "@/lib/clientes";
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 
@@ -84,8 +85,14 @@ export type PortalDeCliente = {
   rondasExtra: number;
 };
 
-/** Lo que se le promete al cliente por defecto mientras no exista el panel. */
-const RONDAS_INCLUIDAS = 2;
+/**
+ * Lo que se le promete al cliente por defecto mientras no exista el panel.
+ *
+ * Sale del dominio: es la misma cuenta con la que el servidor decide si un
+ * pedido de cambios entra o no. Escrita acá otra vez, la pantalla podía
+ * prometer una ronda que la acción iba a rechazar.
+ */
+const RONDAS_INCLUIDAS = RONDAS_INCLUIDAS_POR_DEFECTO;
 
 /** Solo se muestran las imágenes y los PDF: el resto no se puede revisar. */
 const MOSTRABLES = /^(image\/|application\/pdf$)/;

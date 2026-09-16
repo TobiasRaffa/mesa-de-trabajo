@@ -454,3 +454,47 @@ describe("hay algo para entregar", () => {
     expect(hayAlgoParaEntregar("en_curso", 0, 0)).toBe(false);
   });
 });
+
+describe("cerrar la revisión no toca lo que no cambió", () => {
+  // El dominio contesta que sí para una aprobada o una que espera revisión
+  // adicional, y devuelve **la misma pieza**. Quien llama tiene que poder
+  // notarlo: si lo toma como «se envió», marca enviada una pieza que no mandó
+  // nada, y la que esperaba la revisión adicional queda sin salida —la agencia
+  // se la habilita y el cliente no tiene con qué usarla—.
+  it("una pieza esperando revisión adicional vuelve igual", () => {
+    const antes: Pieza = {
+      estado: "extra_pedida",
+      ronda: 2,
+      rondasIncluidas: 2,
+      rondasExtra: 0,
+    };
+    const r = aplicar(antes, { tipo: "cerrar_revision" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.pieza.estado).toBe(antes.estado);
+      expect(r.pieza.ronda).toBe(antes.ronda);
+    }
+  });
+
+  it("una aprobada vuelve igual", () => {
+    const antes: Pieza = { estado: "final", ronda: 1, rondasIncluidas: 2, rondasExtra: 0 };
+    const r = aplicar(antes, { tipo: "cerrar_revision" });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.pieza.estado).toBe("final");
+  });
+
+  it("una con cambios marcados sí cambia: vuelve al equipo y gasta una vuelta", () => {
+    const antes: Pieza = {
+      estado: "cambios_marcados",
+      ronda: 0,
+      rondasIncluidas: 2,
+      rondasExtra: 0,
+    };
+    const r = aplicar(antes, { tipo: "cerrar_revision" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.pieza.estado).toBe("en_curso");
+      expect(r.pieza.ronda).toBe(1);
+    }
+  });
+});

@@ -471,13 +471,22 @@ function Revision({
             )}
           </button>
 
+          {/* Apagado hasta que haya algo aprobado, **y diciendo por qué**. Un
+              botón gris sin explicación se lee como una falla de la página: el
+              cliente prueba, no pasa nada, y no tiene forma de saber si le
+              falta hacer algo o si está roto. */}
           <button
             type="button"
             onClick={() => setDescargas(true)}
             disabled={aprobadas.length === 0}
+            title={
+              aprobadas.length === 0
+                ? "Se habilita cuando apruebes algo: se descarga lo aprobado."
+                : undefined
+            }
             className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-4
                        text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10
-                       disabled:pointer-events-none disabled:opacity-35"
+                       disabled:opacity-35"
           >
             <IconoDescargar />
             Descargar archivos

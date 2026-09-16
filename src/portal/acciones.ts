@@ -16,7 +16,11 @@
 // hacía falta; y el portal no tiene por qué saber que existen.
 
 import { cookies } from "next/headers";
-import { aplicar, type Evento } from "@/dominio/pieza";
+import {
+  aplicar,
+  RONDAS_INCLUIDAS_POR_DEFECTO,
+  type Evento,
+} from "@/dominio/pieza";
 import { agruparVersiones, conSusArchivos, identidadDePieza } from "@/lib/versiones";
 import { entroAlCliente } from "@/lib/acceso";
 import { avisar } from "@/lib/avisar";
@@ -33,6 +37,7 @@ import {
   piezasDeLaCarpeta,
   type Cambio,
   type EstadoDePieza,
+  type Hito,
 } from "@/lib/piezas";
 
 /** Quién figura en la historia. Cuando existan los usuarios, sale de la sesión. */
@@ -77,6 +82,34 @@ async function quienEntro(carpetaId: string) {
     return { cliente, nombreDeLaCarpeta: "una carpeta" };
   }
 }
+
+/**
+ * Qué puede hacer el cliente desde su portal, y qué queda anotado de cada cosa.
+ *
+ * **Una tabla y no una lista más cuatro `if`.** Eran dos cosas separadas —los
+ * eventos permitidos por un lado, las anotaciones por otro— y se
+ * desincronizaron: pedir una revisión adicional estaba permitido y no se
+ * anotaba, así que la pieza pasaba a esperar una decisión de la agencia —que
+ * puede costar plata— sin dejar rastro de quién la pidió ni cuándo. Juntas, no
+ * se puede agregar una sin decidir la otra.
+ *
+ * `null` es «se puede, pero no se anota», y es una decisión: abrir una pieza
+ * es que el cliente la haya mirado, y anotar cada vez que alguien abre algo
+ * llenaría la historia de ruido que tapa lo que importa.
+ *
+ * Se listan los permitidos en vez de prohibir los otros, para que un evento
+ * nuevo del dominio no quede habilitado sin que nadie lo decida.
+ */
+const DESDE_EL_PORTAL: Partial<Record<Evento["tipo"], Hito | null>> = {
+  abrir: null,
+  aprobar: "aprobada",
+  pedir_cambios: "cambios_pedidos",
+  descartar_cambios: "cambios_descartados",
+  pedir_revision_extra: "extra_pedida",
+  // Lo cierra `enviarRevision`, que toca varias piezas de una: acá se acepta
+  // para que el dominio lo valide igual, y la anotación la hace aquella.
+  cerrar_revision: null,
+};
 
 export type RespuestaDePieza =
   | { ok: true; pieza: EstadoDePieza }
@@ -138,23 +171,12 @@ export async function moverPieza(
   const cual = await piezaDeLaCarpeta(carpetaId, piezaId);
   if (!cual) return { ok: false, motivo: "No encontramos esa pieza." };
 
-  // El portal no puede aprobar en nombre de otro ni reabrir: son eventos de la
-  // agencia. Se listan los permitidos en vez de prohibir los otros, para que
-  // un evento nuevo del dominio no quede habilitado sin que nadie lo decida.
-  const PERMITIDOS: Evento["tipo"][] = [
-    "abrir",
-    "aprobar",
-    "pedir_cambios",
-    "descartar_cambios",
-    "pedir_revision_extra",
-    "cerrar_revision",
-  ];
-  if (!PERMITIDOS.includes(evento?.tipo)) {
+  if (!(evento?.tipo in DESDE_EL_PORTAL)) {
     return { ok: false, motivo: "Esa acción no se puede hacer desde el portal." };
   }
 
   const guardada = await estadoDe(carpetaId, piezaId);
-  const rondasIncluidas = 2;
+  const rondasIncluidas = RONDAS_INCLUIDAS_POR_DEFECTO;
 
   const resultado = aplicar(
     {
@@ -180,11 +202,8 @@ export async function moverPieza(
     cambios: evento.tipo === "descartar_cambios" ? [] : guardada.cambios,
   };
 
-  if (evento.tipo === "aprobar") pieza = anotar(pieza, "aprobada", CLIENTE);
-  if (evento.tipo === "pedir_cambios") pieza = anotar(pieza, "cambios_pedidos", CLIENTE);
-  if (evento.tipo === "descartar_cambios") {
-    pieza = anotar(pieza, "cambios_descartados", CLIENTE);
-  }
+  const hito = DESDE_EL_PORTAL[evento.tipo];
+  if (hito) pieza = anotar(pieza, hito, CLIENTE);
 
   // **Aprobar ya no muda el archivo a «Entregas finales».**
   //
@@ -264,7 +283,7 @@ export async function guardarCambiosDePieza(
       {
         estado: guardada.estado,
         ronda: guardada.ronda,
-        rondasIncluidas: 2,
+        rondasIncluidas: RONDAS_INCLUIDAS_POR_DEFECTO,
         rondasExtra: guardada.rondasExtra,
       },
       { tipo: quiereMarcar ? "pedir_cambios" : "descartar_cambios" }
@@ -315,12 +334,25 @@ export async function enviarRevision(
       {
         estado: guardada.estado,
         ronda: guardada.ronda,
-        rondasIncluidas: 2,
+        rondasIncluidas: RONDAS_INCLUIDAS_POR_DEFECTO,
         rondasExtra: guardada.rondasExtra,
       },
       { tipo: "cerrar_revision" }
     );
     if (!r.ok) continue;
+
+    // **Solo se cierra lo que de verdad cambia de estado.**
+    //
+    // El dominio contesta que sí para una pieza aprobada o esperando una
+    // revisión adicional —cerrar la ronda no las toca—, y acá eso se tomaba
+    // como «se envió»: la pieza quedaba marcada `enviada` sin haber mandado
+    // nada. Para una aprobada da igual; para una que espera la revisión
+    // adicional era un callejón sin salida: la agencia se la habilitaba, y el
+    // cliente encontraba «ya se lo mandamos al equipo» y ningún botón para
+    // usar la vuelta que acababa de pedir.
+    if (r.pieza.estado === guardada.estado && r.pieza.ronda === guardada.ronda) {
+      continue;
+    }
 
     aGuardar[id] = anotar(
       {

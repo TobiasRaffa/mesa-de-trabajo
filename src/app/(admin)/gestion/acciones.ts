@@ -48,7 +48,11 @@ import {
   LARGO_MAXIMO,
   type Mensaje,
 } from "@/lib/conversaciones";
-import { aplicar, hayAlgoParaEntregar } from "@/dominio/pieza";
+import {
+  aplicar,
+  hayAlgoParaEntregar,
+  RONDAS_INCLUIDAS_POR_DEFECTO,
+} from "@/dominio/pieza";
 import { avisar } from "@/lib/avisar";
 import { devolverDesdeFinales } from "@/lib/entregasFinales";
 import {
@@ -64,10 +68,13 @@ import {
 /**
  * Cuántas rondas entran en el presupuesto.
  *
- * Escrito a mano y en un solo lugar hasta que se pueda poner por cliente, que
- * es donde se negocia de verdad.
+ * **Vive en el dominio y en ningún otro lado.** Estuvo copiado en cinco: acá,
+ * dos veces en las acciones del portal, una en lo que el portal le muestra al
+ * cliente, y la del dominio. El día que se pueda poner por cliente —que es
+ * donde se negocia de verdad— cambiar una y olvidar las otras deja al portal
+ * dejando pedir cambios que el servidor rechaza, o al revés.
  */
-const RONDAS_INCLUIDAS = 2;
+const RONDAS_INCLUIDAS = RONDAS_INCLUIDAS_POR_DEFECTO;
 import { agruparVersiones, conSusArchivos, identidadDePieza } from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
 import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
@@ -649,6 +656,14 @@ async function laPieza(
   carpetaId: string,
   piezaId: string
 ): Promise<{ estado: EstadoDePieza; archivoActual: string } | null> {
+  // **Que la carpeta sea de un cliente se pregunta acá, y no en cada acción.**
+  // Reabrir una pieza y habilitar una revisión adicional entraban sin
+  // preguntarlo, cuando todas sus hermanas lo preguntan: una acción de
+  // servidor es un endpoint público y el identificador de carpeta que llega en
+  // el pedido no se puede creer. Puesto acá, las dos quedan cubiertas y la
+  // próxima que use esto también.
+  if (!(await esCarpetaDelCliente(carpetaId))) return null;
+
   try {
     const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
     for (const pieza of agrupadas) {

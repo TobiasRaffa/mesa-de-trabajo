@@ -171,6 +171,20 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
   4. Que `quienSoy()` lea esa galleta. Es lo único que toca el código de hoy.
 
   Va junto con Supabase, que es donde van a vivir las contraseñas.
+- **Dos personas escribiendo el mismo hilo de chat en el mismo instante.** Al
+  mandar un mensaje se lee la conversación entera y se vuelve a guardar. Si el
+  cliente y la agencia mandan uno en la misma fracción de segundo, uno de los
+  dos se pierde. Las escrituras a archivos distintos ya no se pisan —hacen
+  cola—, pero eso no alcanza para dos cambios al **mismo** documento.
+
+  Se arregla con una operación de «leer y escribir en un solo paso» en el
+  contrato del almacén. Conviene hacerlo junto con Supabase, que es donde hay
+  transacciones de verdad.
+
+- **Una conversación crece sin techo.** Los avisos tienen tope; los mensajes
+  no. No es un problema con el uso normal, pero conviene decidir un límite
+  antes de que un hilo de tres años haga lento cada guardado.
+
 - **El freno de intentos vive en memoria.** Sirve en una computadora. En
   Netlify, donde cada pedido puede caer en una máquina distinta, no frena nada:
   hay que moverlo al almacén antes de mandarle el primer link a un cliente

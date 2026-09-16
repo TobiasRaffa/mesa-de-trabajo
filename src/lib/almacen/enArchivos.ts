@@ -30,6 +30,38 @@ async function leerCrudo(archivo: string): Promise<unknown> {
   }
 }
 
+/**
+ * Una fila de espera por archivo.
+ *
+ * **Cada guardado lee el archivo entero, le pega el cambio y lo vuelve a
+ * escribir.** Con dos cosas pasando a la vez —el cliente aprueba una pieza
+ * mientras la agencia entrega otra— las dos leen lo mismo, las dos escriben, y
+ * la segunda pisa a la primera: un cambio desaparece sin error, sin aviso y
+ * sin rastro. Es la peor clase de falla que puede tener esto, porque lo que se
+ * pierde es trabajo de alguien.
+ *
+ * Acá corre un solo proceso, así que alcanza con hacer cola: cada operación que
+ * escribe espera a la anterior del mismo archivo. Lo que se serializa es el par
+ * leer+escribir, que es donde está la carrera.
+ *
+ * **Supabase no lo necesita**: ahí cada documento es una fila y guardar uno no
+ * toca a los demás. Por eso vive acá y no en el contrato.
+ */
+const filas = new Map<string, Promise<unknown>>();
+
+function enFila<T>(archivo: string, tarea: () => Promise<T>): Promise<T> {
+  const anterior = filas.get(archivo) ?? Promise.resolve();
+  // Se encadena con `then` en las dos ramas: si una falla, la siguiente igual
+  // tiene que correr. Una cola que se traba con el primer error es peor que no
+  // tenerla.
+  const proxima = anterior.then(tarea, tarea);
+  filas.set(
+    archivo,
+    proxima.catch(() => undefined)
+  );
+  return proxima;
+}
+
 async function escribirCrudo(archivo: string, datos: unknown): Promise<void> {
   await mkdir(CARPETA, { recursive: true });
   const temporal = `${archivo}.${process.pid}.tmp`;
@@ -57,21 +89,29 @@ export const enArchivos: Almacen = {
       async uno(id) {
         return (await todo())[id];
       },
+      // Las tres que escriben van en fila: leen y escriben sin que nadie se
+      // meta en el medio.
       async guardar(id, valor) {
-        await escribirCrudo(archivo, { ...(await todo()), [id]: valor });
+        await enFila(archivo, async () => {
+          await escribirCrudo(archivo, { ...(await todo()), [id]: valor });
+        });
       },
       async guardarVarios(cambios) {
-        const actual: Record<string, T> = await todo();
-        for (const [id, valor] of Object.entries(cambios)) {
-          if (valor === undefined) delete actual[id];
-          else actual[id] = valor;
-        }
-        await escribirCrudo(archivo, actual);
+        await enFila(archivo, async () => {
+          const actual: Record<string, T> = await todo();
+          for (const [id, valor] of Object.entries(cambios)) {
+            if (valor === undefined) delete actual[id];
+            else actual[id] = valor;
+          }
+          await escribirCrudo(archivo, actual);
+        });
       },
       async borrar(id) {
-        const actual = await todo();
-        delete actual[id];
-        await escribirCrudo(archivo, actual);
+        await enFila(archivo, async () => {
+          const actual = await todo();
+          delete actual[id];
+          await escribirCrudo(archivo, actual);
+        });
       },
     };
   },
