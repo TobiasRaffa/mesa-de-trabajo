@@ -21,7 +21,13 @@ import {
   RONDAS_INCLUIDAS_POR_DEFECTO,
   type Evento,
 } from "@/dominio/pieza";
-import { agruparVersiones, conSusArchivos, identidadDePieza } from "@/lib/versiones";
+import {
+  agruparVersiones,
+  conSusArchivos,
+  identidadDePieza,
+  nombreDePieza,
+} from "@/lib/versiones";
+import { enPalabrasLoRevisado, versionQueMira } from "@/dominio/historia";
 import { entroAlCliente } from "@/lib/acceso";
 import { avisar } from "@/lib/avisar";
 import type { ClaseDeAviso } from "@/lib/avisos";
@@ -242,6 +248,14 @@ export async function moverPieza(
       cliente: donde.cliente.nombre,
       carpetaId,
       carpeta: donde.nombreDeLaCarpeta,
+      // Cual pieza y de que vuelta. Decia "una pieza" a secas, y con eso el
+      // aviso obligaba a entrar a mirar de que estaba hablando.
+      detalle: enPalabrasLoRevisado([
+        {
+          nombre: nombreDePieza(piezaId),
+          version: versionQueMira(guardada.ronda),
+        },
+      ]),
     });
   }
 
@@ -347,6 +361,9 @@ export async function enviarRevision(
 
   const estados = await estadosDe(carpetaId, piezas);
   const aGuardar: Record<string, EstadoDePieza> = {};
+  // Que revisó, para el aviso. Se junta acá adentro y no después: la versión
+  // es la que miraba **antes** de cerrar la vuelta, y guardada ya no la tiene.
+  const revisadas: Array<{ nombre: string; version: number }> = [];
 
   for (const [id, guardada] of Object.entries(estados)) {
     if (soloEsta && id !== soloEsta) continue;
@@ -392,21 +409,25 @@ export async function enviarRevision(
       // revisión nueva empieza limpia— y lo único que quedaba era un renglón
       // diciendo que hubo cambios, sin decir cuáles. Dentro de un mes, «¿por
       // qué la v2 salió así?» no tenía respuesta.
-      cambiosEnPalabras(guardada.ronda + 1, guardada.cambios)
+      cambiosEnPalabras(versionQueMira(guardada.ronda), guardada.cambios)
     );
+
+    revisadas.push({
+      nombre: nombreDePieza(id),
+      version: versionQueMira(guardada.ronda),
+    });
   }
 
   await guardarPiezas(aGuardar);
 
-  const cuantas = Object.keys(aGuardar).length;
-  if (cuantas > 0) {
+  if (revisadas.length > 0) {
     await avisar({
       clase: "envio_revision",
       clienteId: donde.cliente.id,
       cliente: donde.cliente.nombre,
       carpetaId,
       carpeta: donde.nombreDeLaCarpeta,
-      detalle: `${cuantas} ${cuantas === 1 ? "pieza" : "piezas"}`,
+      detalle: enPalabrasLoRevisado(revisadas),
     });
   }
 

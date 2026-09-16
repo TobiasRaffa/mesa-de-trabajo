@@ -275,6 +275,16 @@ export type ComentarioDeDrive = {
   resuelto: boolean;
   /** El pedazo del archivo sobre el que se escribió, si lo hay. */
   sobre?: string;
+  /**
+   * En qué hoja del PDF se escribió, si Drive lo dice.
+   *
+   * Un comentario en la hoja 7 de un PDF de veinte, sin decir la hoja, manda a
+   * buscarlo a mano por todo el archivo. Es dato de Drive: lo trae en `anchor`,
+   * que es una cadena opaca y puede venir vacía o con otra forma.
+   */
+  hoja?: number;
+  /** Lo que vino en `anchor`, tal cual. Para el diagnóstico. */
+  ancla?: string;
   /** Las respuestas, en orden. */
   respuestas: Array<{ quien: string; texto: string; cuando: string }>;
 };
@@ -317,7 +327,7 @@ export async function leerComentarios(
     const token = await tokenDeGoogle();
     // Drive v3 obliga a pedir los campos: sin esto contesta comentarios vacíos.
     const fields = encodeURIComponent(
-      "comments(id,content,createdTime,resolved,author/displayName," +
+      "comments(id,content,createdTime,resolved,anchor,author/displayName," +
         "quotedFileContent/value,replies(content,createdTime,author/displayName))"
     );
     const url =
@@ -341,6 +351,7 @@ export async function leerComentarios(
       content?: unknown;
       createdTime?: unknown;
       resolved?: unknown;
+      anchor?: unknown;
       author?: Autor;
       quotedFileContent?: { value?: unknown };
       replies?: unknown;
@@ -356,6 +367,8 @@ export async function leerComentarios(
       texto: String(x.content ?? ""),
       cuando: String(x.createdTime ?? ""),
       resuelto: x.resolved === true,
+      hoja: typeof x.anchor === "string" ? hojaDelAncla(x.anchor) : undefined,
+      ancla: typeof x.anchor === "string" && x.anchor ? x.anchor : undefined,
       sobre:
         typeof x.quotedFileContent?.value === "string" && x.quotedFileContent.value
           ? x.quotedFileContent.value
@@ -371,6 +384,63 @@ export async function leerComentarios(
   } catch (e) {
     return { ok: false, motivo: e instanceof Error ? e.message : "Drive no contestó." };
   }
+}
+
+/**
+ * En qué hoja del PDF está anclado un comentario.
+ *
+ * **`anchor` es, por contrato, una cadena opaca**: Google dice que representa
+ * una región del archivo y no promete ninguna forma. Hoy viene un JSON con la
+ * hoja adentro; mañana puede venir otra cosa, y eso no puede romper la lectura
+ * de comentarios entera.
+ *
+ * Por eso esto no interpreta la estructura: busca un número de hoja donde
+ * suele estar y, si no lo encuentra, **no contesta nada**. Inventar una hoja
+ * es peor que no decirla: manda a mirar la página equivocada con la misma
+ * seguridad que si estuviera bien.
+ */
+export function hojaDelAncla(ancla: string): number | undefined {
+  if (!ancla) return undefined;
+
+  let dato: unknown;
+  try {
+    dato = JSON.parse(ancla);
+  } catch {
+    return undefined;
+  }
+
+  // Cualquier `{ page: 3 }` o `{ page: { n: 3 } }` que haya adentro, a
+  // cualquier profundidad: lo que importa es el número, no dónde vive.
+  let encontrada: number | undefined;
+
+  const mirar = (v: unknown): void => {
+    if (encontrada !== undefined || !v || typeof v !== "object") return;
+
+    if (Array.isArray(v)) {
+      for (const x of v) mirar(x);
+      return;
+    }
+
+    for (const [clave, valor] of Object.entries(v as Record<string, unknown>)) {
+      if (clave === "page" || clave === "pageNumber") {
+        const n =
+          typeof valor === "number"
+            ? valor
+            : valor && typeof valor === "object"
+              ? (valor as Record<string, unknown>).n
+              : undefined;
+        // Las hojas se cuentan desde 1. Un cero es que se leyó otra cosa.
+        if (typeof n === "number" && Number.isInteger(n) && n >= 1) {
+          encontrada = n;
+          return;
+        }
+      }
+      mirar(valor);
+    }
+  };
+
+  mirar(dato);
+  return encontrada;
 }
 
 // Trae los bytes de una miniatura.

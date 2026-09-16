@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { agruparVersiones, leerNombre, identidadDePieza } from "@/lib/versiones";
+import {
+  agruparVersiones,
+  leerNombre,
+  identidadDePieza,
+  nombreDePieza,
+} from "@/lib/versiones";
 
 describe("leerNombre", () => {
   it("un archivo sin sufijo es la primera versión", () => {
@@ -360,5 +365,23 @@ describe("lo que NO se junta, y está bien", () => {
     expect(
       agruparVersiones([{ name: "balance.xlsx" }, { name: "V2025 balance.xlsx" }])
     ).toHaveLength(2);
+  });
+});
+
+describe("nombreDePieza", () => {
+  it("deshace lo que hizo identidadDePieza", () => {
+    const id = identidadDePieza("18gohAQ", "stickers V2.pdf");
+    expect(nombreDePieza(id)).toBe("stickers.pdf");
+  });
+
+  it("un nombre con dos puntos adentro vuelve entero", () => {
+    // La carpeta es un identificador de Drive y esos no llevan dos puntos, así
+    // que todo lo que venga después de los primeros es el nombre.
+    const id = identidadDePieza("18gohAQ", "campaña: verano.pdf");
+    expect(nombreDePieza(id)).toBe("campaña: verano.pdf");
+  });
+
+  it("lo que no tiene separador se devuelve tal cual", () => {
+    expect(nombreDePieza("suelto")).toBe("suelto");
   });
 });

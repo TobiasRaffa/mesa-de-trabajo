@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { cambiosPorVuelta, type HitoLeido } from "@/dominio/historia";
+import {
+  cambiosPorVuelta,
+  enPalabrasLoRevisado,
+  versionQueMira,
+  type HitoLeido,
+} from "@/dominio/historia";
 
 const enviada = (detalle?: string): HitoLeido => ({ que: "revision_enviada", detalle });
 const entregada = (detalle?: string): HitoLeido => ({ que: "entregada", detalle });
@@ -109,5 +114,58 @@ describe("lo mandado y todavía sin contestar aparece una sola vez", () => {
 
     expect(r).toHaveLength(2);
     expect(r[1]).toEqual({ version: 2, puntos: ["y el fondo"], abierta: true });
+  });
+});
+
+describe("qué versión está mirando el cliente", () => {
+  // La ronda cuenta las vueltas cerradas: la que se mira es la siguiente.
+  it("sin ninguna vuelta cerrada, mira la v1", () => {
+    expect(versionQueMira(0)).toBe(1);
+  });
+
+  it("con dos cerradas, mira la v3", () => {
+    expect(versionQueMira(2)).toBe(3);
+  });
+});
+
+describe("cómo se nombra lo que el cliente revisó", () => {
+  it("una pieza lleva su nombre y su versión", () => {
+    expect(enPalabrasLoRevisado([{ nombre: "stickers", version: 3 }])).toBe(
+      "la v3 de stickers"
+    );
+  });
+
+  it("varias de la misma vuelta se cuentan", () => {
+    expect(
+      enPalabrasLoRevisado([
+        { nombre: "stickers", version: 2 },
+        { nombre: "banner", version: 2 },
+      ])
+    ).toBe("la v2 de 2 piezas");
+  });
+
+  it("varias de vueltas distintas dicen cuáles vueltas", () => {
+    // Acá no hay un número que las resuma: decir «la v2 de 3 piezas» sería
+    // afirmar algo falso sobre dos de las tres.
+    expect(
+      enPalabrasLoRevisado([
+        { nombre: "a", version: 3 },
+        { nombre: "b", version: 1 },
+        { nombre: "c", version: 2 },
+      ])
+    ).toBe("3 piezas (v1, v2 y v3)");
+  });
+
+  it("dos vueltas distintas se unen con «y», sin coma", () => {
+    expect(
+      enPalabrasLoRevisado([
+        { nombre: "a", version: 1 },
+        { nombre: "b", version: 2 },
+      ])
+    ).toBe("2 piezas (v1 y v2)");
+  });
+
+  it("sin piezas no inventa una frase", () => {
+    expect(enPalabrasLoRevisado([])).toBe("");
   });
 });

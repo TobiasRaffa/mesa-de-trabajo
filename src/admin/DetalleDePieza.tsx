@@ -73,6 +73,15 @@ export function DetalleDePieza({
             {pieza.comentarios.map((c) => (
               <li key={c.id} className="text-menudo text-tinta-suave">
                 <span className="font-bold">{c.quien}</span>
+                {/* **La hoja, adelante.** Un comentario en la hoja 7 de un PDF
+                    de veinte, sin decir la hoja, manda a buscarlo a mano por
+                    todo el archivo. Solo aparece si Drive la dice: no se
+                    inventa. */}
+                {c.hoja !== undefined && (
+                  <span className="ml-1.5 bg-espera-borde/30 px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider text-espera">
+                    hoja {c.hoja}
+                  </span>
+                )}
                 <span className="text-apagado"> · {enPalabrasLaFecha(c.cuando)}</span>
                 <span className="block whitespace-pre-wrap">{c.texto}</span>
               </li>

@@ -57,7 +57,21 @@ export default async function Diagnostico() {
   // pieza sin comentarios y una pieza cuyos comentarios Google no nos deja
   // leer se ven exactamente igual —vacías—, y ese silencio es el que hace que
   // un permiso mal puesto pase meses sin que nadie lo note.
-  let comentarios: { archivo: string; ok: boolean; detalle: string } | null = null;
+  let comentarios: {
+    archivo: string;
+    ok: boolean;
+    detalle: string;
+    /**
+     * Lo que Drive contestó en `anchor`, tal cual, y qué hoja se leyó de ahí.
+     *
+     * **`anchor` es una cadena opaca por contrato**: Google dice que representa
+     * una región del archivo y no promete ninguna forma. La hoja de un
+     * comentario en un PDF sale de ahí, así que el día que Google le cambie la
+     * forma, la hoja va a dejar de aparecer **en silencio**. Esta lista es el
+     * único lugar donde eso se ve.
+     */
+    anclas: Array<{ quien: string; hoja?: number; ancla?: string }>;
+  } | null = null;
   // El primer archivo de verdad que se encuentre. La carpeta de un cliente
   // suele tener solo carpetas adentro, así que hay que bajar un escalón.
   const primero = await primerArchivo(archivos);
@@ -69,6 +83,9 @@ export default async function Diagnostico() {
       detalle: r.ok
         ? `${r.comentarios.length} ${r.comentarios.length === 1 ? "comentario" : "comentarios"}`
         : r.motivo,
+      anclas: r.ok
+        ? r.comentarios.map((c) => ({ quien: c.quien, hoja: c.hoja, ancla: c.ancla }))
+        : [],
     };
   }
 
@@ -172,6 +189,22 @@ export default async function Diagnostico() {
             Es lo que hace que lo escrito encima de un PDF en Drive aparezca en
             la pantalla de la carpeta, junto a lo que el cliente marcó en el portal.
           </p>
+
+          {comentarios.anclas.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-1 font-mono text-xs text-emerald-900">
+              {comentarios.anclas.map((a, i) => (
+                <li key={i} className="break-all">
+                  <span className="font-semibold">{a.quien}</span>
+                  {" · hoja: "}
+                  <span className={a.hoja === undefined ? "text-red-700" : ""}>
+                    {a.hoja ?? "no se pudo leer"}
+                  </span>
+                  {" · anchor: "}
+                  {a.ancla ?? "(vacío)"}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

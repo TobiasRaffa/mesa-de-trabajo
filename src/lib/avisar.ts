@@ -43,7 +43,12 @@ function comoSeCuenta(clase: ClaseDeAviso, carpeta: string, detalle?: string): s
       // los avisos cuentan algo que pasó, este pide algo.
       return `Se quedó sin vueltas en ${detalle ?? "una pieza"} de ${carpeta} y pide una más.`;
     case "envio_revision":
-      return `Envió la revisión de ${carpeta}${detalle ? ` (${detalle})` : ""}.`;
+      // **Dice qué versión cerró.** Decía «la revisión de Banners (2 piezas)»,
+      // y con eso había que entrar a mirar cuáles y de qué vuelta: saber si es
+      // la primera pasada o la tercera es lo que cambia qué se hace después.
+      return detalle
+        ? `Envió la revisión de ${detalle} en ${carpeta}.`
+        : `Envió la revisión de ${carpeta}.`;
     case "escribio":
       // La conversación es del cliente, no de una carpeta: nombrar una acá
       // mandaría a buscar el mensaje donde no está.

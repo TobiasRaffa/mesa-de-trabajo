@@ -53,6 +53,48 @@ export const EN_PALABRAS: Record<Hito, string> = {
 /** Lo mínimo de un hito para poder leerlo. */
 export type HitoLeido = { que: Hito; detalle?: string };
 
+/**
+ * Qué versión está mirando el cliente cuando la pieza va en esta ronda.
+ *
+ * La ronda cuenta las vueltas **cerradas**; la que se está mirando es la
+ * siguiente. El `+1` estaba suelto en el portal, escrito a mano cada vez que
+ * hacía falta, y con eso alcanza para que un día la historia anote «V2» y el
+ * aviso diga «v3» sobre exactamente lo mismo.
+ */
+export const versionQueMira = (ronda: number): number => ronda + 1;
+
+/**
+ * Cómo se nombra lo que el cliente acaba de revisar.
+ *
+ * **Sin la versión, el aviso no dice nada accionable.** «Envió la revisión de
+ * 2 piezas» obliga a entrar a mirar cuáles y de qué vuelta, que es justo lo
+ * que el aviso venía a evitar. Con la versión adelante se sabe si es la
+ * primera pasada o la tercera, que es lo que cambia qué se hace después.
+ *
+ * Con una pieza la nombra; con varias de la misma vuelta las cuenta; con
+ * varias de vueltas distintas dice cuáles vueltas, porque ahí no hay un
+ * número que las resuma.
+ */
+export function enPalabrasLoRevisado(
+  piezas: Array<{ nombre: string; version: number }>
+): string {
+  if (piezas.length === 0) return "";
+  if (piezas.length === 1) return `la v${piezas[0].version} de ${piezas[0].nombre}`;
+
+  const versiones = [...new Set(piezas.map((p) => p.version))].sort((a, b) => a - b);
+  const cuantas = `${piezas.length} piezas`;
+
+  return versiones.length === 1
+    ? `la v${versiones[0]} de ${cuantas}`
+    : `${cuantas} (${enLista(versiones.map((v) => `v${v}`))})`;
+}
+
+/** «v1, v2 y v3». La coma separa y la «y» cierra, como se lee en voz alta. */
+function enLista(cosas: string[]): string {
+  if (cosas.length < 2) return cosas[0] ?? "";
+  return `${cosas.slice(0, -1).join(", ")} y ${cosas[cosas.length - 1]}`;
+}
+
 export type CambiosDeUnaVuelta = {
   /** 1 es la primera, la que no lleva marca en el nombre del archivo. */
   version: number;

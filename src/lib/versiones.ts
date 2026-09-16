@@ -170,6 +170,21 @@ export function identidadDePieza(carpetaId: string, nombreDelArchivo: string): s
 }
 
 /**
+ * Cómo se llama la pieza que lleva ese identificador.
+ *
+ * Es la vuelta de `identidadDePieza`, y está acá al lado por eso: son las dos
+ * mitades de la misma decisión, y separadas es donde un día una parte por los
+ * dos puntos y la otra por otra cosa.
+ *
+ * Se parte por los **primeros** dos puntos: el identificador de Drive no los
+ * tiene, así que lo que venga después es el nombre entero, tenga los que tenga.
+ */
+export function nombreDePieza(id: string): string {
+  const corte = id.indexOf("::");
+  return corte === -1 ? id : id.slice(corte + 2);
+}
+
+/**
  * Las piezas de una carpeta, cada una con los archivos de Drive que la forman.
  *
  * Es lo que hay que pasarle a `estadosDe`, y existe como una sola función
