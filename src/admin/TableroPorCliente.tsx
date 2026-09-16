@@ -35,6 +35,8 @@ import {
   type Filtros,
 } from "@/admin/FiltrosDelTablero";
 import type { Cancha, CarpetaEnElTablero } from "@/admin/datos/tablero";
+import { Miniatura } from "@/ui/Miniatura";
+import { urlDeMiniatura } from "@/lib/miniaturas";
 
 const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
 
@@ -260,6 +262,7 @@ function Senales({ cliente }: { cliente: PorCliente }) {
   const cuantos = cliente.carpetas.length;
   const vencidos = cliente.carpetas.filter((c) => c.vencida).length;
   const porVencer = cliente.carpetas.filter((c) => c.porVencer).length;
+  const extra = cliente.carpetas.reduce((n, c) => n + c.extraPedida, 0);
   const sinEntregar = cliente.carpetas.reduce((n, c) => n + c.sinEntregar, 0);
   // Los mensajes sin leer son del cliente, no de cada carpeta: el mismo número
   // viene repetido en todas. Sumarlos sería contarlos una vez por trabajo.
@@ -270,6 +273,13 @@ function Senales({ cliente }: { cliente: PorCliente }) {
       <span>
         {cuantos} {cuantos === 1 ? "trabajo" : "trabajos"}
       </span>
+      {/* Primero lo que pide una decisión y no trabajo: alguien tiene que
+          decir que sí, y hasta que lo diga el cliente está esperando. */}
+      {extra > 0 && (
+        <Senal tono="alerta">
+          {extra === 1 ? "pide otra vuelta" : `${extra} piden otra vuelta`}
+        </Senal>
+      )}
       {vencidos > 0 && (
         <Senal tono="alerta">
           {vencidos === 1 ? "vencido" : `${vencidos} vencidos`}
@@ -340,7 +350,6 @@ function Trabajo({
   onMirar: (c: CarpetaEnElTablero) => void;
 }) {
   const cancha = CANCHAS[c.cancha];
-  const cerradas = Math.max(0, c.piezas - c.enAgencia - c.sinRevisar);
   const unaPieza = c.enJuego === 1;
 
   // **Este renglón abrió la ventana.** Mientras siga siendo cierto, la vista
@@ -429,78 +438,69 @@ function Trabajo({
       <div
         aria-hidden="true"
         className={`pointer-events-none absolute left-4 right-0 top-full z-20 hidden
-                    border-2 border-tinta bg-lienzo px-3 py-2 shadow-lg
+                    border-2 border-tinta bg-lienzo p-2 shadow-lg
                     group-hover:block ${abrioLaVentana ? "" : "peer-focus-visible:block"}`}
       >
-        <p className="flex flex-wrap items-baseline gap-x-2 text-micro">
-          <span className="font-extrabold uppercase tracking-widest text-apagado">
-            {cancha.comoEsta}
-          </span>
+        {/*
+          **Se mira, no se lee.** Antes había acá un párrafo, una barra de
+          progreso y cuatro cuentas separadas por puntos: había que detenerse a
+          leerlo, y para eso ya está la ventana. Lo que hace falta al pasar por
+          encima es reconocer el trabajo —«ah, son los banners del día del
+          padre»— y eso se contesta con la imagen, no con números.
+
+          Debajo, una sola línea: qué está esperando y de quién. Si hay algo
+          que pide una decisión, lo dice primero y en rojo.
+        */}
+        {c.muestras.length > 0 && (
+          <div className="flex gap-1">
+            {c.muestras.map((m) => (
+              <span
+                key={m.archivo}
+                className="relative h-20 min-w-0 flex-1 overflow-hidden bg-hueco"
+              >
+                <Miniatura
+                  src={urlDeMiniatura(m.archivo, 400, m.modificado)}
+                  alt=""
+                  nombre={m.nombre}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              </span>
+            ))}
+          </div>
+        )}
+
+        <p
+          className={`flex flex-wrap items-baseline gap-x-2 text-micro ${
+            c.muestras.length > 0 ? "mt-1.5" : ""
+          }`}
+        >
+          {c.extraPedida > 0 ? (
+            <span className="font-extrabold uppercase tracking-widest text-alerta">
+              Pide otra vuelta
+            </span>
+          ) : (
+            <span className="font-extrabold uppercase tracking-widest text-apagado">
+              {cancha.comoEsta}
+            </span>
+          )}
           <span className="text-apagado">
             {c.asignadaA ?? "sin asignar"}
+            {c.enJuego > 0 && ` · ${c.enJuego} ${unaPieza ? "pieza" : "piezas"}`}
             {c.vence && (
-              <span className={c.vencida ? "font-extrabold text-alerta" : ""}>
+              <span
+                className={
+                  c.vencida
+                    ? "font-extrabold text-alerta"
+                    : c.porVencer
+                      ? "font-extrabold text-espera"
+                      : ""
+                }
+              >
                 {" · "}
                 {c.vencida ? "venció el" : "vence el"} {fecha.format(c.vence)}
               </span>
             )}
           </span>
-        </p>
-
-        {c.piezas > 0 && (
-          <div className="mt-1.5 flex h-1.5 overflow-hidden bg-hueco">
-            {c.enAgencia > 0 && (
-              <span
-                className="bg-acento"
-                style={{ width: `${(c.enAgencia / c.piezas) * 100}%` }}
-              />
-            )}
-            {c.sinRevisar > 0 && (
-              <span
-                className="bg-espera-borde"
-                style={{ width: `${(c.sinRevisar / c.piezas) * 100}%` }}
-              />
-            )}
-            {cerradas > 0 && (
-              <span
-                className="bg-tinta-suave"
-                style={{ width: `${(cerradas / c.piezas) * 100}%` }}
-              />
-            )}
-          </div>
-        )}
-
-        {/*
-          **Lo que se cuenta es lo que está en juego.** Una pieza aprobada ya
-          no es trabajo de nadie: sumarla acá hacía que un trabajo con una sola
-          cosa pendiente dijera «2 piezas», y que lo terminado siguiera pesando
-          en la columna del que todavía espera. Las terminadas se dicen aparte
-          y en voz baja, que es lo que son: algo que ya pasó.
-        */}
-        <p className="mt-1.5 text-micro text-apagado">
-          {c.enJuego === 0 ? (
-            c.piezas === 0 ? (
-              "Sin piezas"
-            ) : (
-              `Todo aprobado · ${c.piezas} ${c.piezas === 1 ? "pieza" : "piezas"}`
-            )
-          ) : (
-            <>
-              {c.enJuego} {unaPieza ? "pieza" : "piezas"} en juego
-              {c.sinEntregar > 0 && (
-                <span className="font-bold text-acento">
-                  {" · "}
-                  {c.sinEntregar} sin entregar
-                </span>
-              )}
-              {c.sinRevisar > 0 && ` · ${c.sinRevisar} sin revisar`}
-              {c.terminadas > 0 &&
-                ` · ${c.terminadas} aprobada${c.terminadas === 1 ? "" : "s"}`}
-            </>
-          )}
-          {c.sinLeer > 0 && (
-            <span className="font-bold text-acento"> · {c.sinLeer} sin leer</span>
-          )}
         </p>
       </div>
     </li>

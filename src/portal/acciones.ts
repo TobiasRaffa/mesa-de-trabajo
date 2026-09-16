@@ -24,6 +24,7 @@ import {
 import { agruparVersiones, conSusArchivos, identidadDePieza } from "@/lib/versiones";
 import { entroAlCliente } from "@/lib/acceso";
 import { avisar } from "@/lib/avisar";
+import type { ClaseDeAviso } from "@/lib/avisos";
 import { clienteDeCarpeta, esCarpetaDelCliente } from "@/lib/carpetas";
 import { datosDeCarpeta } from "@/lib/google";
 import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
@@ -223,9 +224,20 @@ export async function moverPieza(
 
   // Se le avisa al equipo. Es el bucle que este proyecto vino a cerrar: hasta
   // hoy, nadie se enteraba salvo que entrara a mirar.
-  if (evento.tipo === "aprobar" || evento.tipo === "pedir_cambios") {
+  // **Pedir una revisión adicional también avisa**, y es el que más falta
+  // hacía: los otros cuentan algo que ya pasó; este deja a una pieza esperando
+  // una decisión de la agencia. Sin aviso, el cliente quedaba esperando a que
+  // alguien entrara a mirar por casualidad.
+  const AVISAN: Partial<Record<Evento["tipo"], ClaseDeAviso>> = {
+    aprobar: "aprobo",
+    pedir_cambios: "pidio_cambios",
+    pedir_revision_extra: "pidio_extra",
+  };
+  const clase = AVISAN[evento.tipo];
+
+  if (clase) {
     await avisar({
-      clase: evento.tipo === "aprobar" ? "aprobo" : "pidio_cambios",
+      clase,
       clienteId: donde.cliente.id,
       cliente: donde.cliente.nombre,
       carpetaId,

@@ -17,24 +17,14 @@ import { randomUUID } from "node:crypto";
 import { coleccion } from "@/lib/almacen";
 import type { Estado } from "@/dominio/pieza";
 import { archivosDe, metadatosArchivo, type ArchivoDrive } from "@/lib/google";
+// Los hitos y cómo se leen viven en el dominio: los necesita una pantalla, y
+// este módulo lee y escribe archivos. Se reexportan para no obligar a nadie a
+// cambiar de puerta.
+export { EN_PALABRAS, type Hito } from "@/dominio/historia";
+import type { Hito } from "@/dominio/historia";
 
 export type Cambio = { id: string; texto: string };
 
-export type Hito =
-  | "entregada"
-  | "reabierta_por_agencia"
-  | "extra_pedida"
-  | "extra_habilitada"
-  | "devuelta_a_su_carpeta"
-  | "no_se_pudo_devolver"
-  | "aprobada"
-  | "cambios_pedidos"
-  | "cambios_descartados"
-  | "revision_enviada"
-  | "reabierta"
-  | "movida_a_finales"
-  | "no_se_pudo_mover"
-  | "archivo_reemplazado";
 
 export type EntradaDeHistoria = {
   id: string;
@@ -324,22 +314,6 @@ export function anotar(
 // ---------------------------------------------------------------------------
 
 /** Cómo se cuenta cada hito en la historia que ve una persona. */
-export const EN_PALABRAS: Record<Hito, string> = {
-  entregada: "Se entregó",
-  aprobada: "Aprobó",
-  cambios_pedidos: "Pidió cambios",
-  cambios_descartados: "Descartó los cambios",
-  revision_enviada: "Envió la revisión",
-  reabierta: "Reabrió la pieza",
-  reabierta_por_agencia: "Reabrió la pieza para que el cliente la vuelva a mirar",
-  extra_pedida: "Pidió una revisión adicional",
-  extra_habilitada: "Habilitó una revisión adicional",
-  movida_a_finales: "Se movió a «Entregas finales»",
-  no_se_pudo_mover: "No se pudo mover a «Entregas finales»",
-  devuelta_a_su_carpeta: "Volvió a su carpeta de trabajo",
-  no_se_pudo_devolver: "No se pudo sacar de «Entregas finales»",
-  archivo_reemplazado: "Se borró el archivo y se subió otro con el mismo nombre: la pieza vuelve a empezar",
-};
 
 // ---------------------------------------------------------------------------
 

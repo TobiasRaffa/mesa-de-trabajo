@@ -15,7 +15,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { abrirCarpeta } from "@/app/(admin)/gestion/acciones";
+import { abrirCarpeta, historiaDeCarpeta } from "@/app/(admin)/gestion/acciones";
+import { DetalleDePieza } from "@/admin/DetalleDePieza";
+import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { Entregar } from "@/admin/Entregar";
 import { Estado } from "@/ui/Estado";
 import { Miniatura } from "@/ui/Miniatura";
@@ -52,6 +54,21 @@ export function ResumenDeTrabajo({
   // antes y diría el viejo al lado del mensaje que prometió el nuevo.
   const [diasPuestos, setDiasPuestos] = useState<number | null>(null);
   const diasQueCorren = diasPuestos ?? c.diasQueCorren;
+
+  // Lo que pasó en cada pieza: los cambios que pidió el cliente, lo que
+  // escribieron encima del archivo en Drive, y cuándo. Se pide aparte porque
+  // cuesta una vuelta por pieza y solo hace falta con la ventana abierta.
+  const [historia, setHistoria] = useState<PiezaConHistoria[] | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    historiaDeCarpeta(c.carpetaId)
+      .then((r) => vivo && r.ok && setHistoria(r.piezas))
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [c.carpetaId, vuelta]);
 
   useEffect(() => {
     let vivo = true;
@@ -208,7 +225,7 @@ export function ResumenDeTrabajo({
 
           {piezas && piezas.length > 0 && (
             <>
-              {enJuego.length > 0 && <Lista piezas={enJuego} />}
+              {enJuego.length > 0 && <Lista piezas={enJuego} historia={historia} onCambio={() => setVuelta((n) => n + 1)} />}
 
               {/*
                 **Lo aprobado va abajo y bajo su propio título.** Mezclado
@@ -224,7 +241,7 @@ export function ResumenDeTrabajo({
                       Ya aprobadas
                     </h3>
                   )}
-                  <Lista piezas={terminadas} />
+                  <Lista piezas={terminadas} historia={historia} onCambio={() => setVuelta((n) => n + 1)} />
                 </>
               )}
             </>
@@ -235,11 +252,24 @@ export function ResumenDeTrabajo({
   );
 }
 
-function Lista({ piezas }: { piezas: NodoArchivo[] }) {
+function Lista({
+  piezas,
+  historia,
+  onCambio,
+}: {
+  piezas: NodoArchivo[];
+  historia: PiezaConHistoria[] | null;
+  onCambio: () => void;
+}) {
   return (
     <ul className="mt-2 border-t border-linea">
       {piezas.map((p) => (
-        <Pieza key={p.id} pieza={p} />
+        <Pieza
+          key={p.id}
+          pieza={p}
+          detalle={historia?.find((h) => h.id === p.id)}
+          onCambio={onCambio}
+        />
       ))}
     </ul>
   );
@@ -256,12 +286,24 @@ function Lista({ piezas }: { piezas: NodoArchivo[] }) {
  * cuándo sale publicado. Arriba, lo que lo identifica: la vuelta en la que va y
  * si el cliente lo ve.
  */
-function Pieza({ pieza: p }: { pieza: NodoArchivo }) {
+function Pieza({
+  pieza: p,
+  detalle,
+  onCambio,
+}: {
+  pieza: NodoArchivo;
+  detalle?: PiezaConHistoria;
+  onCambio: () => void;
+}) {
   // La última vuelta es la que se está mirando, y es la que tiene imagen.
   const archivo = p.archivos[p.archivos.length - 1];
 
   return (
-    <li className="flex items-start gap-3 border-b border-linea py-3">
+    // En columna: arriba el renglón de siempre, abajo el detalle a lo ancho.
+    // En una sola fila, el detalle —que ocupa todo— aplastaba la miniatura y el
+    // nombre hasta partirlos en una palabra por línea.
+    <li className="flex flex-col gap-2 border-b border-linea py-3">
+      <div className="flex items-start gap-3">
       <span className="relative h-11 w-11 shrink-0 overflow-hidden bg-hueco">
         <Miniatura
           src={urlDeMiniatura(archivo, 220, p.modificado)}
@@ -293,7 +335,19 @@ function Pieza({ pieza: p }: { pieza: NodoArchivo }) {
         </p>
       </div>
 
-      <Estado estado={p.estado} />
+        <Estado estado={p.estado} />
+      </div>
+
+      {/* Todo lo que pasó con esta pieza, abajo y a lo ancho: lo que pidió el
+          cliente, lo que escribieron en Drive, y qué se puede hacer. Es lo que
+          antes obligaba a irse a la pantalla de la carpeta. */}
+      {detalle && (
+        <DetalleDePieza
+          pieza={detalle}
+          carpetaId={p.id.split("::")[0]}
+          onCambio={onCambio}
+        />
+      )}
     </li>
   );
 }

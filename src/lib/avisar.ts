@@ -38,6 +38,10 @@ function comoSeCuenta(clase: ClaseDeAviso, carpeta: string, detalle?: string): s
       return `Aprobó ${detalle ?? "una pieza"} en ${carpeta}.`;
     case "pidio_cambios":
       return `Pidió cambios en ${detalle ?? "una pieza"} de ${carpeta}.`;
+    case "pidio_extra":
+      // Este espera una decisión de la agencia, y por eso lo dice: el resto de
+      // los avisos cuentan algo que pasó, este pide algo.
+      return `Se quedó sin vueltas en ${detalle ?? "una pieza"} de ${carpeta} y pide una más.`;
     case "envio_revision":
       return `Envió la revisión de ${carpeta}${detalle ? ` (${detalle})` : ""}.`;
     case "escribio":

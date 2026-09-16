@@ -20,6 +20,8 @@ export type ClaseDeAviso =
   | "entregamos"
   | "aprobo"
   | "pidio_cambios"
+  /** Se le acabaron las vueltas incluidas y pide una más. Espera una decisión. */
+  | "pidio_extra"
   | "envio_revision"
   | "escribio"
   | "vencio";

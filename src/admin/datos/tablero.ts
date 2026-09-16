@@ -90,6 +90,22 @@ export type CarpetaEnElTablero = {
   sinRevisar: number;
   /** Ya no están en juego: aprobadas —en «Entregas finales»— o canceladas. */
   terminadas: number;
+  /**
+   * Cuántas piezas se quedaron sin vueltas y piden una más.
+   *
+   * Es lo único del tablero que **espera una decisión de la agencia** y no
+   * trabajo: alguien tiene que decir que sí. Sin esto, el cliente pedía y se
+   * quedaba esperando a que alguien entrara a mirar por casualidad.
+   */
+  extraPedida: number;
+  /**
+   * Unas pocas piezas con qué mirarlas, para la vista rápida.
+   *
+   * **Sin viajes de más**: los archivos ya se leyeron para contar las piezas;
+   * esto es quedarse con los primeros en vez de tirarlos. Son la última vuelta
+   * de cada una, que es la que hay que ver.
+   */
+  muestras: Array<{ archivo: string; nombre: string; modificado?: string }>;
   /** Mensajes del cliente que nadie leyó. */
   sinLeer: number;
   /** Piezas que esperan trabajo de la agencia. */
@@ -259,6 +275,15 @@ export async function elTablero(): Promise<Tablero> {
               enJuego: piezas.length - terminadas,
               sinRevisar,
               terminadas,
+              extraPedida: piezas.filter((p) => p.estado === "extra_pedida").length,
+              muestras: agrupadas.slice(0, 4).map((pieza) => {
+                const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
+                return {
+                  archivo: ultima.id,
+                  nombre: pieza.titulo,
+                  modificado: ultima.modifiedTime,
+                };
+              }),
               sinLeer: sinLeer[cliente.id] ?? 0,
               visible: ajustes.visible,
               subcarpetas: adentro.length,

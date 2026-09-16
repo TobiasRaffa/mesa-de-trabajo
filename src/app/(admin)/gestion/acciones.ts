@@ -85,6 +85,8 @@ import {
   heredadoDelCliente,
   type Contenido,
 } from "@/admin/datos/arbol";
+import { carpetaParaFechar } from "@/admin/datos/carpetas";
+import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { marcarTodosVistos } from "@/lib/avisos";
 import {
   cambiarPersona,
@@ -975,6 +977,38 @@ export async function abrirCarpeta(
   }
   try {
     return { ok: true, contenido: await contenidoDe(carpetaId, heredado) };
+  } catch {
+    return { ok: false, motivo: "No pude leer la carpeta en Drive." };
+  }
+}
+
+/**
+ * Todo lo que pasó en una carpeta, pieza por pieza.
+ *
+ * **Es lo que hace que la ventana del tablero sirva.** Mostraba el nombre y el
+ * estado de cada pieza, y para saber qué había pedido el cliente —o qué
+ * escribieron encima del archivo en Drive— había que irse a la pantalla de la
+ * carpeta. Cuatro pantallas para contestar «¿por qué está frenado esto?».
+ *
+ * Va aparte de `abrirCarpeta` a propósito: eso dibuja el árbol y se pide
+ * seguido; esto pregunta además por los comentarios de Drive —una vuelta por
+ * pieza— y solo hace falta cuando alguien abre una ventana.
+ */
+export async function historiaDeCarpeta(
+  carpetaId: string
+): Promise<
+  { ok: true; piezas: PiezaConHistoria[] } | { ok: false; motivo: string }
+> {
+  if (!(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no existe." };
+  }
+
+  const cliente = await clienteDeCarpeta(carpetaId);
+  if (!cliente) return { ok: false, motivo: "Esa carpeta no es de ningún cliente." };
+
+  try {
+    const { historia } = await carpetaParaFechar(cliente.id, carpetaId);
+    return { ok: true, piezas: historia };
   } catch {
     return { ok: false, motivo: "No pude leer la carpeta en Drive." };
   }
