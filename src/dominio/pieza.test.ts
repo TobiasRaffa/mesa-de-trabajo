@@ -3,6 +3,7 @@ import {
   aplicar,
   deQuienEsLaPelota,
   estaBloqueada,
+  hayAlgoParaEntregar,
   piezaNueva,
   quedanRondas,
   sigueEnJuego,
@@ -417,5 +418,39 @@ describe("sigue en juego", () => {
     // Un estado nuevo que nadie clasifique se contaría como pendiente sin que
     // nadie lo haya decidido, y el tablero pediría trabajo que no existe.
     expect(casos).toHaveLength(7);
+  });
+});
+
+describe("hay algo para entregar", () => {
+  // La pieza vuelve a nosotros cuando el cliente manda sus cambios, y ahí la
+  // aplicación ofrecía entregarla de nuevo en el acto: le mandaba al cliente el
+  // mismo archivo que acababa de devolver, sin una línea cambiada.
+  it("el original recién subido se puede entregar", () => {
+    expect(hayAlgoParaEntregar("en_curso", 0, 1)).toBe(true);
+  });
+
+  it("devuelta con cambios y sin V2 todavía, no", () => {
+    expect(hayAlgoParaEntregar("en_curso", 1, 1)).toBe(false);
+  });
+
+  it("con la V2 arriba, sí", () => {
+    expect(hayAlgoParaEntregar("en_curso", 1, 2)).toBe(true);
+  });
+
+  it("la V3 después de la segunda vuelta", () => {
+    expect(hayAlgoParaEntregar("en_curso", 2, 2)).toBe(false);
+    expect(hayAlgoParaEntregar("en_curso", 2, 3)).toBe(true);
+  });
+
+  it("lo que ya está del lado del cliente no se entrega de nuevo", () => {
+    // Aunque sobren versiones: ya la tiene.
+    expect(hayAlgoParaEntregar("entregada", 0, 3)).toBe(false);
+    expect(hayAlgoParaEntregar("en_revision", 1, 5)).toBe(false);
+    expect(hayAlgoParaEntregar("cambios_marcados", 1, 5)).toBe(false);
+    expect(hayAlgoParaEntregar("final", 0, 2)).toBe(false);
+  });
+
+  it("una carpeta sin archivos no tiene nada que entregar", () => {
+    expect(hayAlgoParaEntregar("en_curso", 0, 0)).toBe(false);
   });
 });

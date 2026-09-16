@@ -48,7 +48,7 @@ import {
   LARGO_MAXIMO,
   type Mensaje,
 } from "@/lib/conversaciones";
-import { aplicar } from "@/dominio/pieza";
+import { aplicar, hayAlgoParaEntregar } from "@/dominio/pieza";
 import { avisar } from "@/lib/avisar";
 import { devolverDesdeFinales } from "@/lib/entregasFinales";
 import {
@@ -503,7 +503,9 @@ export async function entregarCarpeta(
     return { ok: false, motivo: "No pude leer la carpeta en Drive." };
   }
 
-  const estados = await estadosDe(carpetaId, conSusArchivos(carpetaId, agrupadas));
+  const conArchivos = conSusArchivos(carpetaId, agrupadas);
+  const estados = await estadosDe(carpetaId, conArchivos);
+  const vueltasDe = new Map(conArchivos.map((p) => [p.id, p.archivos.length]));
 
   // El plazo se guarda **antes** de entregar: el vencimiento se calcula desde
   // la fecha de entrega con los días que corren, y si se guardara después la
@@ -531,6 +533,20 @@ export async function entregarCarpeta(
     // Entregar de a una: el resto de la carpeta se queda donde está.
     if (soloEsta && id !== soloEsta) continue;
 
+    // **Entregar la tanda no arrastra lo que no tiene nada nuevo.** Una pieza
+    // que el cliente devolvió con cambios está de nuestro lado, pero hasta que
+    // no aparezca la vuelta nueva entregarla le manda el mismo archivo que
+    // acaba de devolver. Se saltea, como cualquier otra que no se pueda.
+    //
+    // Entregando de a una sí se deja: ahí alguien está mirando esa pieza y
+    // decidiendo sobre ella. La pantalla se lo avisa antes.
+    if (
+      !soloEsta &&
+      !hayAlgoParaEntregar(guardada.estado, guardada.ronda, vueltasDe.get(id) ?? 0)
+    ) {
+      continue;
+    }
+
     // Las reglas de qué se puede entregar **no están acá**: salen de
     // `aplicar()`, la misma función que corre en el navegador.
     const r = aplicar(
@@ -545,10 +561,32 @@ export async function entregarCarpeta(
     // Una pieza que ya estaba entregada no es un error: se saltea y se sigue.
     if (!r.ok) continue;
 
+    // **La vuelta nueva abre la revisión de cero.**
+    //
+    // Sin esto, entregar la V2 le llegaba al cliente con la lista de cambios
+    // de la V1 todavía marcada como enviada, y el portal no le dejaba ni
+    // aprobar ni pedir cambios: le mostraba «ya se lo mandamos al equipo»
+    // encima de un archivo nuevo que nadie podía decidir. Quedaba trabado,
+    // sin salida y sin decir por qué.
+    //
+    // Lo pedido no se pierde: se guarda en la historia, junto a la entrega que
+    // lo contesta. Es la única forma de poder decir dentro de un mes «esta
+    // vuelta salió por esto».
+    const pedidos = guardada.cambios;
+
     cambios[id] = anotar(
-      { ...guardada, estado: r.pieza.estado, entregadaEl: ahora },
+      {
+        ...guardada,
+        estado: r.pieza.estado,
+        entregadaEl: ahora,
+        cambios: [],
+        enviada: false,
+      },
       "entregada",
-      firma
+      firma,
+      pedidos.length > 0
+        ? `Responde a: ${pedidos.map((c, i) => `${i + 1}) ${c.texto}`).join("  ")}`
+        : undefined
     );
   }
 

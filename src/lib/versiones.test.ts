@@ -235,3 +235,130 @@ describe("la marca adelante no desordena nada", () => {
     );
   });
 });
+
+describe("el camino completo: V1, V2, V3", () => {
+  // Es el flujo que más se usa y el que más puede doler si falla. Se recorre
+  // entero, con los nombres tal como los escribe el estudio.
+  const carpeta = "c1";
+
+  it("las tres vueltas son una sola pieza, en orden", () => {
+    const enDrive = [
+      { name: "banner dia del padre.pdf", id: "f1" },
+      { name: "V2 banner dia del padre.pdf", id: "f2" },
+      { name: "V3 banner dia del padre.pdf", id: "f3" },
+    ];
+    const piezas = agruparVersiones(enDrive);
+
+    expect(piezas).toHaveLength(1);
+    expect(piezas[0].titulo).toBe("banner dia del padre");
+    expect(piezas[0].versiones.map((v) => v.numero)).toEqual([1, 2, 3]);
+    expect(piezas[0].versiones.map((v) => v.archivo.id)).toEqual(["f1", "f2", "f3"]);
+  });
+
+  it("la identidad no se mueve en todo el camino", () => {
+    // Es lo que hace que los cambios pedidos sobre la V1 sigan estando cuando
+    // llega la V3. Si esto se rompe, se pierde la conversación entera.
+    const esperada = identidadDePieza(carpeta, "banner dia del padre.pdf");
+    expect(identidadDePieza(carpeta, "V2 banner dia del padre.pdf")).toBe(esperada);
+    expect(identidadDePieza(carpeta, "V3 banner dia del padre.pdf")).toBe(esperada);
+  });
+
+  it("Drive las devuelve por nombre y eso no manda", () => {
+    // Alfabéticamente «V2…» y «V3…» vienen antes que «banner…».
+    const enDrive = [
+      { name: "V3 banner.pdf", id: "f3" },
+      { name: "V2 banner.pdf", id: "f2" },
+      { name: "banner.pdf", id: "f1" },
+    ];
+    const [pieza] = agruparVersiones(enDrive);
+    expect(pieza.versiones.map((v) => v.archivo.id)).toEqual(["f1", "f2", "f3"]);
+  });
+
+  it("se puede mezclar la marca adelante y atrás", () => {
+    // Dos personas nombrando distinto no pueden partir un trabajo en dos.
+    const piezas = agruparVersiones([
+      { name: "banner.pdf", id: "f1" },
+      { name: "V2 banner.pdf", id: "f2" },
+      { name: "banner V3.pdf", id: "f3" },
+    ]);
+    expect(piezas).toHaveLength(1);
+    expect(piezas[0].versiones.map((v) => v.numero)).toEqual([1, 2, 3]);
+  });
+
+  it("saltear un número no rompe nada", () => {
+    const [pieza] = agruparVersiones([
+      { name: "banner.pdf", id: "f1" },
+      { name: "V3 banner.pdf", id: "f3" },
+    ]);
+    expect(pieza.versiones.map((v) => v.numero)).toEqual([1, 3]);
+  });
+
+  it("la V2 sola, sin V1, sigue siendo esa pieza", () => {
+    // Pasa cuando se borra la primera. El nombre manda: es «banner».
+    const [pieza] = agruparVersiones([{ name: "V2 banner.pdf", id: "f2" }]);
+    expect(pieza.titulo).toBe("banner");
+    expect(identidadDePieza(carpeta, "V2 banner.pdf")).toBe(
+      identidadDePieza(carpeta, "banner.pdf")
+    );
+  });
+});
+
+describe("cómo se escribe de verdad", () => {
+  // Cada una de estas es alguien apurado nombrando un archivo. Ninguna puede
+  // partir la pieza en dos.
+  it.each([
+    "V2 banner.pdf",
+    "v2 banner.pdf",
+    "V2banner.pdf",
+    "V2_banner.pdf",
+    "V2-banner.pdf",
+    "V 2 banner.pdf",
+    "banner V2.pdf",
+    "banner v2.pdf",
+    "banner_V2.pdf",
+    "banner-v2.pdf",
+    "banner  V2.pdf",
+  ])("«%s» es una vuelta de «banner.pdf»", (nombre) => {
+    const piezas = agruparVersiones([{ name: "banner.pdf" }, { name: nombre }]);
+    expect(piezas).toHaveLength(1);
+  });
+
+  it("las mayúsculas del nombre no parten la pieza", () => {
+    // «banner.pdf» y «V2 Banner.pdf»: lo mismo escrito por dos personas.
+    // Antes eran dos trabajos distintos, y el cliente veía dos.
+    const piezas = agruparVersiones([
+      { name: "banner dia del padre.pdf" },
+      { name: "V2 Banner Dia Del Padre.pdf" },
+    ]);
+    expect(piezas).toHaveLength(1);
+    expect(piezas[0].versiones.map((v) => v.numero)).toEqual([1, 2]);
+  });
+
+  it("el nombre que se muestra es el de la primera, no el de la última", () => {
+    const [pieza] = agruparVersiones([
+      { name: "banner dia del padre.pdf" },
+      { name: "V2 BANNER DIA DEL PADRE.pdf" },
+    ]);
+    expect(pieza.titulo).toBe("banner dia del padre");
+  });
+});
+
+describe("lo que NO se junta, y está bien", () => {
+  it("dos formatos son dos piezas", () => {
+    // Se entrega el mismo trabajo para mirar y para imprimir; juntarlos sería
+    // mentir sobre qué se está aprobando.
+    expect(agruparVersiones([{ name: "banner.jpg" }, { name: "banner.pdf" }])).toHaveLength(2);
+  });
+
+  it("cambiar el nombre es otra pieza", () => {
+    expect(
+      agruparVersiones([{ name: "banner.pdf" }, { name: "banner final.pdf" }])
+    ).toHaveLength(2);
+  });
+
+  it("un año que empieza con uve no es una versión", () => {
+    expect(
+      agruparVersiones([{ name: "balance.xlsx" }, { name: "V2025 balance.xlsx" }])
+    ).toHaveLength(2);
+  });
+});

@@ -20,7 +20,7 @@ import { Entregar } from "@/admin/Entregar";
 import { Estado } from "@/ui/Estado";
 import { Miniatura } from "@/ui/Miniatura";
 import { urlDeMiniatura } from "@/lib/miniaturas";
-import { sigueEnJuego } from "@/dominio/pieza";
+import { hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
 import { IconoCerrar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import type { NodoArchivo } from "@/admin/datos/arbol";
@@ -80,8 +80,12 @@ export function ResumenDeTrabajo({
   // se entrega algo, esa foto queda vieja en el acto y diría «1 sin entregar»
   // al lado de un botón que ya no tiene nada que entregar.
   const cargadas = piezas !== null;
+  // La misma regla que el tablero, no «está de nuestro lado»: una pieza que
+  // el cliente devolvió con cambios no tiene nada nuevo para entregar hasta
+  // que aparezca la vuelta siguiente. Acá se calculaba distinto, y la ventana
+  // ofrecía entregar lo que la columna de al lado decía que no.
   const sinEntregar = cargadas
-    ? enJuego.filter((p) => p.estado === "en_curso").length
+    ? enJuego.filter((p) => hayAlgoParaEntregar(p.estado, p.ronda, p.vueltas)).length
     : c.sinEntregar;
   const sinRevisar = cargadas
     ? enJuego.filter((p) => p.estado === "entregada" || p.estado === "en_revision").length

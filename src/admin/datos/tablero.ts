@@ -22,7 +22,7 @@ import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { calcularVencimiento } from "@/lib/fechas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
-import { sigueEnJuego } from "@/dominio/pieza";
+import { hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
 
 /**
  * De quién es el próximo movimiento.
@@ -174,7 +174,13 @@ export async function elTablero(): Promise<Tablero> {
             // Lo que está en Drive y todavía no se entregó. Es un subconjunto
             // de lo anterior —también es nuestro— pero se cuenta aparte porque
             // lo que hay que hacer con esto es apretar un botón, no diseñar.
-            const sinEntregar = piezas.filter((p) => p.estado === "en_curso").length;
+            // **No alcanza con estar de nuestro lado.** Una pieza que el
+            // cliente devolvió con cambios vuelve a `en_curso`, y ofrecerla
+            // para entregar ahí le manda el mismo archivo que acaba de
+            // devolver. Falta la vuelta nueva.
+            const sinEntregar = conArchivos.filter(({ id, archivos }) =>
+              hayAlgoParaEntregar(estados[id].estado, estados[id].ronda, archivos.length)
+            ).length;
 
             // Lo que ya no está en juego. Sigue existiendo —nada se borra— pero
             // no es trabajo pendiente de nadie.

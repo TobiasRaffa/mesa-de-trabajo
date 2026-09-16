@@ -37,7 +37,7 @@ import {
 import { diaDe, publicacionesDe } from "@/lib/publicaciones";
 import { calcularVencimiento } from "@/lib/fechas";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
-import { sigueEnJuego, type Estado } from "@/dominio/pieza";
+import { hayAlgoParaEntregar, sigueEnJuego, type Estado } from "@/dominio/pieza";
 
 export type NodoCarpeta = {
   id: string;
@@ -106,7 +106,17 @@ export type NodoArchivo = {
   enlaceDrive?: string;
   modificado?: string;
   estado: Estado;
+  /** Cuántos archivos tiene: el original más cada vuelta nueva. */
   vueltas: number;
+  /**
+   * En qué vuelta va la pieza. 0 es la primera, antes de cualquier cambio.
+   *
+   * Hace falta afuera para una sola pregunta, y es importante: **¿hay algo
+   * nuevo para entregar?** Una pieza que el cliente devolvió con cambios está
+   * de nuestro lado pero no tiene nada nuevo adentro hasta que aparezca la
+   * versión siguiente.
+   */
+  ronda: number;
   /** Ya se mudó a «Entregas finales». */
   mudada: boolean;
   /** Cuándo sale publicada, si tiene fecha. */
@@ -210,7 +220,8 @@ async function subcarpetasDeCarpeta(
       }
 
       const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpeta.id));
-      const estados = await estadosDe(carpeta.id, conSusArchivos(carpeta.id, agrupadas));
+      const suyasConArchivos = conSusArchivos(carpeta.id, agrupadas);
+      const estados = await estadosDe(carpeta.id, suyasConArchivos);
 
       const suyas = Object.values(estados);
       const terminadas = suyas.filter((p) => !sigueEnJuego(p.estado)).length;
@@ -223,7 +234,9 @@ async function subcarpetasDeCarpeta(
           (p) => p.estado === "entregada" || p.estado === "en_revision"
         ).length,
         terminadas,
-        sinEntregar: suyas.filter((p) => p.estado === "en_curso").length,
+        sinEntregar: suyasConArchivos.filter(({ id, archivos }) =>
+          hayAlgoParaEntregar(estados[id].estado, estados[id].ronda, archivos.length)
+        ).length,
         subcarpetas: adentro.length,
       };
     })
@@ -280,6 +293,7 @@ async function archivosDeCarpeta(
       modificado: ultima.modifiedTime,
       estado: estado.estado,
       vueltas: pieza.versiones.length,
+      ronda: estado.ronda,
       mudada: estado.mudada,
       publicaEl: dias[suya],
       dias: propios[suya],

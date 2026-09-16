@@ -45,11 +45,13 @@ const SUFIJO = /[ _-]+v\s*(\d{1,3})$/i;
 /**
  * La misma marca, al principio: «V2 banner dia del padre».
  *
- * Pide un separador después del número —espacio, guion o guion bajo— para no
- * comerse el nombre: sin eso, `V2025 balance` sería la versión 2025 de
- * «025 balance», que no es nada.
+ * **Lo que protege el nombre no es el separador, es que no siga un dígito.**
+ * Pedía un separador —espacio, guion o guion bajo— y con eso `V2banner.pdf`,
+ * escrito por alguien apurado, quedaba como una pieza aparte. Lo que había que
+ * evitar era comerse un año: `V2025 balance` no puede ser la versión 202 de
+ * «5 balance». Eso lo resuelve `(?!\d)`, que exige que el número termine ahí.
  */
-const PREFIJO = /^v\s*(\d{1,3})[ _-]+/i;
+const PREFIJO = /^v\s*(\d{1,3})(?!\d)[ _-]*/i;
 
 export type NombreDeArchivo = {
   /** Lo que identifica a la pieza: el nombre sin el sufijo, con extensión. */
@@ -116,12 +118,17 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
 
   for (const archivo of archivos) {
     const { base, version, titulo } = leerNombre(archivo.name);
-    const pieza = porBase.get(base);
+    // **Las mayúsculas no parten una pieza.** «banner dia del padre.pdf» y
+    // «V2 Banner Dia Del Padre.pdf» son lo mismo escrito por dos personas, y
+    // separarlos le mostraba al cliente dos trabajos donde hay uno, sin poder
+    // comparar. Se agrupa sin distinguir caja; el nombre que se muestra sigue
+    // siendo el de la primera vuelta, tal como lo escribieron.
+    const pieza = porBase.get(base.toLowerCase());
 
     if (pieza) {
       pieza.versiones.push({ numero: version, archivo });
     } else {
-      porBase.set(base, { titulo, versiones: [{ numero: version, archivo }] });
+      porBase.set(base.toLowerCase(), { titulo, versiones: [{ numero: version, archivo }] });
     }
   }
 

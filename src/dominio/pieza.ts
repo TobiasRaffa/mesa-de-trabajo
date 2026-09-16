@@ -116,6 +116,29 @@ export function sigueEnJuego(estado: Estado): boolean {
   }
 }
 
+/**
+ * ¿Hay algo nuevo para entregarle al cliente?
+ *
+ * **No alcanza con que la pieza esté de nuestro lado.** Cuando el cliente
+ * devuelve la V1 con cambios, la pieza vuelve a nosotros —queda `en_curso`— y
+ * la aplicación ofrecía entregarla de nuevo en el acto. Entregar ahí le manda
+ * al cliente **el mismo archivo que acaba de devolver**, sin una línea
+ * cambiada: el peor mensaje posible, porque parece que se hizo el trabajo.
+ *
+ * Lo que falta es la vuelta nueva. Cada ronda cerrada pide una versión más:
+ * con la vuelta 0 alcanza el archivo original, la vuelta 1 necesita la V2, la
+ * 2 necesita la V3. Mientras no aparezca, no hay nada que entregar.
+ *
+ * `vueltas` son los archivos que hoy forman la pieza, contando el original.
+ */
+export function hayAlgoParaEntregar(
+  estado: Estado,
+  ronda: number,
+  vueltas: number
+): boolean {
+  return estado === "en_curso" && vueltas > ronda;
+}
+
 /** ¿De quién se está esperando algo? Es la pregunta que contesta el tablero. */
 export function deQuienEsLaPelota(p: Pieza): "agencia" | "cliente" | "nadie" {
   switch (p.estado) {

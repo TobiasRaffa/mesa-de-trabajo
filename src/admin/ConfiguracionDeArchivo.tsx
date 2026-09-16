@@ -39,6 +39,22 @@ export function ConfiguracionDeArchivo({
         Faltaba, y sin esto la única salida era entregar todo o no entregar
         nada.
       */}
+      {/*
+        **Acá se puede entregar aunque no haya vuelta nueva.** En la carpeta no:
+        entregar la tanda con una pieza que el cliente acaba de devolver le
+        manda el mismo archivo sin una línea cambiada. Pero esta es la ficha de
+        una pieza, y quien la abre está mirando esa y ninguna otra: si decide
+        mandarla igual —porque el cambio se resolvió hablando, porque se
+        entregó por otro lado—, es una decisión, no un descuido. Se avisa y se
+        deja pasar.
+      */}
+      {archivo.estado === "en_curso" && archivo.vueltas <= archivo.ronda && (
+        <p className="border-l-4 border-espera-borde bg-espera-tenue px-3 py-2 text-menudo text-espera">
+          El cliente devolvió esta pieza con cambios y todavía no hay una vuelta
+          nueva en Drive. Si la entregás así, le llega el mismo archivo.
+        </p>
+      )}
+
       {/* Sin condición afuera: «Entregar» decide solo si se muestra. Con una
           condición acá, entregar desmonta el componente en el mismo momento en
           que el árbol se refresca —y se lleva puesto el mensaje para el

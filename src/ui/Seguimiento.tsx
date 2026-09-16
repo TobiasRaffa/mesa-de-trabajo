@@ -1,9 +1,15 @@
-// El camino que hizo una pieza: Boceto, las rondas que hubo, y Final.
+// El camino que hizo una pieza: V1, las vueltas que hubo, y Final.
 //
-// No enumera las rondas que todavía no pasaron. Mostrar «Boceto · Ronda 1 ·
-// Ronda 2 · Final» desde el principio da a entender que va a haber cambios, y
-// muchas veces al cliente le gusta el boceto y se termina ahí. El camino se
-// dibuja a medida que se recorre.
+// **Se habla de versiones y no de rondas.** Decía «Boceto · Ronda 1 · Ronda 2»
+// y en el estudio se habla de otra cosa: el archivo se llama «V2», el cliente
+// pregunta por la V2, y la pantalla le contestaba «ronda 1». Dos nombres para
+// la misma cosa, y uno solo estaba escrito en el archivo. Ahora la vuelta 0 es
+// **V1** —el archivo sin marca— y cada ronda cerrada es la versión siguiente.
+//
+// No enumera las versiones que todavía no pasaron. Mostrar «V1 · V2 · V3 ·
+// Final» desde el principio da a entender que va a haber cambios, y muchas
+// veces al cliente le gusta la primera y se termina ahí. El camino se dibuja a
+// medida que se recorre.
 
 type Props = {
   ronda: number;
@@ -15,10 +21,14 @@ type Props = {
 };
 
 function nombreDelPaso(n: number, rondasIncluidas: number) {
-  if (n === 0) return "Boceto";
-  // Las rondas habilitadas por encima de las incluidas se llaman distinto: el
-  // cliente ve que fue algo adicional sin que diga la palabra factura.
-  return n <= rondasIncluidas ? `Ronda ${n}` : "Revisión adicional";
+  // La vuelta 0 es la V1: el archivo tal como se subió, sin marca en el
+  // nombre. De ahí en más, cada vuelta cerrada es la versión siguiente, que es
+  // exactamente lo que dice el nombre del archivo en Drive.
+  const version = `V${n + 1}`;
+  // Las versiones que salieron de una revisión adicional se nombran igual
+  // —son la V4, no otra cosa— pero se aclara de dónde salieron, para que el
+  // cliente vea que fue algo aparte sin que diga la palabra factura.
+  return n <= rondasIncluidas ? version : `${version} · adicional`;
 }
 
 export function pasoActual(ronda: number, rondasIncluidas: number, aprobada: boolean) {
