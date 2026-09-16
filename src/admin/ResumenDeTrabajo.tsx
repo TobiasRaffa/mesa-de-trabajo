@@ -390,55 +390,65 @@ function Pieza({
   const archivo = p.archivos[p.archivos.length - 1];
 
   return (
-    // En columna: arriba el renglón de siempre, abajo el detalle a lo ancho.
-    // En una sola fila, el detalle —que ocupa todo— aplastaba la miniatura y el
-    // nombre hasta partirlos en una palabra por línea.
-    <li className="flex flex-col gap-2 border-b border-linea py-3">
-      <div className="flex items-start gap-3">
-      <span className="relative h-11 w-11 shrink-0 overflow-hidden bg-hueco">
-        <Miniatura
-          src={urlDeMiniatura(archivo, 220, p.modificado)}
-          alt=""
-          nombre={p.nombre}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      </span>
+    // **La misma forma que la ventana del cliente**: la pieza grande de un
+    // lado y todo lo que se sabe de ella del otro. Era una lista de renglones
+    // con una miniatura de estampilla, y de un trabajo lo primero que se mira
+    // es el trabajo.
+    <li className="border-b border-linea py-4">
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <a
+          href={`/api/archivo/${archivo}?ver=1`}
+          target="_blank"
+          rel="noreferrer noopener"
+          title={`Abrir ${p.nombre}`}
+          className="relative block h-56 w-full overflow-hidden border border-linea bg-hueco
+                     transition-colors hover:border-tinta"
+        >
+          <Miniatura
+            src={urlDeMiniatura(archivo, 800, p.modificado)}
+            alt={p.nombre}
+            nombre={p.nombre}
+            className="absolute inset-0 h-full w-full object-contain p-1"
+          />
+        </a>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="min-w-0 font-bold tracking-tight">{p.nombre}</span>
-          {p.vueltas > 1 && (
-            <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
-              v{p.vueltas}
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="min-w-0 text-guia font-extrabold tracking-tight">
+              {p.nombre}
             </span>
-          )}
-          {!p.visible && (
-            <span className="bg-tinta px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
-              Oculta
-            </span>
+            {p.vueltas > 1 && (
+              <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
+                v{p.vueltas}
+              </span>
+            )}
+            {!p.visible && (
+              <span className="bg-tinta px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+                Oculta
+              </span>
+            )}
+            <Estado estado={p.estado} />
+          </div>
+
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-micro text-apagado">
+            <span>{p.responsableA ?? "sin asignar"}</span>
+            {p.vence && <span className="cifras">· vence {comoFecha(p.vence)}</span>}
+            {p.publicaEl && (
+              <span className="cifras">· sale el {comoFecha(p.publicaEl)}</span>
+            )}
+          </p>
+
+          {/* Todo lo que pasó con esta pieza: lo que pidió el cliente, lo que
+              escribieron en Drive, y qué se puede hacer. */}
+          {detalle && (
+            <DetalleDePieza
+              pieza={detalle}
+              carpetaId={p.id.split("::")[0]}
+              onCambio={onCambio}
+            />
           )}
         </div>
-
-        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-micro text-apagado">
-          <span>{p.responsableA ?? "sin asignar"}</span>
-          {p.vence && <span className="cifras">· vence {comoFecha(p.vence)}</span>}
-          {p.publicaEl && <span className="cifras">· sale el {comoFecha(p.publicaEl)}</span>}
-        </p>
       </div>
-
-        <Estado estado={p.estado} />
-      </div>
-
-      {/* Todo lo que pasó con esta pieza, abajo y a lo ancho: lo que pidió el
-          cliente, lo que escribieron en Drive, y qué se puede hacer. Es lo que
-          antes obligaba a irse a la pantalla de la carpeta. */}
-      {detalle && (
-        <DetalleDePieza
-          pieza={detalle}
-          carpetaId={p.id.split("::")[0]}
-          onCambio={onCambio}
-        />
-      )}
     </li>
   );
 }

@@ -595,10 +595,13 @@ function FilaCarpeta({
               type="button"
               onClick={() => mirar(carpeta, clienteId)}
               title={`Ver ${carpeta.nombre}`}
-              className={`font-bold tracking-tight transition-colors hover:text-acento
-                          focus-visible:outline-2 focus-visible:outline-acento ${
-                            oculta ? "text-apagado" : ""
-                          }`}
+              // **Subrayado desde el principio, no solo al pasar por encima.**
+              // Sin eso el nombre se lee como texto y nadie lo toca: el trabajo
+              // quedaba a un clic de distancia que no se veía.
+              className={`font-bold tracking-tight underline decoration-linea
+                          underline-offset-4 transition-colors hover:text-acento
+                          hover:decoration-acento focus-visible:outline-2
+                          focus-visible:outline-acento ${oculta ? "text-apagado" : ""}`}
             >
               {carpeta.nombre}
             </button>
