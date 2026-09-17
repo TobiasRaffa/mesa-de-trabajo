@@ -29,6 +29,7 @@ import { Boton } from "@/ui/Boton";
 import { IconoCerrar, IconoEnviar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { Fondo } from "@/ui/Fondo";
+import { LARGO_MAXIMO } from "@/dominio/texto";
 import type { Mensaje } from "@/lib/conversaciones";
 
 export type { Mensaje };
@@ -174,6 +175,7 @@ export function Conversacion({
               ref={campo}
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
+              maxLength={LARGO_MAXIMO}
               rows={1}
               autoFocus
               placeholder={

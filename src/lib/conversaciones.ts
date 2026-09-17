@@ -34,8 +34,11 @@ export type Mensaje = {
   cuando: string;
 };
 
-/** Nadie escribe un mensaje más largo que esto sin querer romper algo. */
-export const LARGO_MAXIMO = 4000;
+// El tope vive en el dominio porque además lo necesita el campo donde se
+// escribe, que corre en el navegador. Se reexporta para no obligar a nadie a
+// cambiar de puerta.
+export { LARGO_MAXIMO } from "@/dominio/texto";
+import { LARGO_MAXIMO } from "@/dominio/texto";
 
 function esMensaje(m: unknown): m is Mensaje {
   if (!m || typeof m !== "object") return false;

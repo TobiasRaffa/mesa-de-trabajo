@@ -22,6 +22,7 @@ import { Boton, BotonEnlace } from "@/ui/Boton";
 import { Comparador } from "@/ui/Comparador";
 import type { Lamina } from "@/ui/Ampliada";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
+import { LARGO_MAXIMO } from "@/dominio/texto";
 import {
   IconoAmpliar,
   IconoAprobar,
@@ -588,9 +589,13 @@ function CampoDeCambio({
 }) {
   return (
     <div className="flex flex-col gap-2">
+      {/* El tope lo respeta el campo y no solo el servidor: recortaba en
+          silencio, así que quien pegaba un brief largo guardaba las primeras
+          dos carillas y no se enteraba de que había perdido el resto. */}
       <textarea
         value={valor}
         onChange={(e) => onEscribir(e.target.value)}
+        maxLength={LARGO_MAXIMO}
         rows={3}
         autoFocus
         placeholder="Una cosa por vez: «el sol pisa la bajada», «la fecha tiene que decir 12/3»…"
