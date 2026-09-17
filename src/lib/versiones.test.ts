@@ -567,3 +567,27 @@ describe("cuando un renombre parte un trabajo en dos", () => {
     expect(piezas[0].comparteNombre).toBe(false);
   });
 });
+
+describe("la versión cero no existe", () => {
+  // La primera vuelta es la V1: el archivo sin marca. Un cero no numera nada,
+  // así que es parte del nombre. Sin esto el cliente veía «V0 › V999 › Final»
+  // en su camino, dos números que no existen en el vocabulario de nadie.
+  it("«V0_stickers.pdf» no es una vuelta de «stickers.pdf»", () => {
+    const leido = leerNombre("V0_stickers.pdf");
+    expect(leido.version).toBe(1);
+    expect(leido.marcado).toBe(false);
+    expect(leido.base).toBe("V0_stickers.pdf");
+  });
+
+  it("y no se junta con la pieza de al lado", () => {
+    const piezas = agruparVersiones([
+      { name: "stickers.pdf" },
+      { name: "V0_stickers.pdf" },
+    ]);
+    expect(piezas).toHaveLength(2);
+  });
+
+  it("la V1 escrita sí vale", () => {
+    expect(leerNombre("V1_stickers.pdf").marcado).toBe(true);
+  });
+});

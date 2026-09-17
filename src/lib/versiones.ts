@@ -95,7 +95,13 @@ export function leerNombre(nombre: string): NombreDeArchivo {
 
   // «V2.jpeg» a secas no es la versión dos de nada: sin nombre al lado, la
   // marca *es* el nombre.
-  if (marca && limpio.trim() === "") {
+  //
+  // **Y «V0» tampoco es una versión.** La primera vuelta es la V1 —el archivo
+  // sin marca— así que un cero no numera nada: es parte del nombre. Sin esto,
+  // el cliente veía «V0 › V999 › Final» en su camino, dos números que no
+  // existen en el vocabulario de nadie. Se deja como está escrito, que se ve y
+  // se corrige renombrando.
+  if (marca && (limpio.trim() === "" || Number(marca[1]) === 0)) {
     return { base: nombre, version: 1, titulo: cuerpo, marcado: false };
   }
 
