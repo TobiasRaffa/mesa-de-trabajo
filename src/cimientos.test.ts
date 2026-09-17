@@ -12,6 +12,8 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { seccionDeLaRuta } from "@/dominio/roles";
+import { ENTRADA } from "@/proxy";
 
 const RAIZ = process.cwd();
 const FUENTE = path.join(RAIZ, "src");
@@ -381,7 +383,120 @@ describe("las puertas", () => {
     expect(
       proxy,
       "La puerta tiene que mirar la galleta de sesión, no dejar pasar a todos."
-    ).toContain("galletaDeGestionValida");
+    ).toContain("quienLleva(");
+  });
+
+  it("la puerta separa por sección, no solo por «entró o no entró»", () => {
+    // Que la barra lateral no dibuje «Facturas» no protege nada: la dirección
+    // se escribe a mano. La protección es esta, y está acá por la misma razón
+    // que la puerta entera: es el único lugar por el que pasa todo, incluido
+    // lo que todavía no existe.
+    const proxy = leer("src/proxy.ts");
+
+    expect(proxy, "La puerta no mira de qué sección es la dirección.").toContain(
+      "seccionDeLaRuta("
+    );
+    expect(
+      proxy,
+      "La puerta no compara contra las secciones de quien entró: sabe quién es " +
+        "y le abre todo igual."
+    ).toContain("sesion.secciones.includes(");
+  });
+
+  it("ninguna pantalla de gestión se queda sin sección", () => {
+    // **Es la mitad que hace que separar por sección se sostenga.** Una
+    // dirección que nadie clasificó no es de ninguna sección, y la puerta la
+    // trata como «acá no entra nadie»: se cierra para todos, incluida quien
+    // administra. Eso es lo correcto —lo contrario sería abrirla para todos—
+    // pero sin este aviso el error aparece cuando alguien no puede trabajar.
+    const paginas = archivosBajo(path.join(FUENTE, "app", "(admin)")).filter((f) =>
+      /[/\\]page\.tsx$/.test(f)
+    );
+    expect(paginas.length, "No encontré ninguna pantalla de gestión.").toBeGreaterThan(0);
+
+    const sinSeccion = paginas
+      .map((f) => {
+        // De la carpeta a la dirección: se sacan los grupos `(admin)` y los
+        // tramos variables `[clienteId]` se reemplazan por algo cualquiera.
+        const ruta =
+          "/" +
+          path
+            .relative(path.join(FUENTE, "app"), path.dirname(f))
+            .replace(/\\/g, "/")
+            .split("/")
+            .filter((t) => t && !t.startsWith("("))
+            .map((t) => (t.startsWith("[") ? "cualquiera" : t))
+            .join("/");
+        return ruta;
+      })
+      .filter((ruta) => ruta !== ENTRADA && seccionDeLaRuta(ruta) === null);
+
+    expect(
+      sinSeccion,
+      "Estas pantallas no están en ninguna sección, así que no entra nadie: " +
+        "ni quien administra. Clasificalas en `src/dominio/roles.ts`."
+    ).toEqual([]);
+  });
+
+  it("las acciones de Admin preguntan si quien las llama entra a Admin", () => {
+    // **El segundo cerrojo, y hace falta que sea segundo.** El primero es la
+    // puerta: una acción se manda a la dirección de la pantalla que la dibujó,
+    // así que el POST de dar de alta gente llega a `/gestion/admin` y se
+    // rebota ahí. Pero eso depende de en qué pantalla se dibujó el formulario,
+    // que es una decisión de quien arma la pantalla: el día que un formulario
+    // del equipo aparezca en una pantalla que casi todos abren, la puerta lo
+    // dejaría pasar y cualquiera se daría a sí mismo el rol que quiera.
+    const fuente = leer("src/app/(admin)/gestion/acciones.ts");
+
+    // Las que cambian quién entra y a qué, más las claves de los clientes.
+    const deAdmin = [
+      "darDeAlta",
+      "editarDelEquipo",
+      "cambiarAccesos",
+      "reiniciarClaveDePersona",
+      "quitarDelEquipo",
+      "ponerTagDeCliente",
+      "verClaveDeCliente",
+    ];
+
+    const partes = new Map(
+      fuente
+        .split(/^export async function /m)
+        .slice(1)
+        .map((bloque) => [bloque.slice(0, bloque.indexOf("(")), bloque] as const)
+    );
+
+    const sinPreguntar = deAdmin.filter((nombre) => {
+      const bloque = partes.get(nombre);
+      return !bloque || !bloque.includes('puedoVer("admin")');
+    });
+
+    expect(
+      sinPreguntar,
+      "Estas acciones cambian quién entra y a qué, y no preguntan quién las " +
+        "está llamando. Empezá por `if (!(await puedoVer(\"admin\"))) return NO_ES_TUYO;`."
+    ).toEqual([]);
+  });
+
+  it("nadie le pone la contraseña a otro", () => {
+    // **Es la regla entera del alta.** Se da de alta un correo y un rol; la
+    // contraseña la elige esa persona la primera vez que entra, y desde ahí no
+    // la sabe nadie más. Si una pantalla de administración pudiera ponerle una
+    // a alguien, quien administra podría entrar como cualquiera, y todo lo que
+    // queda firmado con un nombre dejaría de significar algo.
+    const ponen = SIN_PRUEBAS.filter((f) => {
+      const cuerpo = readFileSync(f, "utf8")
+        .split("\n")
+        .filter((linea) => !linea.trimStart().startsWith("import "))
+        .join("\n");
+      return /\bponerClave\(/.test(cuerpo);
+    }).map(relativo);
+
+    expect(
+      ponen.sort(),
+      "Solo la puerta puede guardar una contraseña, y solo la que acaba de " +
+        "escribir su dueña."
+    ).toEqual(["src/app/(admin)/gestion/entrar/acciones.ts", "src/lib/claves.ts"]);
   });
 
   it("el proxy no reparte la sesión: solo la exige", () => {

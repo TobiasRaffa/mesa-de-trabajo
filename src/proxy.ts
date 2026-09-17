@@ -1,4 +1,4 @@
-// Quién está mirando, del lado de la agencia.
+// Quién está mirando, del lado de la agencia, y qué le toca ver.
 //
 // **Esto vuelve a ser una puerta, y ahora cada una tiene su llave.**
 //
@@ -14,29 +14,71 @@
 // no se llega a nada que cuelgue de `/gestion` ni al diagnóstico, así que una
 // pantalla nueva nace protegida sin que nadie tenga que acordarse.
 //
-// La pantalla de entrada queda afuera, por razones obvias: si también pidiera
-// sesión, no habría forma de conseguir una.
+// **Y ahora además separa por sección.** Que la barra lateral no dibuje
+// «Facturas» no es una protección: la dirección se escribe a mano. La
+// protección es esta, y está acá por la misma razón que la puerta entera: es el
+// único lugar por el que pasa todo, incluido lo que todavía no existe.
+//
+// **Las acciones de servidor pasan por acá también**, porque se mandan a la
+// dirección de la pantalla que las dibujó: un POST a `/gestion/admin` con la
+// acción de dar de alta gente se rebota igual que abrir esa pantalla. Aun así
+// las acciones de Admin vuelven a preguntar por su cuenta —hay un guardián que
+// lo verifica—: **que estén protegidas no puede depender de en qué pantalla se
+// dibujó el formulario**, que es una decisión de quien arma la pantalla.
 //
 // En Next 16 esto se llama `proxy` y ya no `middleware`, y corre en Node por
-// omisión, que es lo que permite firmar con `node:crypto` acá adentro.
+// omisión, que es lo que permite firmar con `node:crypto` y leer quién es quién
+// acá adentro.
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { GALLETA_DE_GESTION, galletaDeGestionValida } from "@/lib/contrasena";
+import { GALLETA_DE_GESTION } from "@/lib/contrasena";
+import { dondeEmpieza, seccionDeLaRuta } from "@/dominio/roles";
+import { quienLleva } from "@/lib/sesion";
 
 /** Dónde se entra. Queda afuera de la puerta, o no se podría entrar. */
 export const ENTRADA = "/gestion/entrar";
 
-export function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname === ENTRADA) return NextResponse.next();
+export async function proxy(request: NextRequest) {
+  const ruta = request.nextUrl.pathname;
+  if (ruta === ENTRADA) return NextResponse.next();
 
-  if (galletaDeGestionValida(request.cookies.get(GALLETA_DE_GESTION)?.value)) {
-    return NextResponse.next();
+  const sesion = await quienLleva(request.cookies.get(GALLETA_DE_GESTION)?.value);
+  if (!sesion) return aLaPuerta(request);
+
+  // `null` es una dirección que nadie clasificó. Se trata como «acá no entra
+  // nadie»: una pantalla nueva sin clasificar queda cerrada en vez de abierta,
+  // y hay un guardián que avisa en las pruebas antes de que moleste a alguien.
+  const seccion = seccionDeLaRuta(ruta);
+  if (seccion && sesion.secciones.includes(seccion)) return NextResponse.next();
+
+  // **Un pedido que no es de ir a una pantalla se contesta que no, y punto.**
+  // Mandarlo a otro lado sería reenviarle el formulario a una pantalla que no
+  // lo espera; y quien está mandando un POST a una sección que no es la suya
+  // no se perdió: la está probando.
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new NextResponse("Esa parte no es tuya.", { status: 403 });
   }
 
-  // **A dónde volver después de entrar.** Sin esto, quien abre un link a un
-  // trabajo puntual —de los que se pasan por chat— entra y aparece en la
-  // pantalla de inicio, sin saber a dónde iba.
+  // Se perdió, o le cambiaron el acceso mientras tenía la pantalla abierta. Va
+  // a la primera sección que sí puede ver, no a la puerta: hacerlo entrar de
+  // nuevo no arreglaría nada, porque ya entró.
+  const suya = dondeEmpieza(sesion.secciones);
+  if (!suya) return aLaPuerta(request);
+
+  const destino = request.nextUrl.clone();
+  destino.pathname = suya;
+  destino.search = "";
+  return NextResponse.redirect(destino);
+}
+
+/**
+ * A escribir la contraseña, y después a donde iba.
+ *
+ * Sin el «volver», quien abre un link a un trabajo puntual —de los que se pasan
+ * por chat— entra y aparece en la pantalla de inicio, sin saber a dónde iba.
+ */
+function aLaPuerta(request: NextRequest) {
   const aEntrar = request.nextUrl.clone();
   aEntrar.pathname = ENTRADA;
   aEntrar.search = "";

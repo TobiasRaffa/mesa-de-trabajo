@@ -12,9 +12,14 @@
 // los que conocemos. Sin eso, un POST armado a mano podría llenar los archivos
 // de configuración con lo que quisiera.
 //
-// Lo que todavía NO hay es autenticación: cualquiera que llegue a la máquina
-// puede entrar. Hoy alcanza porque la aplicación corre en una computadora y no
-// está en internet. Antes de subirla, esto necesita login.
+// **Las de Admin preguntan además por su cuenta.** Una acción se manda a la
+// dirección de la pantalla que la dibujó, así que `proxy.ts` ya rebota el POST
+// de dar de alta gente: llega a `/gestion/admin`, que es la sección que esa
+// pantalla es. Pero eso depende de dónde se dibujó el formulario, que es una
+// decisión de quien arma la pantalla: el día que un formulario del equipo
+// aparezca en otro lado, la puerta lo dejaría pasar. Por eso el equipo, los
+// roles y las claves de los clientes preguntan con `puedoVer("admin")`, y hay
+// un guardián en `cimientos.test.ts` que verifica que ninguna se olvide.
 
 import { revalidatePath } from "next/cache";
 import {
@@ -78,9 +83,11 @@ const RONDAS_INCLUIDAS = RONDAS_INCLUIDAS_POR_DEFECTO;
 import { agruparVersiones, conSusArchivos, identidadDePieza } from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
 import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
-import { LARGO_MINIMO_DE_CLAVE, ponerClave, sacarClave } from "@/lib/claves";
+import { sacarClave } from "@/lib/claves";
 import { correoValido } from "@/lib/equipo";
-import { firmaDeAgencia } from "@/lib/sesion";
+import { firmaDeAgencia, puedoVer } from "@/lib/sesion";
+import { darPorAtendido } from "@/lib/olvidos";
+import { esRol, esSeccion, seccionesDe, type Seccion } from "@/dominio/roles";
 import {
   contenidoDe,
   heredadoDelCliente,
@@ -92,7 +99,9 @@ import { marcarTodosVistos } from "@/lib/avisos";
 import {
   cambiarPersona,
   elEquipo,
+  personaPorCorreo,
   sacarDelEquipo,
+  seccionesDePersona,
   sumarAlEquipo,
 } from "@/lib/equipo";
 import { diasValidos, ponerPlazo } from "@/lib/plazos";
@@ -106,6 +115,15 @@ import {
 } from "@/lib/publicaciones";
 
 export type Resultado = { ok: true } | { ok: false; motivo: string };
+
+/**
+ * Lo que contesta una acción de Admin a quien no entra a Admin.
+ *
+ * Es el mismo texto que contesta la puerta, a propósito: quien llegó hasta acá
+ * sin pasar por Admin no tiene por qué enterarse de cuál de los dos cerrojos lo
+ * frenó.
+ */
+const NO_ES_TUYO = { ok: false as const, motivo: "Esa parte no es tuya." };
 
 // ---------------------------------------------------------------------------
 // Carpetas
@@ -228,6 +246,8 @@ export async function renovarLinkDeCliente(_previo: unknown, formulario: FormDat
  * no tiene por qué estar a mano de quien se sienta en la computadora un rato.
  */
 export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) {
+  if (!(await puedoVer("admin"))) return NO_ES_TUYO;
+
   const clienteId = String(formulario.get("clienteId") ?? "");
   const tag = String(formulario.get("tag") ?? "").trim();
   const contrasena = String(formulario.get("contrasena") ?? "");
@@ -286,6 +306,8 @@ export async function verClaveDeCliente(
   _previo: unknown,
   formulario: FormData
 ): Promise<{ ok: true; clave: string } | { ok: false; motivo: string }> {
+  if (!(await puedoVer("admin"))) return NO_ES_TUYO;
+
   const clienteId = String(formulario.get("clienteId") ?? "");
   const contrasena = String(formulario.get("contrasena") ?? "");
 
@@ -903,76 +925,159 @@ export async function guardarResponsable(
  * Nunca se guarda lo escrito: se guarda una huella, y en otro archivo que el
  * navegador no ve nunca.
  */
-export async function ponerClaveDePersona(_previo: unknown, formulario: FormData) {
-  const id = String(formulario.get("id") ?? "");
-  const clave = String(formulario.get("clave") ?? "");
+/**
+ * **Dar de alta es un correo y un rol. No hay contraseña acá.**
+ *
+ * La elige esa persona la primera vez que entra, y desde ese momento no la
+ * sabe nadie más —ni quien la dio de alta, porque nunca pasó por sus manos—.
+ * Antes esta pantalla le ponía una contraseña a cualquiera, que es lo mismo
+ * que decir que cualquiera de Admin podía entrar como cualquiera.
+ *
+ * El nombre no se pide: sale del correo, y esa persona lo corrige cuando entra
+ * por primera vez, que es cuando sabe cómo quiere que la llamen.
+ */
+export async function darDeAlta(_previo: unknown, formulario: FormData) {
+  if (!(await puedoVer("admin"))) return NO_ES_TUYO;
 
-  if (!(await elEquipo()).some((p) => p.id === id)) {
-    return { ok: false as const, motivo: "Esa persona no está." };
-  }
-  if (clave.length < LARGO_MINIMO_DE_CLAVE) {
-    return {
-      ok: false as const,
-      motivo: `La contraseña tiene que tener al menos ${LARGO_MINIMO_DE_CLAVE} caracteres.`,
-    };
-  }
-
-  await ponerClave(id, clave);
-  revalidatePath("/gestion", "layout");
-  return { ok: true as const };
-}
-
-export async function agregarAlEquipo(_previo: unknown, formulario: FormData) {
-  const nombre = String(formulario.get("nombre") ?? "").trim();
   const correo = String(formulario.get("correo") ?? "").trim();
+  const rol = formulario.get("rol");
 
-  if (nombre.length < 2) return { ok: false as const, motivo: "Falta el nombre." };
-  if (correo && !correoValido(correo)) {
+  if (!correoValido(correo)) {
     return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
   }
+  if (!esRol(rol)) return { ok: false as const, motivo: "Elegí un rol." };
 
-  await sumarAlEquipo(
-    nombre,
-    correo,
-    formulario.get("avisaDeTodo") === "si",
-    String(formulario.get("enDrive") ?? "").trim()
-  );
+  // **Dos personas con el mismo correo es una puerta ambigua**: entrar buscaría
+  // por correo y se quedaría con la primera, así que la segunda tendría una
+  // ficha que no se abre nunca.
+  if (await personaPorCorreo(correo)) {
+    return { ok: false as const, motivo: "Ya hay alguien con ese correo." };
+  }
+
+  await sumarAlEquipo({ correo, rol });
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
 
 export async function editarDelEquipo(_previo: unknown, formulario: FormData) {
+  if (!(await puedoVer("admin"))) return NO_ES_TUYO;
+
   const id = String(formulario.get("id") ?? "");
   const nombre = String(formulario.get("nombre") ?? "").trim();
   const correo = String(formulario.get("correo") ?? "").trim();
 
-  if (!(await elEquipo()).some((p) => p.id === id)) {
-    return { ok: false as const, motivo: "Esa persona no está." };
-  }
+  const persona = (await elEquipo()).find((p) => p.id === id);
+  if (!persona) return { ok: false as const, motivo: "Esa persona no está." };
   if (nombre.length < 2) return { ok: false as const, motivo: "Falta el nombre." };
   if (correo && !correoValido(correo)) {
     return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
   }
 
-  await cambiarPersona(
-    id,
+  const otra = correo ? await personaPorCorreo(correo) : null;
+  if (otra && otra.id !== id) {
+    return { ok: false as const, motivo: "Ya hay alguien con ese correo." };
+  }
+
+  await cambiarPersona(id, {
     nombre,
     correo,
-    formulario.get("avisaDeTodo") === "si",
-    String(formulario.get("enDrive") ?? "").trim()
-  );
+    avisaDeTodo: formulario.get("avisaDeTodo") === "si",
+    enDrive: String(formulario.get("enDrive") ?? "").trim(),
+  });
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+/**
+ * A qué partes de la gestión entra alguien: su rol, y lo que se le da aparte.
+ *
+ * **Las sueltas suman y nunca restan.** Lo que da el rol no se puede destildar
+ * desde acá: para quitarle algo a alguien se le cambia el rol, que es la
+ * decisión que de verdad se está tomando. Tildar una que el rol ya da no
+ * cambia nada, y la pantalla la muestra puesta y sin tocar.
+ */
+export async function cambiarAccesos(_previo: unknown, formulario: FormData) {
+  if (!(await puedoVer("admin"))) return NO_ES_TUYO;
+
+  const id = String(formulario.get("id") ?? "");
+  const rol = formulario.get("rol");
+  const sueltas = formulario.getAll("sueltas").filter(esSeccion);
+
+  const persona = (await elEquipo()).find((p) => p.id === id);
+  if (!persona) return { ok: false as const, motivo: "Esa persona no está." };
+  if (!esRol(rol)) return { ok: false as const, motivo: "Elegí un rol." };
+
+  const sinAdmin = await dejariaSinAdmin(id, seccionesDe(rol, sueltas));
+  if (sinAdmin) return sinAdmin;
+
+  await cambiarPersona(id, { rol, sueltas });
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+/**
+ * Le saca la contraseña a alguien: vuelve a poder elegir una.
+ *
+ * **No le pone una nueva, y esa es la diferencia.** Nadie elige la contraseña
+ * de otro: esto la deja como recién dada de alta, y la próxima vez que entre
+ * elige la suya. Es lo que contesta el «olvidé mi contraseña», así que de paso
+ * el pedido queda dado por atendido.
+ */
+export async function reiniciarClaveDePersona(_previo: unknown, formulario: FormData) {
+  if (!(await puedoVer("admin"))) return NO_ES_TUYO;
+
+  const id = String(formulario.get("id") ?? "");
+  if (!(await elEquipo()).some((p) => p.id === id)) {
+    return { ok: false as const, motivo: "Esa persona no está." };
+  }
+
+  await sacarClave(id);
+  await darPorAtendido(id);
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
 
 export async function quitarDelEquipo(_previo: unknown, formulario: FormData) {
+  if (!(await puedoVer("admin"))) return NO_ES_TUYO;
+
   const id = String(formulario.get("id") ?? "");
+
+  const sinAdmin = await dejariaSinAdmin(id, []);
+  if (sinAdmin) return sinAdmin;
+
   // Y con ella su contraseña: dejarla sería dejar abierta una puerta a nombre
   // de alguien que ya no está.
   await sacarClave(id);
   await sacarDelEquipo(id);
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
+}
+
+/**
+ * **La aplicación no puede quedarse sin nadie que la administre.**
+ *
+ * Es un lazo fácil de hacerse solo: quien administra se cambia el rol a
+ * «Diseño» para ver cómo se ve, y desde ese momento nadie puede volver a
+ * repartir roles —ni ella misma—. La llave del equipo no salva: ese camino se
+ * cierra en cuanto alguien tiene contraseña. Quedaría editar un archivo a mano.
+ */
+async function dejariaSinAdmin(
+  id: string,
+  quedaria: readonly Seccion[]
+): Promise<{ ok: false; motivo: string } | null> {
+  if (quedaria.includes("admin")) return null;
+
+  const otros = (await elEquipo()).filter(
+    (p) => p.id !== id && seccionesDePersona(p).includes("admin")
+  );
+  if (otros.length > 0) return null;
+
+  return {
+    ok: false,
+    motivo:
+      "Sos la única persona que entra a Admin. Si te lo sacás, nadie puede " +
+      "volver a repartir accesos. Dale Admin a otra persona primero.",
+  };
 }
 
 // ---------------------------------------------------------------------------

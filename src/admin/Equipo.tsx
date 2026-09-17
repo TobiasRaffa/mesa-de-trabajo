@@ -1,23 +1,39 @@
 "use client";
 
-// Sumar gente al equipo y editarla.
+// Quién es del equipo, y a qué parte entra cada uno.
+//
+// **Dar de alta es un correo y un rol.** No se pide nombre ni contraseña: el
+// nombre sale del correo y lo corrige esa persona cuando entra, y la
+// contraseña la elige ella la primera vez. Nunca pasa por acá, así que quien
+// da de alta no puede saberla ni por accidente.
 //
 // Los campos no se pueden escribir de una: hay que apretar **Editar**. Una
 // lista de campos abiertos invita a cambiar algo sin querer al pasar el mouse,
-// y acá lo que se cambia es a dónde le llegan los avisos a alguien.
+// y acá lo que se cambia es a dónde le llegan los avisos a alguien y a qué
+// partes de la aplicación entra.
 //
 // Cada fila es un formulario suelto: se guarda una persona sin tocar las
 // demás, y un error de una no borra lo que se estaba escribiendo en otra.
 
 import { useActionState, useState } from "react";
 import {
-  agregarAlEquipo,
+  cambiarAccesos,
+  darDeAlta,
   editarDelEquipo,
-  ponerClaveDePersona,
   quitarDelEquipo,
+  reiniciarClaveDePersona,
 } from "@/app/(admin)/gestion/acciones";
 import type { Persona } from "@/lib/equipo";
-import { LARGO_MINIMO_DE_CLAVE } from "@/dominio/claves";
+import {
+  laDaElRol,
+  NOMBRE_DE_ROL,
+  NOMBRE_DE_SECCION,
+  QUE_HAY_EN,
+  ROLES,
+  SECCIONES,
+  seccionesDe,
+  type Rol,
+} from "@/dominio/roles";
 
 const CAMPO =
   "min-w-0 flex-1 border border-linea bg-lienzo px-3 py-2 text-normal transition-colors " +
@@ -27,34 +43,58 @@ const BOTON =
   "shrink-0 min-h-toque border-2 border-tinta px-4 text-normal font-bold tracking-tight " +
   "text-tinta transition-colors hover:bg-hueco disabled:opacity-40";
 
+const MARCA = "mt-1 text-micro font-extrabold uppercase tracking-wider";
+
 export function FilaDePersona({
   persona,
   tieneClave,
+  pidioOtraClave,
 }: {
   persona: Persona;
-  /** Si ya puede entrar. Sin contraseña, existe en la lista pero no entra. */
+  /** Si ya eligió su contraseña. Sin ella existe en la lista pero no entró nunca. */
   tieneClave: boolean;
+  /** Dijo que no puede entrar y está esperando que se la reinicien. */
+  pidioOtraClave: boolean;
 }) {
   const [editando, setEditando] = useState(false);
   const [estado, guardar, guardando] = useActionState(editarDelEquipo, null);
   const [estadoQuitar, quitar, quitando] = useActionState(quitarDelEquipo, null);
 
+  const suyas = seccionesDe(persona.rol, persona.sueltas);
+
   if (!editando) {
     return (
       <li className="flex flex-wrap items-center gap-3 border-b border-linea px-4 py-4">
         <div className="min-w-0 flex-1">
-          <p className="font-bold tracking-tight">{persona.nombre}</p>
+          <p className="font-bold tracking-tight">
+            {persona.nombre}
+            <span className="ml-2 border border-linea px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider text-apagado">
+              {NOMBRE_DE_ROL[persona.rol]}
+            </span>
+          </p>
           <p className="mt-0.5 text-menudo text-apagado">
             {persona.correo || "sin correo"}
             {persona.enDrive && ` · en Drive: ${persona.enDrive}`}
             {persona.avisaDeTodo && " · recibe todos los avisos"}
           </p>
-          {/* **Sin contraseña existe en la lista pero no entra.** Se le puede
-              asignar trabajo y le llegan los avisos, pero la puerta no la
-              conoce. Decirlo acá evita el «no me deja entrar» de mañana. */}
+          {/* Qué ve en concreto. El rol es un nombre; esto es lo que el nombre
+              quiere decir, que es lo que hay que poder mirar de un vistazo. */}
+          <p className="mt-0.5 text-menudo text-apagado">
+            Entra a: {suyas.map((s) => NOMBRE_DE_SECCION[s]).join(", ")}
+          </p>
+
+          {/* **Todavía no eligió contraseña.** Existe en la lista, se le asigna
+              trabajo y le llegan los avisos, pero nunca entró. Decirlo acá
+              evita el «no me deja entrar» de mañana, y de paso se ve si una
+              cuenta quedó abierta sin que la reclame su dueña. */}
           {!tieneClave && (
-            <p className="mt-1 text-micro font-extrabold uppercase tracking-wider text-espera">
-              todavía no puede entrar: ponele una contraseña
+            <p className={`${MARCA} text-espera`}>
+              todavía no entró: elige su contraseña la primera vez
+            </p>
+          )}
+          {pidioOtraClave && (
+            <p className={`${MARCA} text-alerta`}>
+              pidió que le reinicien la contraseña
             </p>
           )}
         </div>
@@ -113,7 +153,7 @@ export function FilaDePersona({
           Cancelar
         </button>
 
-        <Clave persona={persona} tieneClave={tieneClave} />
+        <Contrasena persona={persona} tieneClave={tieneClave} pidioOtraClave={pidioOtraClave} />
 
         <form action={quitar}>
           <input type="hidden" name="id" value={persona.id} />
@@ -128,6 +168,8 @@ export function FilaDePersona({
         </form>
       </div>
 
+      <Accesos persona={persona} />
+
       {[estado, estadoQuitar]
         .filter((r) => r && !r.ok)
         .map((r, i) => (
@@ -139,15 +181,156 @@ export function FilaDePersona({
   );
 }
 
+/**
+ * A qué partes entra: el rol, y lo que se le da aparte.
+ *
+ * **Lo que da el rol se muestra tildado y no se puede destildar.** Las sueltas
+ * suman y nunca restan: para quitarle algo a alguien se le cambia el rol, que
+ * es la decisión que de verdad se está tomando. Una casilla que parece que
+ * quita y no quita es peor que no tenerla.
+ */
+function Accesos({ persona }: { persona: Persona }) {
+  const [estado, guardar, guardando] = useActionState(cambiarAccesos, null);
+  const [rol, setRol] = useState<Rol>(persona.rol);
+
+  return (
+    <form action={guardar} className="mt-4 border-t border-linea pt-4">
+      <input type="hidden" name="id" value={persona.id} />
+
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-menudo font-semibold">
+          Rol
+          <select
+            name="rol"
+            value={rol}
+            onChange={(e) => setRol(e.target.value as Rol)}
+            className="border border-linea bg-lienzo px-2 py-2 text-normal"
+          >
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {NOMBRE_DE_ROL[r]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" disabled={guardando} className={BOTON}>
+          {guardando ? "…" : "Guardar accesos"}
+        </button>
+      </div>
+
+      <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+        {SECCIONES.map((seccion) => {
+          const delRol = laDaElRol(rol, seccion);
+          return (
+            <li key={seccion}>
+              <label className="flex items-start gap-2 text-menudo">
+                {/* La que da el rol se dibuja aparte: puesta, apagada y **sin
+                    nombre**, así no viaja como suelta. Guardarla también como
+                    suelta dejaría la marca pegada el día que se le cambie el
+                    rol, y alguien seguiría entrando a una sección que creímos
+                    haberle sacado. La `key` distinta obliga a rehacer el campo
+                    al cambiar el rol, en vez de reusar el de antes. */}
+                {delRol ? (
+                  <input
+                    key="del-rol"
+                    type="checkbox"
+                    checked
+                    readOnly
+                    disabled
+                    className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-acento)]"
+                  />
+                ) : (
+                  <input
+                    key="suelta"
+                    type="checkbox"
+                    name="sueltas"
+                    value={seccion}
+                    defaultChecked={persona.sueltas.includes(seccion)}
+                    className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-acento)]"
+                  />
+                )}
+                <span className="min-w-0">
+                  <span className="font-semibold">{NOMBRE_DE_SECCION[seccion]}</span>
+                  {delRol && (
+                    <span className="ml-1 text-micro uppercase tracking-wider text-apagado">
+                      la da el rol
+                    </span>
+                  )}
+                  <span className="block text-micro text-apagado">{QUE_HAY_EN[seccion]}</span>
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+
+      {estado && !estado.ok && (
+        <p aria-live="polite" className="mt-2 text-menudo font-semibold text-alerta">
+          {estado.motivo}
+        </p>
+      )}
+    </form>
+  );
+}
+
+/**
+ * Reiniciarle la contraseña a alguien.
+ *
+ * **No hay forma de ponerle una.** Antes sí, y era la misma cosa que decir que
+ * cualquiera de Admin podía entrar como cualquiera. Esto le saca la que tenía:
+ * queda como recién dada de alta y elige una nueva la próxima vez que entre.
+ * Se le avisa por donde se le habla siempre; acá no hay correo que mandar.
+ */
+function Contrasena({
+  persona,
+  tieneClave,
+  pidioOtraClave,
+}: {
+  persona: Persona;
+  tieneClave: boolean;
+  pidioOtraClave: boolean;
+}) {
+  const [estado, reiniciar, yendo] = useActionState(reiniciarClaveDePersona, null);
+
+  if (!tieneClave) {
+    return (
+      <span className="text-menudo font-semibold text-espera">
+        todavía no eligió su contraseña
+      </span>
+    );
+  }
+
+  return (
+    <form action={reiniciar} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="id" value={persona.id} />
+      <button
+        type="submit"
+        disabled={yendo}
+        className={pidioOtraClave ? `${BOTON} border-alerta text-alerta` : BOTON}
+      >
+        {yendo ? "…" : "Reiniciar contraseña"}
+      </button>
+      {estado && (
+        <span
+          aria-live="polite"
+          className={`text-menudo font-semibold ${estado.ok ? "text-acento" : "text-alerta"}`}
+        >
+          {estado.ok ? "Lista: elige una nueva cuando entre." : estado.motivo}
+        </span>
+      )}
+    </form>
+  );
+}
+
 export function SumarPersona() {
   const [abierto, setAbierto] = useState(false);
-  const [estado, sumar, sumando] = useActionState(agregarAlEquipo, null);
+  const [estado, sumar, sumando] = useActionState(darDeAlta, null);
 
   if (!abierto) {
     return (
       <div className="mt-8 border-t-2 border-tinta pt-6">
         <button type="button" onClick={() => setAbierto(true)} className={BOTON}>
-          Agregar a alguien
+          Dar de alta a alguien
         </button>
       </div>
     );
@@ -155,32 +338,34 @@ export function SumarPersona() {
 
   return (
     <section className="mt-8 border-t-2 border-tinta pt-6">
-      <form action={sumar} className="flex flex-wrap items-center gap-2">
-        <input name="nombre" placeholder="Nombre" aria-label="Nombre" className={CAMPO} />
+      <p className="text-menudo text-apagado">
+        Su correo y qué rol tiene. La contraseña la elige esa persona la primera
+        vez que entra, y no la sabe nadie más.
+      </p>
+
+      <form action={sumar} className="mt-3 flex flex-wrap items-center gap-2">
         <input
           name="correo"
           type="email"
           placeholder="correo"
           aria-label="Correo"
+          required
           className={CAMPO}
         />
-        <input
-          name="enDrive"
-          placeholder="cómo aparece en Drive"
-          aria-label="Cómo aparece en Drive"
-          className={CAMPO}
-        />
-        <label className="flex items-center gap-2 text-menudo font-semibold">
-          <input
-            type="checkbox"
-            name="avisaDeTodo"
-            value="si"
-            className="h-4 w-4 accent-[var(--color-acento)]"
-          />
-          Recibe todo
-        </label>
+        <select
+          name="rol"
+          defaultValue="diseno"
+          aria-label="Rol"
+          className="border border-linea bg-lienzo px-2 py-2 text-normal"
+        >
+          {ROLES.map((r) => (
+            <option key={r} value={r}>
+              {NOMBRE_DE_ROL[r]}
+            </option>
+          ))}
+        </select>
         <button type="submit" disabled={sumando} className={BOTON}>
-          Agregar
+          Dar de alta
         </button>
         <button type="button" onClick={() => setAbierto(false)} className={BOTON}>
           Cancelar
@@ -193,57 +378,5 @@ export function SumarPersona() {
         </p>
       )}
     </section>
-  );
-}
-
-/**
- * Ponerle o cambiarle la contraseña a alguien.
- *
- * **No pide la anterior.** Son tres personas en una oficina que ya comparten
- * los clientes, los archivos y la caja; la que se la olvida gira la silla. Y
- * quien está escribiendo acá ya entró: pedirle otra contraseña para cambiar
- * una no agrega nada que la puerta no haya preguntado.
- */
-function Clave({ persona, tieneClave }: { persona: Persona; tieneClave: boolean }) {
-  const [estado, poner, poniendo] = useActionState(ponerClaveDePersona, null);
-  const [abierto, setAbierto] = useState(false);
-
-  if (!abierto) {
-    return (
-      <button type="button" onClick={() => setAbierto(true)} className={BOTON}>
-        {tieneClave ? "Cambiar contraseña" : "Poner contraseña"}
-      </button>
-    );
-  }
-
-  return (
-    <form action={poner} className="flex flex-wrap items-center gap-2">
-      <input type="hidden" name="id" value={persona.id} />
-      <input
-        name="clave"
-        type="password"
-        autoComplete="new-password"
-        minLength={LARGO_MINIMO_DE_CLAVE}
-        placeholder={`contraseña nueva (${LARGO_MINIMO_DE_CLAVE} o más)`}
-        aria-label={`Contraseña de ${persona.nombre}`}
-        className={CAMPO}
-      />
-      <button type="submit" disabled={poniendo} className={BOTON}>
-        {poniendo ? "…" : "Guardar"}
-      </button>
-      <button type="button" onClick={() => setAbierto(false)} className={BOTON}>
-        Cancelar
-      </button>
-      {estado && (
-        <span
-          aria-live="polite"
-          className={`text-menudo font-semibold ${
-            estado.ok ? "text-acento" : "text-alerta"
-          }`}
-        >
-          {estado.ok ? "Lista." : estado.motivo}
-        </span>
-      )}
-    </form>
   );
 }

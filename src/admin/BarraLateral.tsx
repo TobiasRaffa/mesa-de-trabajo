@@ -13,56 +13,46 @@
 //
 // En el teléfono vuelve a ser una fila que se corre de costado: en columna se
 // comía la pantalla entera antes de llegar al trabajo.
+//
+// **Muestra solo lo que le toca a cada uno, y eso no es la protección.** La
+// dirección se escribe a mano: quien protege es `proxy.ts`. Esto es para no
+// ofrecerle a alguien una puerta que le va a dar en la cara.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { salir } from "@/app/(admin)/gestion/entrar/acciones";
+import {
+  NOMBRE_DE_SECCION,
+  RUTA_DE,
+  seccionDeLaRuta,
+  type Seccion,
+} from "@/dominio/roles";
 
 /** El trabajo de todos los días. */
-const SECCIONES = [
-  { href: "/gestion/tablero", texto: "Tablero" },
-  // «Clientes» es la raíz, y la ficha de cada cliente cuelga de ella: estando
-  // adentro de un cliente, la sección que corresponde marcar sigue siendo esta.
-  { href: "/gestion", texto: "Clientes", tambien: "/gestion/cliente" },
-  { href: "/gestion/chats", texto: "Conversaciones" },
-  { href: "/gestion/notificaciones", texto: "Notificaciones" },
-  // El diagnóstico no está acá: cuando Drive falla, cada pantalla lo dice donde
-  // pasa. La ruta sigue existiendo para cuando haga falta mirar la conexión.
-] as const;
+const ARRIBA: readonly Seccion[] = ["tablero", "clientes", "conversaciones", "notificaciones"];
 
 /**
  * Lo que se toca de vez en cuando, abajo y aparte.
  *
- * Las claves de los clientes y el equipo no son trabajo diario: se configuran
- * al dar de alta a alguien y después se miran cada tanto. Mezcladas con las
- * secciones de todos los días, ocupan el mismo peso visual que «Clientes» y
- * no lo valen. Abajo del todo están donde se las busca cuando se las busca.
- */
-const ABAJO = [
-  { href: "/gestion/facturas", texto: "Facturas" },
-  { href: "/gestion/admin", texto: "Admin" },
-] as const;
-
-/**
- * Si una sección es la que se está mirando.
+ * Las facturas y la administración no son trabajo diario: se miran cada tanto.
+ * Mezcladas con las secciones de todos los días ocupan el mismo peso visual que
+ * «Clientes» y no lo valen. Abajo del todo están donde se las busca cuando se
+ * las busca.
  *
- * `/gestion` necesita comparación exacta porque es prefijo de todas las demás:
- * sin eso quedarían dos secciones marcadas a la vez, que es peor que ninguna.
+ * El diagnóstico no está en ninguna de las dos listas: cuando Drive falla, cada
+ * pantalla lo dice donde pasa. La ruta sigue existiendo para cuando haga falta
+ * mirar la conexión.
  */
-type Seccion = { href: string; texto: string; tambien?: string };
-
-function esLaActual(ruta: string, seccion: Seccion): boolean {
-  if (seccion.href === "/gestion") {
-    return ruta === "/gestion" || ruta.startsWith(`${seccion.tambien}/`);
-  }
-  return ruta === seccion.href || ruta.startsWith(`${seccion.href}/`);
-}
+const ABAJO: readonly Seccion[] = ["facturas", "admin"];
 
 export function BarraLateral({
   quien,
+  secciones,
 }: {
   /** Quién entró. `null` con la llave del equipo, que no es de nadie. */
   quien: string | null;
+  /** Qué partes le tocan. Lo que no está acá no se dibuja. */
+  secciones: readonly Seccion[];
 }) {
   const ruta = usePathname();
 
@@ -71,26 +61,32 @@ export function BarraLateral({
   // hay adentro.
   if (ruta === "/gestion/entrar") return null;
 
+  const arriba = ARRIBA.filter((s) => secciones.includes(s));
+  const abajo = ABAJO.filter((s) => secciones.includes(s));
+  const actual = seccionDeLaRuta(ruta);
+
   return (
     <aside
       className="flex w-full flex-col gap-6 bg-tinta p-6 text-lienzo
                  lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:shrink-0 lg:overflow-y-auto"
     >
       <Link
-        href="/gestion"
+        href={RUTA_DE[arriba[0] ?? abajo[0] ?? "clientes"]}
         className="text-micro font-extrabold uppercase tracking-widest text-lienzo/45
                    transition-colors hover:text-lienzo/70"
       >
         Mesa de trabajo
       </Link>
 
-      <Secciones cuales={SECCIONES} ruta={ruta} etiqueta="Secciones" />
+      {arriba.length > 0 && <Secciones cuales={arriba} actual={actual} etiqueta="Secciones" />}
 
       {/* `mt-auto` lo empuja al pie de la columna en pantalla grande. En el
           teléfono la barra es una fila y sigue a lo anterior, con una línea que
           lo separa para que se lea como otro grupo. */}
       <div className="mt-2 border-t border-lienzo/15 pt-2 lg:mt-auto lg:pt-4">
-        <Secciones cuales={ABAJO} ruta={ruta} etiqueta="Administración" />
+        {abajo.length > 0 && (
+          <Secciones cuales={abajo} actual={actual} etiqueta="Administración" />
+        )}
 
         {/* **Quién entró, a la vista.** Lo que se hace queda firmado con ese
             nombre: si la máquina quedó con la sesión de otra, hay que poder
@@ -114,41 +110,45 @@ export function BarraLateral({
 
 function Secciones({
   cuales,
-  ruta,
+  actual,
   etiqueta,
 }: {
   cuales: readonly Seccion[];
-  ruta: string;
+  /**
+   * En qué sección se está parado.
+   *
+   * Lo decide el dominio y no una comparación de acá: con una propia, estando
+   * adentro de un cliente quedaban dos secciones marcadas a la vez —«Clientes»
+   * es prefijo de todo lo demás—, que es peor que ninguna.
+   */
+  actual: Seccion | null;
   etiqueta: string;
 }) {
   return (
     <nav aria-label={etiqueta}>
-        <ul className="flex gap-2 overflow-x-auto lg:flex-col lg:gap-0 lg:overflow-visible">
-          {cuales.map((seccion) => {
-            const actual = esLaActual(ruta, seccion);
-            return (
-              <li key={seccion.href} className="shrink-0 lg:shrink">
-                <Link
-                  href={seccion.href}
-                  aria-current={actual ? "page" : undefined}
-                  // Un filo marca dónde estás: se ve de reojo, sin leer. Va del
-                  // lado por donde corre la lista —abajo cuando es una fila, a
-                  // la izquierda cuando es una columna—; puesto al costado en
-                  // una fila horizontal parece que separa, no que señala.
-                  className={`flex min-h-toque items-center whitespace-nowrap border-b-4 px-3
-                              text-normal font-bold tracking-tight transition-colors
-                              lg:border-b-0 lg:border-l-4 ${
-                                actual
-                                  ? "border-lienzo bg-lienzo/10 text-lienzo"
-                                  : "border-transparent text-lienzo/70 hover:bg-lienzo/5 hover:text-lienzo"
-                              }`}
-                >
-                  {seccion.texto}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+      <ul className="flex gap-2 overflow-x-auto lg:flex-col lg:gap-0 lg:overflow-visible">
+        {cuales.map((seccion) => (
+          <li key={seccion} className="shrink-0 lg:shrink">
+            <Link
+              href={RUTA_DE[seccion]}
+              aria-current={seccion === actual ? "page" : undefined}
+              // Un filo marca dónde estás: se ve de reojo, sin leer. Va del
+              // lado por donde corre la lista —abajo cuando es una fila, a
+              // la izquierda cuando es una columna—; puesto al costado en
+              // una fila horizontal parece que separa, no que señala.
+              className={`flex min-h-toque items-center whitespace-nowrap border-b-4 px-3
+                          text-normal font-bold tracking-tight transition-colors
+                          lg:border-b-0 lg:border-l-4 ${
+                            seccion === actual
+                              ? "border-lienzo bg-lienzo/10 text-lienzo"
+                              : "border-transparent text-lienzo/70 hover:bg-lienzo/5 hover:text-lienzo"
+                          }`}
+            >
+              {NOMBRE_DE_SECCION[seccion]}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }

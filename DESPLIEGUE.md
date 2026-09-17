@@ -11,19 +11,56 @@ mitad de camino que faltaba un paso.
 
 ## La puerta de gestión: ya está
 
-**Hecho.** `/gestion` y el diagnóstico piden sesión, y cada persona entra con
-su correo y su contraseña. Lo que hace queda firmado con su nombre en vez de
-«El equipo».
+**Hecho.** `/gestion` y el diagnóstico piden sesión, cada persona entra con su
+correo y su contraseña, y **cada una ve solo la parte que le toca**. Lo que hace
+queda firmado con su nombre en vez de «El equipo».
 
 Lo que hay que saber para arrancar:
 
 1. **La primera vez no hay ninguna contraseña cargada**, así que la puerta
    acepta `CLAVE_DE_ADMIN` sola y lo dice: «Primera vez».
-2. Adentro, en **Admin → El equipo**, cada persona tiene un botón «Poner
-   contraseña». Quien todavía no tiene una aparece marcada: existe en la lista
-   —se le asigna trabajo, le llegan los avisos— pero no puede entrar.
+2. Adentro, en **Admin → El equipo**, se da de alta gente con **un correo y un
+   rol, y nada más**. No se pone contraseña: la elige esa persona la primera
+   vez que entra, y desde ahí no la sabe nadie más. Quien todavía no entró
+   aparece marcada: existe en la lista —se le asigna trabajo, le llegan los
+   avisos— pero nunca entró.
 3. **En cuanto alguien tiene la suya, el arranque se cierra solo.** De ahí en
-   más se entra con correo y contraseña, y nada más.
+   más se entra con correo y contraseña. Quien ya fue dado de alta y todavía no
+   eligió la suya tiene, en esa misma pantalla, «Ya me dieron de alta: entrar
+   con mi correo».
+
+### Los roles
+
+Tres, y se cambian en **Admin → El equipo → Editar**:
+
+| Rol             | Qué ve                                                     |
+| --------------- | ---------------------------------------------------------- |
+| Administración  | Todo, incluido Admin. Es la única que reparte accesos.      |
+| Diseño          | Tablero, Clientes, Conversaciones, Notificaciones.          |
+| Facturación     | Facturas.                                                  |
+
+Además del rol, a una persona se le pueden dar **secciones sueltas** —«esta
+diseñadora también mira las facturas»— sin inventarle un rol nuevo. Suman y
+nunca restan: para quitarle algo a alguien se le cambia el rol.
+
+El rol es un molde vivo, no una copia: cambiar qué ve «Diseño» cambia lo que
+ven todas las diseñadoras en el acto, sin repasarlas una por una. Y la
+aplicación **no deja quedarse sin nadie en Administración**: si sos la única y
+te lo sacás, avisa y no lo hace.
+
+### «Olvidé mi contraseña»
+
+No manda ningún correo, a propósito: un link que abre la aplicación sin
+contraseña es una segunda puerta para cuidar. Quien no puede entrar toca
+«Olvidé mi contraseña» y el pedido **aparece en Admin**. Ahí se le **reinicia**
+—no se le pone una nueva; nadie elige la contraseña de otro— y esa persona
+elige la suya la próxima vez que entre.
+
+**Lo que hay que tener presente del alta por correo:** entre que se da de alta
+un correo y esa persona entra por primera vez, cualquiera que conozca ese correo
+podría llegar antes y quedarse con la cuenta. Por eso Admin muestra «todavía no
+entró» en cada fila: si alguien dice que nunca entró y la fila no lo marca,
+entró otro. Avisale por donde le hablás siempre y que entre el mismo día.
 
 Cambiar `CLAVE_DE_ADMIN` echa a todo el mundo en el acto: la firma de las
 sesiones sale de ahí. No hay lista de sesiones abiertas que mantener.
