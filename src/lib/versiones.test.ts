@@ -517,3 +517,53 @@ describe("cambiar de formato entre vueltas", () => {
     expect(alReves).toBe(derecho);
   });
 });
+
+describe("cuando un renombre parte un trabajo en dos", () => {
+  // **Pasó y no se puede diagnosticar solo.** Sacarle la marca de versión a un
+  // archivo lo saca de su grupo y funda otro. Lo anotado -la historia, las
+  // rondas, lo que pidió el cliente- se queda con el grupo que conservó el
+  // nombre, aunque sea el que tiene menos archivos, y el cliente termina
+  // mirando un archivo distinto del que estaba revisando. Sin ningún aviso.
+  //
+  // La aplicación no lo arregla sola -mudar lo anotado de un trabajo a otro es
+  // lo más delicado que tiene- pero lo marca, y lo arregla una persona
+  // renombrando, que es de donde salió.
+  it("las dos piezas quedan marcadas", () => {
+    const piezas = agruparVersiones([
+      { name: "stickers.pdf" },
+      { name: "stickers.jpeg" },
+    ]);
+
+    expect(piezas.map((p) => p.comparteNombre)).toEqual([true, true]);
+  });
+
+  it("no se marca la que está sola, aunque tenga varias vueltas", () => {
+    const piezas = agruparVersiones([
+      { name: "stickers.pdf" },
+      { name: "V2_stickers.pdf" },
+      { name: "banner.jpg" },
+    ]);
+
+    expect(piezas.map((p) => p.comparteNombre)).toEqual([false, false]);
+  });
+
+  it("las mayúsculas no esconden el choque", () => {
+    const piezas = agruparVersiones([
+      { name: "Stickers.pdf" },
+      { name: "stickers.jpeg" },
+    ]);
+
+    expect(piezas.every((p) => p.comparteNombre)).toBe(true);
+  });
+
+  it("dos vueltas de lo mismo no son un choque", () => {
+    // Es una sola pieza: la marca de versión manda sobre la extensión.
+    const piezas = agruparVersiones([
+      { name: "stickers.pdf" },
+      { name: "V3_stickers.jpeg" },
+    ]);
+
+    expect(piezas).toHaveLength(1);
+    expect(piezas[0].comparteNombre).toBe(false);
+  });
+});

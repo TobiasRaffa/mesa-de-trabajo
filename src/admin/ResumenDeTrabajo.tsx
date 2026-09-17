@@ -453,11 +453,31 @@ function Ficha({
           archivo subido que no llega a ningún lado no es un detalle del
           trabajo: es trabajo hecho que el cliente no va a ver.
         */}
+        {/*
+          **Es el aviso que evita una confusión que nadie puede diagnosticar.**
+          Un trabajo se arma juntando los archivos que, después de la marca de
+          versión, dicen lo mismo. Sacarle la marca a uno lo saca del grupo y
+          funda otro trabajo: lo anotado se queda con el que conservó el
+          nombre, y el cliente puede terminar mirando un archivo distinto del
+          que estaba revisando, sin que nadie se entere de nada.
+
+          La aplicación no lo arregla sola —mudar lo anotado de un trabajo a
+          otro es lo más delicado que tiene— pero lo dice, y dice cómo.
+        */}
+        {p.comparteNombre && (
+          <p className="border-l-4 border-alerta bg-alerta-tenue px-3 py-2 text-menudo font-semibold text-alerta">
+            Hay otro trabajo en esta carpeta que también se llama «{p.nombre}», en otro
+            formato. Si son el mismo trabajo, ponele la marca de versión al que le falta
+            —«V2_{p.nombre}»— y se juntan solos. Si de verdad son dos, dejalo así.
+          </p>
+        )}
+
         {p.vueltaAtrasada && (
           <p className="border-l-4 border-alerta bg-alerta-tenue px-3 py-2 text-menudo font-semibold text-alerta">
-            Se subió «{p.vueltaAtrasada.subida}», pero la vuelta que se muestra y se
-            entrega sigue siendo «{p.vueltaAtrasada.actual}», que tiene un número más
-            alto. Renombrala con un número mayor para que sea la última.
+            Lo último que se tocó en Drive fue «{p.vueltaAtrasada.subida}», pero la
+            vuelta que se muestra y se entrega es «{p.vueltaAtrasada.actual}», que tiene
+            un número más alto. Si la nueva es la primera, renombrala con un número
+            mayor. Si solo la renombraste, ignoralo.
           </p>
         )}
 

@@ -882,9 +882,20 @@ function FilaArchivo({
           )}
           {/* El archivo está, pero no es el que se muestra: sin decirlo, el
               que lo subió no se entera de que no llegó a ningún lado. */}
+          {/* Dos trabajos con el mismo nombre en distinto formato: casi
+              siempre es un renombre que partió uno en dos, y el cliente puede
+              quedar mirando el pedazo equivocado. */}
+          {archivo.comparteNombre && (
+            <span
+              title={`Hay otro trabajo en esta carpeta que también se llama «${archivo.nombre}», en otro formato. Si son el mismo, ponele la marca de versión al que falta —«V2_${archivo.nombre}»— y la aplicación los junta.`}
+              className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta"
+            >
+              nombre repetido
+            </span>
+          )}
           {archivo.vueltaAtrasada && (
             <span
-              title={`Se subió «${archivo.vueltaAtrasada.subida}» pero la vuelta que se muestra sigue siendo «${archivo.vueltaAtrasada.actual}»: tiene un número más alto. Renombrala para que sea la última.`}
+              title={`Lo último que se tocó en Drive fue «${archivo.vueltaAtrasada.subida}», pero la vuelta que se muestra y se entrega es «${archivo.vueltaAtrasada.actual}», que tiene un número más alto. Si la nueva es la primera, renombrala con un número mayor.`}
               className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta"
             >
               vuelta atrasada

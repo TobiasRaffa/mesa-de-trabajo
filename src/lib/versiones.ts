@@ -129,6 +129,22 @@ export type Agrupado<T> = {
   base: string;
   /** De la más vieja a la más nueva. La última es la que se está mirando. */
   versiones: Array<{ numero: number; archivo: T }>;
+  /**
+   * Hay otra pieza en la carpeta que se llama igual y está en otro formato.
+   *
+   * **Casi siempre es un renombre que salió mal.** Un trabajo se arma juntando
+   * los archivos que después de la marca de versión dicen lo mismo, así que
+   * sacarle la marca a uno —«V4_stickers.jpeg» → «stickers.jpeg»— lo saca del
+   * grupo y funda otro. Lo anotado se queda con el grupo que conservó el
+   * nombre, aunque sea el que tiene menos archivos, y el cliente puede
+   * terminar mirando un archivo distinto del que estaba revisando.
+   *
+   * La aplicación **no lo arregla sola**: mudar lo anotado de un trabajo a
+   * otro es lo más delicado que tiene, y un renombre raro podría llevarse una
+   * historia a un lugar inesperado. Lo dice, y lo arregla una persona
+   * renombrando, que es de donde salió.
+   */
+  comparteNombre: boolean;
 };
 
 /**
@@ -170,7 +186,12 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
   const orden: string[] = [];
 
   const abrir = (clave: string, leido: Leido) => {
-    porBase.set(clave, { titulo: leido.titulo, base: leido.base, versiones: [] });
+    porBase.set(clave, {
+      titulo: leido.titulo,
+      base: leido.base,
+      versiones: [],
+      comparteNombre: false,
+    });
     orden.push(clave);
   };
 
@@ -215,6 +236,18 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
     // Y recién acá se fija la identidad: la de la vuelta más baja, que es la
     // misma cualquiera sea el orden en que llegaron los archivos.
     pieza.base = leerNombre(pieza.versiones[0].archivo.name).base;
+  }
+
+  // Dos piezas con el mismo nombre y distinto formato son casi siempre un
+  // renombre que partió un trabajo en dos. Se marcan las dos: desde afuera no
+  // se puede decir cuál es «la buena».
+  const cuantasConEseNombre = new Map<string, number>();
+  for (const pieza of porBase.values()) {
+    const suyo = pieza.titulo.toLowerCase();
+    cuantasConEseNombre.set(suyo, (cuantasConEseNombre.get(suyo) ?? 0) + 1);
+  }
+  for (const pieza of porBase.values()) {
+    pieza.comparteNombre = (cuantasConEseNombre.get(pieza.titulo.toLowerCase()) ?? 0) > 1;
   }
 
   return orden.map((clave) => porBase.get(clave)!);

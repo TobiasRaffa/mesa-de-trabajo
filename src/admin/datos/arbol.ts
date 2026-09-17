@@ -131,6 +131,14 @@ export type NodoArchivo = {
    * una persona renombrando.
    */
   vueltaAtrasada?: { subida: string; actual: string };
+  /**
+   * Hay otro trabajo en esta carpeta que se llama igual, en otro formato.
+   *
+   * Casi siempre es un renombre que partió un trabajo en dos, y la
+   * consecuencia se ve del lado del cliente: puede quedar mirando un archivo
+   * distinto del que estaba revisando, sin que nadie se entere.
+   */
+  comparteNombre?: boolean;
   /** Si el cliente lo ve. Se apaga y se prende igual que una carpeta. */
   visible: boolean;
   /**
@@ -347,6 +355,7 @@ async function archivosDeCarpeta(
         ultimaTocada && ultimaTocada.archivo.id !== ultima.id
           ? { subida: ultimaTocada.archivo.name, actual: ultima.name }
           : undefined,
+      comparteNombre: pieza.comparteNombre || undefined,
       // Si alguna vuelta está escondida, la pieza se muestra como escondida:
       // mitad visible y mitad no es un estado que nadie quiso.
       visible: !suyos.some((a) => escondidos.has(a)),
