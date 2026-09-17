@@ -83,6 +83,20 @@ create trigger documentos_modificado
 
 alter table documentos enable row level security;
 
+-- **El permiso de la llave de servicio, escrito a mano.**
+--
+-- Supabase le da permisos a las tablas nuevas por omisión, pero eso depende de
+-- una casilla del panel —«Automatically expose new tables»— que es razonable
+-- querer apagada. Apagada, una tabla nueva puede quedar sin permiso **también**
+-- para `service_role`, que es la que usa el servidor de la aplicación: cada
+-- pedido fallaría con un error de permisos, y el error no diría que la causa
+-- fue una casilla marcada hace meses.
+--
+-- Dicho acá no depende de ninguna casilla. Y no abre nada: `service_role` ya
+-- es la llave que puede todo, y es la única que nunca sale del servidor.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on documentos to service_role;
+
 -- Sin ninguna `policy`, RLS niega todo. Se deja dicho igual, porque «no hay
 -- políticas» se lee como un olvido y esto es una decisión.
 drop policy if exists documentos_nadie on documentos;
