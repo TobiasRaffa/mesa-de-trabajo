@@ -30,13 +30,19 @@ import {
   type Vista,
   mostrarUOcultar,
 } from "@/lib/ajustes";
-import { clientePorId } from "@/lib/clientes";
+import { olvidarCarpetas } from "@/lib/carpetas";
+// **Los clientes y las carpetas se piden por acá y no a `lib`.** Es lo que
+// hace que una acción no pueda tocar la carpeta de un cliente que quien la
+// llama no lleva. Hay un guardián que lo verifica.
 import {
-  clienteDeCarpeta,
-  esCarpetaDelCliente,
-  idsDeCarpetasReales,
-  olvidarCarpetas,
-} from "@/lib/carpetas";
+  clienteDeMiCarpeta,
+  esCarpetaMia,
+  miCliente,
+  misAvisos,
+  misCarpetas,
+  misClientes,
+  todosMisClientes,
+} from "@/admin/datos/clientes";
 import { datosDeCarpeta } from "@/lib/google";
 import { plazoDe, plazoQueCorre } from "@/lib/plazos";
 import {
@@ -45,7 +51,6 @@ import {
   ponerTag,
   ponerTelefono,
   renovarLink,
-  todosLosClientes,
 } from "@/lib/clientes";
 import {
   agregarMensaje,
@@ -94,7 +99,13 @@ import { sacarClave } from "@/lib/claves";
 import { correoValido } from "@/lib/equipo";
 import { firmaDeAgencia, puedoVer } from "@/lib/sesion";
 import { darPorAtendido } from "@/lib/olvidos";
-import { esRol, esSeccion, seccionesDe, type Seccion } from "@/dominio/roles";
+import {
+  esRol,
+  esSeccion,
+  seccionesDe,
+  type Alcance,
+  type Seccion,
+} from "@/dominio/roles";
 import {
   contenidoDe,
   heredadoDelCliente,
@@ -102,7 +113,7 @@ import {
 } from "@/admin/datos/arbol";
 import { carpetaParaFechar } from "@/admin/datos/carpetas";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
-import { marcarTodosVistos } from "@/lib/avisos";
+import { marcarVistos } from "@/lib/avisos";
 import {
   cambiarPersona,
   elEquipo,
@@ -143,7 +154,7 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
 
   if (!carpetaId) return { ok: false as const, motivo: "Falta la carpeta." };
 
-  const reales = await idsDeCarpetasReales();
+  const reales = await misCarpetas();
   if (!reales.has(carpetaId)) {
     return {
       ok: false as const,
@@ -180,7 +191,7 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
 async function esClienteReal(id: string): Promise<boolean> {
   if (!id) return false;
   try {
-    return (await todosLosClientes()).some((c) => c.id === id);
+    return (await misClientes()).some((c) => c.id === id);
   } catch {
     return false;
   }
@@ -325,7 +336,7 @@ export async function verClaveDeCliente(
     return { ok: false, motivo: "Esa contraseña no es." };
   }
 
-  const cliente = await clientePorId(clienteId);
+  const cliente = await miCliente(clienteId);
   if (!cliente) return { ok: false, motivo: "Ese cliente no existe." };
   return { ok: true, clave: cliente.tag };
 }
@@ -333,7 +344,7 @@ export async function verClaveDeCliente(
 export async function pedirLinkDeCarpeta(carpetaId: string): Promise<
   { ok: true; token: string } | { ok: false; motivo: string }
 > {
-  if (!(await esCarpetaDelCliente(carpetaId))) {
+  if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no está adentro de la de un cliente." };
   }
   try {
@@ -369,7 +380,7 @@ export async function guardarCalendario(
   carpetaId: string,
   cambios: CambioDeFecha[]
 ): Promise<Resultado> {
-  if (!(await esCarpetaDelCliente(carpetaId))) {
+  if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no está adentro de la carpeta de un cliente." };
   }
 
@@ -531,7 +542,7 @@ export async function entregarCarpeta(
   | { ok: true; entregadas: number; avisar: ParaAvisar | null }
   | { ok: false; motivo: string }
 > {
-  if (!(await esCarpetaDelCliente(carpetaId))) {
+  if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
 
@@ -653,7 +664,7 @@ export async function entregarCarpeta(
   await guardarPiezas(cambios);
 
   // El aviso va después de guardar: si el correo falla, la entrega vale igual.
-  const cliente = await clienteDeCarpeta(carpetaId);
+  const cliente = await clienteDeMiCarpeta(carpetaId);
   let paraAvisar: ParaAvisar | null = null;
 
   if (cliente) {
@@ -705,7 +716,7 @@ async function laPieza(
   // servidor es un endpoint público y el identificador de carpeta que llega en
   // el pedido no se puede creer. Puesto acá, las dos quedan cubiertas y la
   // próxima que use esto también.
-  if (!(await esCarpetaDelCliente(carpetaId))) return null;
+  if (!(await esCarpetaMia(carpetaId))) return null;
 
   try {
     const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
@@ -767,7 +778,7 @@ export async function reabrirPieza(
 
   // La vuelta del archivo es una consecuencia, no una condición: si Drive no
   // contesta, la pieza queda reabierta igual y se anota que no se pudo mover.
-  const cliente = await clienteDeCarpeta(carpetaId);
+  const cliente = await clienteDeMiCarpeta(carpetaId);
   if (pieza.mudada && cliente) {
     const vuelta = await devolverDesdeFinales(
       cliente.id,
@@ -859,13 +870,13 @@ async function nivelReal(
   }
 
   if (nivel === "carpeta") {
-    if (!(await esCarpetaDelCliente(id))) {
+    if (!(await esCarpetaMia(id))) {
       return { ok: false, motivo: "Esa carpeta no existe." };
     }
     return { ok: true, debajo: (await piezasDeLaCarpeta(id)).map((a) => a.id) };
   }
 
-  if (!carpetaId || !(await esCarpetaDelCliente(carpetaId))) {
+  if (!carpetaId || !(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
   if (!(await piezasDeLaCarpeta(carpetaId)).some((a) => a.id === id)) {
@@ -1014,10 +1025,15 @@ export async function cambiarAccesos(_previo: unknown, formulario: FormData) {
   if (!persona) return { ok: false as const, motivo: "Esa persona no está." };
   if (!esRol(rol)) return { ok: false as const, motivo: "Elegí un rol." };
 
+  const clientes = await alcanceDelFormulario(formulario);
+  if (!clientes) {
+    return { ok: false as const, motivo: "Elegí al menos un cliente, o marcá «todos»." };
+  }
+
   const sinAdmin = await dejariaSinAdmin(id, seccionesDe(rol, sueltas));
   if (sinAdmin) return sinAdmin;
 
-  await cambiarPersona(id, { rol, sueltas });
+  await cambiarPersona(id, { rol, sueltas, clientes });
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
@@ -1058,6 +1074,27 @@ export async function quitarDelEquipo(_previo: unknown, formulario: FormData) {
   await sacarDelEquipo(id);
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
+}
+
+/**
+ * A qué clientes llega, leído del formulario.
+ *
+ * `null` es «no elegiste ninguno», que no es lo mismo que «todos»: dejar a
+ * alguien sin ningún cliente es una persona que entra y no ve nada, y casi
+ * siempre es que se olvidó de tildar. Se avisa en vez de guardarlo.
+ *
+ * **Los identificadores se comparan contra los que existen de verdad.** Un
+ * formulario armado a mano podría mandar cualquier cosa, y una ficha con un
+ * cliente inventado adentro es basura que nadie va a poder explicar después.
+ */
+async function alcanceDelFormulario(formulario: FormData): Promise<Alcance | null> {
+  if (formulario.get("alcance") === "todos") return "todos";
+
+  const pedidos = formulario.getAll("cliente").map(String);
+  const reales = new Set((await todosMisClientes()).map((c) => c.id));
+  const elegidos = pedidos.filter((id) => reales.has(id));
+
+  return elegidos.length > 0 ? elegidos : null;
 }
 
 /**
@@ -1109,7 +1146,7 @@ export async function unirConLaOtra(
   carpetaId: string,
   piezaId: string
 ): Promise<Resultado> {
-  if (!(await esCarpetaDelCliente(carpetaId))) {
+  if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no es de un cliente." };
   }
 
@@ -1174,7 +1211,9 @@ export async function unirConLaOtra(
 // La bandeja
 
 export async function marcarAvisosVistos(): Promise<void> {
-  await marcarTodosVistos();
+  // Solo los suyos: tocar «marcar leído» no puede bajarle el contador a
+  // quien lleva otros clientes.
+  await marcarVistos((await misAvisos()).map((a) => a.id));
   revalidatePath("/gestion", "layout");
 }
 
@@ -1216,7 +1255,7 @@ export async function abrirCliente(clienteId: string): Promise<Abierta> {
 /**
  * Lo que hay dentro de una carpeta, a cualquier profundidad.
  *
- * `esCarpetaDelCliente` comprueba que la carpeta cuelgue de un cliente: sin
+ * `esCarpetaMia` comprueba que la carpeta cuelgue de un cliente: sin
  * eso, cualquiera con una dirección de gestión podría pedir el contenido de
  * una carpeta ajena del Drive del robot.
  */
@@ -1224,7 +1263,7 @@ export async function abrirCarpeta(
   carpetaId: string,
   heredado: { dias: number; responsable: string | null }
 ): Promise<Abierta> {
-  if (!(await esCarpetaDelCliente(carpetaId))) {
+  if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
   try {
@@ -1251,11 +1290,11 @@ export async function historiaDeCarpeta(
 ): Promise<
   { ok: true; piezas: PiezaConHistoria[] } | { ok: false; motivo: string }
 > {
-  if (!(await esCarpetaDelCliente(carpetaId))) {
+  if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
 
-  const cliente = await clienteDeCarpeta(carpetaId);
+  const cliente = await clienteDeMiCarpeta(carpetaId);
   if (!cliente) return { ok: false, motivo: "Esa carpeta no es de ningún cliente." };
 
   try {
@@ -1282,7 +1321,7 @@ export async function cambiarVisibilidad(
     // Vale tanto para una carpeta como para un archivo, así que se acepta
     // cualquiera de las dos comprobaciones. Lo que no se acepta es un
     // identificador suelto de Drive que no cuelgue de ningún cliente.
-    const deUnCliente = (await esCarpetaDelCliente(id)) || (await esDeAlgunCliente(id));
+    const deUnCliente = (await esCarpetaMia(id)) || (await esDeAlgunCliente(id));
     if (!deUnCliente) return { ok: false, motivo: "Eso no es de ningún cliente." };
   }
 

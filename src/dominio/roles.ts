@@ -132,6 +132,35 @@ export function seccionesDe(rol: Rol, sueltas: readonly Seccion[] = []): Seccion
 export const laDaElRol = (rol: Rol, seccion: Seccion): boolean =>
   DEL_ROL[rol].includes(seccion);
 
+// ---------------------------------------------------------------------------
+// Qué clientes, además de qué secciones
+
+/**
+ * A qué clientes llega alguien.
+ *
+ * **Los roles separan secciones; esto separa clientes.** Son dos cosas
+ * distintas y hacen falta las dos: quien entra a «Clientes» ve las carpetas y
+ * los archivos de todos, y en una agencia con varias cuentas eso es demasiado
+ * —no por desconfianza, sino porque abrir el árbol y encontrar ocho clientes
+ * cuando llevás uno es ruido todos los días—.
+ *
+ * `"todos"` no es lo mismo que la lista de todos los clientes de hoy: quiere
+ * decir **los que haya**, incluidos los que se den de alta mañana. Una lista
+ * dejaría afuera a los nuevos sin que nadie se entere.
+ */
+export type Alcance = "todos" | string[];
+
+export const alcanzaA = (alcance: Alcance, clienteId: string): boolean =>
+  alcance === "todos" || alcance.includes(clienteId);
+
+/** De una lista de clientes, los que le tocan. */
+export const recortaA = <T extends { id: string }>(alcance: Alcance, cuales: T[]): T[] =>
+  alcance === "todos" ? cuales : cuales.filter((c) => alcance.includes(c.id));
+
+/** Si el alcance guardado tiene forma de alcance. */
+export const esAlcance = (v: unknown): v is Alcance =>
+  v === "todos" || (Array.isArray(v) && v.every((x) => typeof x === "string"));
+
 /**
  * Por dónde empieza cada sección.
  *

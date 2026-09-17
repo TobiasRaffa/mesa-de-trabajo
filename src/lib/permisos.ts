@@ -34,7 +34,9 @@
 
 import { clienteQueEntro } from "@/lib/acceso";
 import { esCarpetaDeFacturas, escondidosEntre } from "@/lib/ajustes";
-import { GALLETA_DE_GESTION, galletaDeGestionValida } from "@/lib/contrasena";
+import { GALLETA_DE_GESTION } from "@/lib/contrasena";
+import { quienLleva } from "@/lib/sesion";
+import { recortaA } from "@/dominio/roles";
 import { clientesHabilitados } from "@/lib/clientes";
 import { metadatosArchivo, type MetadatosArchivo } from "@/lib/google";
 
@@ -153,8 +155,19 @@ async function hayCamino(
   return false;
 }
 
-/** Quién está del otro lado de un pedido de archivo. */
-export type QuienPide = { tipo: "cliente"; raiz: string } | { tipo: "agencia" };
+/**
+ * Quién está del otro lado de un pedido de archivo.
+ *
+ * **La agencia trae sus raíces, no un permiso general.** Antes era `{ tipo:
+ * "agencia" }` a secas y con eso se autorizaba contra las carpetas de *todos*
+ * los clientes: una diseñadora que solo lleva una cuenta se bajaba el archivo
+ * de otra con solo conocer su identificador de Drive. Ahora trae las carpetas
+ * de los clientes que le tocan, y la comprobación es la misma que la del
+ * cliente: ¿cuelga de alguna de estas raíces?
+ */
+export type QuienPide =
+  | { tipo: "cliente"; raiz: string }
+  | { tipo: "agencia"; raices: string[] };
 
 /**
  * Autoriza un archivo **para quien lo pide**, y de paso devuelve sus datos.
@@ -196,7 +209,7 @@ export async function archivoAutorizado(
     // El archivo en sí puede estar escondido aunque su carpeta se muestre.
     if (!deLaAgencia && (await escondidosEntre([fileId])).has(fileId)) return null;
 
-    const raices = deLaAgencia ? await carpetasAdministradas() : [quien.raiz];
+    const raices = quien.tipo === "agencia" ? quien.raices : [quien.raiz];
     const adentro = await hayCamino(archivo.parents ?? [], raices, {
       respetarEscondidos: !deLaAgencia,
     });
@@ -218,8 +231,18 @@ export async function quienPide(galletas: {
 }): Promise<QuienPide | null> {
   // Primero la agencia: es una firma y no toca Drive. Buscar el cliente
   // recorre sus carpetas, y sería trabajo tirado cuando quien mira es el equipo.
-  if (galletaDeGestionValida(galletas.get(GALLETA_DE_GESTION)?.value)) {
-    return { tipo: "agencia" };
+  const sesion = await quienLleva(galletas.get(GALLETA_DE_GESTION)?.value);
+  if (sesion) {
+    // Las raíces salen del alcance de esa persona. Con `"todos"` son las de
+    // todos los clientes, que es lo que era antes para cualquiera.
+    const administradas = await carpetasAdministradas();
+    return {
+      tipo: "agencia",
+      raices: recortaA(
+        sesion.clientes,
+        administradas.map((id) => ({ id }))
+      ).map((c) => c.id),
+    };
   }
 
   const cliente = await clienteQueEntro(galletas);

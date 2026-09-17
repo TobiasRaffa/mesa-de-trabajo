@@ -93,10 +93,19 @@ export async function anotarAviso(
   return nuevo;
 }
 
-export async function marcarTodosVistos(): Promise<void> {
+/**
+ * Marca como vistos los avisos que se le digan.
+ *
+ * **Recibe cuáles y no los marca todos**: quien lleva dos clientes de ocho no
+ * puede, tocando «marcar leído», bajarle el contador a los otros seis —que ni
+ * siquiera ve—. Quien llega a todos le pasa todos, y queda igual que antes.
+ */
+export async function marcarVistos(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const cuales = new Set(ids);
   const cambios: Record<string, Aviso> = {};
   for (const aviso of await losAvisos()) {
-    if (!aviso.visto) cambios[aviso.id] = { ...aviso, visto: true };
+    if (!aviso.visto && cuales.has(aviso.id)) cambios[aviso.id] = { ...aviso, visto: true };
   }
   await almacen.guardarVarios(cambios);
 }

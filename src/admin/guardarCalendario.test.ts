@@ -3,10 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Drive y el almacén se reemplazan por dobles: acá se prueba **qué hace la
 // acción con lo que le llega**, no la conexión con Google.
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// Los clientes y las carpetas que le tocan a quien llama. La acción ya no le
+// pregunta a `lib/carpetas` directamente: pasa por acá, que es donde se
+// recorta por alcance.
+vi.mock("@/admin/datos/clientes", () => ({
+  esCarpetaMia: vi.fn(async () => true),
+  clienteDeMiCarpeta: vi.fn(async () => ({ id: "cliente" })),
+  miCliente: vi.fn(async () => ({ id: "cliente" })),
+  misCarpetas: vi.fn(async () => new Set<string>()),
+  misClientes: vi.fn(async () => [{ id: "cliente" }]),
+}));
 vi.mock("@/lib/carpetas", () => ({
-  esCarpetaDelCliente: vi.fn(async () => true),
   esCarpetaReservada: vi.fn(() => false),
-  idsDeCarpetasReales: vi.fn(async () => new Set<string>()),
   olvidarCarpetas: vi.fn(),
   clienteDeCarpeta: vi.fn(async () => null),
 }));

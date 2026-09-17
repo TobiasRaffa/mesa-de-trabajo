@@ -25,8 +25,13 @@
 
 import { cookies } from "next/headers";
 import { GALLETA_DE_GESTION, personaDeLaGalleta, SIN_PERSONA } from "@/lib/contrasena";
-import { personaPorId, seccionesDePersona, type Persona } from "@/lib/equipo";
-import { seccionesDe, type Seccion } from "@/dominio/roles";
+import {
+  alcanceDePersona,
+  personaPorId,
+  seccionesDePersona,
+  type Persona,
+} from "@/lib/equipo";
+import { alcanzaA, seccionesDe, type Alcance, type Seccion } from "@/dominio/roles";
 
 /** Cómo se firma lo que no lo manda una persona identificada. */
 export const LA_AGENCIA = "El equipo";
@@ -36,6 +41,8 @@ export type Sesion = {
   persona: Persona | null;
   /** Qué partes de la gestión le tocan. */
   secciones: Seccion[];
+  /** A qué clientes llega. `"todos"` son los que haya, hoy y mañana. */
+  clientes: Alcance;
 };
 
 /**
@@ -53,14 +60,20 @@ export async function quienLleva(galleta: string | undefined): Promise<Sesion | 
 
   // La llave del equipo, el arranque: no es nadie, pero tiene que poder cargar
   // a la primera persona, y eso vive en Admin.
-  if (id === SIN_PERSONA) return { persona: null, secciones: seccionesDe("admin") };
+  if (id === SIN_PERSONA) {
+    return { persona: null, secciones: seccionesDe("admin"), clientes: "todos" };
+  }
 
   const persona = await personaPorId(id);
   // La galleta sigue firmada pero la persona ya no está: se la dio de baja
   // mientras tenía la sesión abierta. No es nadie, y no ve nada.
   if (!persona) return null;
 
-  return { persona, secciones: seccionesDePersona(persona) };
+  return {
+    persona,
+    secciones: seccionesDePersona(persona),
+    clientes: alcanceDePersona(persona),
+  };
 }
 
 /** Lo mismo, desde una pantalla o una acción. */
@@ -92,6 +105,22 @@ export async function quienSoy(): Promise<Persona | null> {
  */
 export async function puedoVer(seccion: Seccion): Promise<boolean> {
   return (await miSesion())?.secciones.includes(seccion) ?? false;
+}
+
+/**
+ * A qué clientes llega quien está usando esto.
+ *
+ * **Sin sesión no llega a ninguno.** Es la respuesta segura: una pantalla que
+ * pregunte esto sin que nadie haya entrado tiene que ver una lista vacía, no
+ * la de todos.
+ */
+export async function miAlcance(): Promise<Alcance> {
+  return (await miSesion())?.clientes ?? [];
+}
+
+/** Si quien está usando esto llega a este cliente. */
+export async function puedoVerAlCliente(clienteId: string): Promise<boolean> {
+  return alcanzaA(await miAlcance(), clienteId);
 }
 
 /**

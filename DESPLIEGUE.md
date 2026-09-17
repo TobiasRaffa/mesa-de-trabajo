@@ -43,6 +43,22 @@ Además del rol, a una persona se le pueden dar **secciones sueltas** —«esta
 diseñadora también mira las facturas»— sin inventarle un rol nuevo. Suman y
 nunca restan: para quitarle algo a alguien se le cambia el rol.
 
+### A qué clientes llega cada uno
+
+El rol dice a qué **partes** entra; esto, a **cuáles clientes**. Se elige en la
+misma pantalla: «Todos» o «Solo estos», con la lista al lado.
+
+«Todos» quiere decir los que haya, **incluidos los que se den de alta más
+adelante**. Una lista con todos los de hoy dejaría afuera a los nuevos sin que
+nadie se entere de por qué.
+
+Acotar a alguien le recorta todo a la vez: el árbol de clientes, el tablero,
+las conversaciones, las notificaciones, las facturas, los archivos y las
+miniaturas. Escribir a mano la dirección de un cliente que no lleva contesta
+«no existe» —lo mismo que si de verdad no existiera: distinguirlos contaría
+qué clientes tiene la agencia—, y los avisos de esos clientes no le llegan ni
+le inflan el contador.
+
 El rol es un molde vivo, no una copia: cambiar qué ve «Diseño» cambia lo que
 ven todas las diseñadoras en el acto, sin repasarlas una por una. Y la
 aplicación **no deja quedarse sin nadie en Administración**: si sos la única y

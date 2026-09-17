@@ -6,7 +6,7 @@
 // eso se trata la pantalla: decidir qué se muestra.
 
 import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustes";
-import { clientePorId, todosLosClientes, type Cliente } from "@/lib/clientes";
+import { miCliente, todosMisClientes, type Cliente } from "@/admin/datos/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 import { conLosComentariosDelCliente } from "@/lib/comentariosDelCliente";
@@ -52,7 +52,7 @@ export async function carpetaParaFechar(
   clienteId: string,
   carpetaId: string
 ): Promise<CarpetaParaFechar> {
-  const cliente = await clientePorId(clienteId);
+  const cliente = await miCliente(clienteId);
   if (!cliente) throw new Error("No encontré ese cliente.");
 
   const [datos, ajustes, archivos] = await Promise.all([
@@ -147,7 +147,7 @@ export type ClienteEnGestion = Omit<Cliente, "tag"> & {
 /** Todos los clientes que el robot ve, para la pantalla que los administra. */
 export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
   const [clientes, sinLeer] = await Promise.all([
-    todosLosClientes(),
+    todosMisClientes(),
     sinLeerPorCliente("agencia"),
   ]);
   const ids = clientes.map((c) => c.id);

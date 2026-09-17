@@ -11,8 +11,8 @@
 // Todo sale de datos que ya existen: no hay un estado nuevo que mantener.
 
 import { ajustesDe, esCarpetaReservada } from "@/lib/ajustes";
-import { losAvisos, type Aviso } from "@/lib/avisos";
-import { clientesHabilitados } from "@/lib/clientes";
+import type { Aviso } from "@/lib/avisos";
+import { misAvisos, misClientes } from "@/admin/datos/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { correoConfigurado } from "@/lib/correo";
 import { personaPorId } from "@/lib/equipo";
@@ -184,7 +184,7 @@ export type Tablero = {
 };
 
 export async function elTablero(): Promise<Tablero> {
-  const [avisos, clientes] = await Promise.all([losAvisos(), clientesHabilitados()]);
+  const [avisos, clientes] = await Promise.all([misAvisos(), misClientes()]);
 
   const sinLeer = await sinLeerPorCliente("agencia");
 

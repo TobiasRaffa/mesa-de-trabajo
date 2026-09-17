@@ -18,10 +18,12 @@
 import { randomUUID } from "node:crypto";
 import { coleccion } from "@/lib/almacen";
 import {
+  esAlcance,
   esRol,
   esSeccion,
   ROL_DE_ANTES,
   seccionesDe,
+  type Alcance,
   type Rol,
   type Seccion,
 } from "@/dominio/roles";
@@ -64,6 +66,14 @@ export type Persona = {
    * eso se le cambia el rol, que es la decisión que de verdad se está tomando.
    */
   sueltas: Seccion[];
+  /**
+   * A qué clientes llega.
+   *
+   * `"todos"` quiere decir los que haya, incluidos los que se den de alta
+   * mañana. Una lista con todos los de hoy dejaría afuera a los nuevos sin que
+   * nadie se entere.
+   */
+  clientes: Alcance;
 };
 
 /**
@@ -113,6 +123,10 @@ function completar(p: Persona): Persona {
     enDrive: typeof p.enDrive === "string" && p.enDrive ? p.enDrive : undefined,
     rol: esRol(p.rol) ? p.rol : ROL_DE_ANTES,
     sueltas: Array.isArray(p.sueltas) ? p.sueltas.filter(esSeccion) : [],
+    // Quien fue cargado antes de que esto existiera llegaba a todos los
+    // clientes, y así se queda: bajarle el acceso en silencio se parece
+    // demasiado a un error. Se ve y se cambia en Admin.
+    clientes: esAlcance(p.clientes) ? p.clientes : "todos",
   };
 }
 
@@ -125,6 +139,9 @@ export async function elEquipo(): Promise<Persona[]> {
 
 /** Qué secciones ve una persona: las de su rol más las sueltas. */
 export const seccionesDePersona = (p: Persona): Seccion[] => seccionesDe(p.rol, p.sueltas);
+
+/** A qué clientes llega una persona. */
+export const alcanceDePersona = (p: Persona): Alcance => p.clientes;
 
 /**
  * Da de alta a alguien: un correo y un rol.
@@ -140,6 +157,7 @@ export async function sumarAlEquipo(datos: {
   avisaDeTodo?: boolean;
   enDrive?: string;
   sueltas?: Seccion[];
+  clientes?: Alcance;
 }): Promise<Persona> {
   const correo = datos.correo.trim().slice(0, 120);
   const persona: Persona = {
@@ -150,6 +168,7 @@ export async function sumarAlEquipo(datos: {
     enDrive: datos.enDrive?.trim().slice(0, 120) || undefined,
     rol: datos.rol,
     sueltas: (datos.sueltas ?? []).filter(esSeccion),
+    clientes: esAlcance(datos.clientes) ? datos.clientes : "todos",
   };
   await almacen.guardar(persona.id, persona);
   return persona;
@@ -177,6 +196,7 @@ export async function cambiarPersona(
     recortado.enDrive = recortado.enDrive.trim().slice(0, 120) || undefined;
   }
   if (recortado.sueltas) recortado.sueltas = recortado.sueltas.filter(esSeccion);
+  if ("clientes" in recortado && !esAlcance(recortado.clientes)) delete recortado.clientes;
 
   await almacen.guardar(id, completar({ ...actual, ...recortado }));
 }

@@ -9,7 +9,7 @@
 // Juntas y abajo del todo en la barra: se las busca cuando se las necesita, y
 // mientras tanto no ocupan lugar.
 
-import { todosLosClientes } from "@/lib/clientes";
+import { todosMisClientes } from "@/admin/datos/clientes";
 import { ClavesDeClientes } from "@/admin/ClavesDeClientes";
 import { Plegable } from "@/admin/Plegable";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
@@ -25,7 +25,7 @@ export default async function Admin() {
   let clientes;
   let gente;
   try {
-    [clientes, gente] = await Promise.all([todosLosClientes(), elEquipo()]);
+    [clientes, gente] = await Promise.all([todosMisClientes(), elEquipo()]);
   } catch (error) {
     return <ErrorDeDrive error={error} />;
   }
@@ -131,6 +131,9 @@ export default async function Admin() {
                 persona={persona}
                 tieneClave={conClave.has(persona.id)}
                 pidioOtraClave={Boolean(esperando[persona.id])}
+                // Para poder elegir a cuáles llega. Va el nombre porque el
+                // identificador de Drive no le dice nada a nadie.
+                clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))}
               />
             ))}
           </ul>

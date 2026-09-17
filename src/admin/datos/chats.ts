@@ -4,7 +4,7 @@
 // están esperando una respuesta**. Por eso el orden no es alfabético, sino por
 // lo que quedó sin leer y por quién habló último.
 
-import { clientesHabilitados } from "@/lib/clientes";
+import { misClientes } from "@/admin/datos/clientes";
 import { leerConversacion, sinLeerPorCliente, type Mensaje } from "@/lib/conversaciones";
 
 export type ChatEnLista = {
@@ -17,7 +17,7 @@ export type ChatEnLista = {
 
 export async function todasLasConversaciones(): Promise<ChatEnLista[]> {
   const [clientes, sinLeer] = await Promise.all([
-    clientesHabilitados(),
+    misClientes(),
     sinLeerPorCliente("agencia"),
   ]);
 

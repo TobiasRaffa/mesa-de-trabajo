@@ -35,6 +35,9 @@ import {
   type Rol,
 } from "@/dominio/roles";
 
+/** Un cliente, como lo necesita esta pantalla: para nombrarlo y tildarlo. */
+export type ClienteParaElegir = { id: string; nombre: string };
+
 const CAMPO =
   "min-w-0 flex-1 border border-linea bg-lienzo px-3 py-2 text-normal transition-colors " +
   "placeholder:text-apagado focus:border-acento focus:outline-none";
@@ -49,12 +52,15 @@ export function FilaDePersona({
   persona,
   tieneClave,
   pidioOtraClave,
+  clientes,
 }: {
   persona: Persona;
   /** Si ya eligió su contraseña. Sin ella existe en la lista pero no entró nunca. */
   tieneClave: boolean;
   /** Dijo que no puede entrar y está esperando que se la reinicien. */
   pidioOtraClave: boolean;
+  /** Todos los que hay, para poder elegir a cuáles llega. */
+  clientes: ClienteParaElegir[];
 }) {
   const [editando, setEditando] = useState(false);
   const [estado, guardar, guardando] = useActionState(editarDelEquipo, null);
@@ -81,6 +87,9 @@ export function FilaDePersona({
               quiere decir, que es lo que hay que poder mirar de un vistazo. */}
           <p className="mt-0.5 text-menudo text-apagado">
             Entra a: {suyas.map((s) => NOMBRE_DE_SECCION[s]).join(", ")}
+          </p>
+          <p className="mt-0.5 text-menudo text-apagado">
+            Clientes: {comoSeLee(persona.clientes, clientes)}
           </p>
 
           {/* **Todavía no eligió contraseña.** Existe en la lista, se le asigna
@@ -168,7 +177,7 @@ export function FilaDePersona({
         </form>
       </div>
 
-      <Accesos persona={persona} />
+      <Accesos persona={persona} clientes={clientes} />
 
       {[estado, estadoQuitar]
         .filter((r) => r && !r.ok)
@@ -189,9 +198,16 @@ export function FilaDePersona({
  * es la decisión que de verdad se está tomando. Una casilla que parece que
  * quita y no quita es peor que no tenerla.
  */
-function Accesos({ persona }: { persona: Persona }) {
+function Accesos({
+  persona,
+  clientes,
+}: {
+  persona: Persona;
+  clientes: ClienteParaElegir[];
+}) {
   const [estado, guardar, guardando] = useActionState(cambiarAccesos, null);
   const [rol, setRol] = useState<Rol>(persona.rol);
+  const [todos, setTodos] = useState(persona.clientes === "todos");
 
   return (
     <form action={guardar} className="mt-4 border-t border-linea pt-4">
@@ -264,6 +280,68 @@ function Accesos({ persona }: { persona: Persona }) {
         })}
       </ul>
 
+      {/* **A qué clientes llega, aparte del rol.** Son dos cosas distintas: el
+          rol dice a qué *partes* de la aplicación entra, esto a *cuáles*
+          clientes. Quien lleva una sola cuenta no tiene por qué abrir el árbol
+          y encontrarse con las otras ocho. */}
+      <fieldset className="mt-4 border-t border-linea pt-4">
+        <legend className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+          Clientes
+        </legend>
+
+        <label className="mt-2 flex items-center gap-2 text-menudo font-semibold">
+          <input
+            type="radio"
+            name="alcance"
+            value="todos"
+            checked={todos}
+            onChange={() => setTodos(true)}
+            className="h-4 w-4 accent-[var(--color-acento)]"
+          />
+          Todos
+          <span className="font-normal text-apagado">
+            — también los que se den de alta más adelante
+          </span>
+        </label>
+
+        <label className="mt-1 flex items-center gap-2 text-menudo font-semibold">
+          <input
+            type="radio"
+            name="alcance"
+            value="estos"
+            checked={!todos}
+            onChange={() => setTodos(false)}
+            className="h-4 w-4 accent-[var(--color-acento)]"
+          />
+          Solo estos
+        </label>
+
+        {!todos && (
+          <ul className="mt-2 grid gap-1.5 pl-6 sm:grid-cols-2">
+            {clientes.length === 0 ? (
+              <li className="text-menudo text-apagado">Todavía no hay clientes.</li>
+            ) : (
+              clientes.map((c) => (
+                <li key={c.id}>
+                  <label className="flex items-center gap-2 text-menudo">
+                    <input
+                      type="checkbox"
+                      name="cliente"
+                      value={c.id}
+                      defaultChecked={
+                        persona.clientes !== "todos" && persona.clientes.includes(c.id)
+                      }
+                      className="h-4 w-4 shrink-0 accent-[var(--color-acento)]"
+                    />
+                    <span className="min-w-0 truncate">{c.nombre}</span>
+                  </label>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
+      </fieldset>
+
       {estado && !estado.ok && (
         <p aria-live="polite" className="mt-2 text-menudo font-semibold text-alerta">
           {estado.motivo}
@@ -271,6 +349,22 @@ function Accesos({ persona }: { persona: Persona }) {
       )}
     </form>
   );
+}
+
+/**
+ * A qué clientes llega, en palabras.
+ *
+ * Se nombran hasta tres y después se cuenta: una fila con once nombres pegados
+ * deja de leerse, y lo que hay que ver de un vistazo es si son todos o algunos.
+ */
+function comoSeLee(alcance: Persona["clientes"], clientes: ClienteParaElegir[]): string {
+  if (alcance === "todos") return "todos";
+  if (alcance.length === 0) return "ninguno";
+
+  const nombres = alcance.map((id) => clientes.find((c) => c.id === id)?.nombre ?? id);
+  return nombres.length <= 3
+    ? nombres.join(", ")
+    : `${nombres.slice(0, 3).join(", ")} y ${nombres.length - 3} más`;
 }
 
 /**

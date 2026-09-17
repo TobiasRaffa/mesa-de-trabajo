@@ -8,7 +8,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  alcanzaA,
   dondeEmpieza,
+  esAlcance,
+  recortaA,
   laDaElRol,
   ROLES,
   RUTA_DE,
@@ -139,5 +142,43 @@ describe("a dónde cae alguien al entrar", () => {
     // nombres: repartir el acceso a una estaría repartiendo el de la otra.
     const rutas = SECCIONES.map((s: Seccion) => RUTA_DE[s]);
     expect(new Set(rutas).size).toBe(SECCIONES.length);
+  });
+});
+
+describe("a qué clientes llega alguien", () => {
+  const CLIENTES = [{ id: "cafe" }, { id: "panaderia" }, { id: "estudio" }];
+
+  it("«todos» son los que haya, también los de mañana", () => {
+    // **No es lo mismo que la lista de todos los clientes de hoy.** Guardada
+    // como lista, el cliente que se dé de alta la semana que viene quedaría
+    // afuera para todo el mundo, sin que nadie se entere de por qué.
+    expect(alcanzaA("todos", "un-cliente-que-todavia-no-existe")).toBe(true);
+    expect(recortaA("todos", CLIENTES)).toEqual(CLIENTES);
+  });
+
+  it("una lista deja entrar a los suyos y a nadie más", () => {
+    expect(alcanzaA(["cafe"], "cafe")).toBe(true);
+    expect(alcanzaA(["cafe"], "panaderia")).toBe(false);
+    expect(recortaA(["cafe", "estudio"], CLIENTES)).toEqual([
+      { id: "cafe" },
+      { id: "estudio" },
+    ]);
+  });
+
+  it("una lista vacía no alcanza a nadie", () => {
+    // Es la respuesta segura, y la que devuelve la sesión cuando no hay nadie
+    // adentro: una pantalla sin sesión tiene que ver una lista vacía, no la de
+    // todos.
+    expect(alcanzaA([], "cafe")).toBe(false);
+    expect(recortaA([], CLIENTES)).toEqual([]);
+  });
+
+  it("lo guardado se valida antes de creerle", () => {
+    expect(esAlcance("todos")).toBe(true);
+    expect(esAlcance(["cafe"])).toBe(true);
+    expect(esAlcance([])).toBe(true);
+    expect(esAlcance("cafe")).toBe(false);
+    expect(esAlcance(undefined)).toBe(false);
+    expect(esAlcance([1, 2])).toBe(false);
   });
 });

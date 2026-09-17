@@ -12,7 +12,7 @@
 // la va a tener.
 
 import { esCarpetaDeFacturas } from "@/lib/ajustes";
-import { clientesHabilitados } from "@/lib/clientes";
+import { misClientes } from "@/admin/datos/clientes";
 // Acá sí corresponde preguntarle a Drive en crudo. `piezasDeLaCarpeta` existe
 // para alcanzar piezas que quedaron fuera de su carpeta —las que se mudaron a
 // «Entregas finales» cuando aprobar las mudaba—; una factura no es una pieza,
@@ -41,7 +41,7 @@ export type FacturasDeUnCliente = {
 };
 
 export async function lasFacturas(): Promise<FacturasDeUnCliente[]> {
-  const clientes = await clientesHabilitados();
+  const clientes = await misClientes();
 
   return Promise.all(
     clientes.map(async (cliente): Promise<FacturasDeUnCliente> => {

@@ -369,15 +369,35 @@ describe("la cadena hasta el cliente", () => {
  * como se abre un agujero: la segunda pantalla que lo necesite lo copia.
  */
 describe("la agencia mira con otra vara", () => {
-  const comoAgencia = { tipo: "agencia" as const };
+  const comoAgencia = { tipo: "agencia" as const, raices: [CLIENTE] };
 
   beforeEach(() => {
     clientes.mockResolvedValue([cliente(CLIENTE), cliente("otro-cliente")]);
   });
 
-  it("ve el archivo de cualquier cliente", async () => {
-    driveConArbol({ "archivo-1": ["sub"], sub: ["otro-cliente"] });
+  it("ve el archivo de los clientes que lleva", async () => {
+    driveConArbol({ "archivo-1": ["sub"], sub: [CLIENTE] });
     await expect(archivoAutorizado("archivo-1", comoAgencia)).resolves.not.toBeNull();
+  });
+
+  it("**no** ve el de un cliente que no lleva", async () => {
+    // **Era un agujero y no se veía.** Antes «agencia» quería decir «todos los
+    // clientes»: una diseñadora que lleva una sola cuenta se bajaba el archivo
+    // de otra con solo conocer su identificador de Drive —que lo ve cualquiera
+    // a quien le compartieron la carpeta—. Las raíces son las suyas, y la
+    // comprobación es la misma que la del cliente.
+    driveConArbol({ "archivo-1": ["sub"], sub: ["otro-cliente"] });
+    await expect(archivoAutorizado("archivo-1", comoAgencia)).resolves.toBeNull();
+  });
+
+  it("y quien los lleva a todos sigue viéndolos a todos", async () => {
+    driveConArbol({ "archivo-1": ["sub"], sub: ["otro-cliente"] });
+    await expect(
+      archivoAutorizado("archivo-1", {
+        tipo: "agencia" as const,
+        raices: [CLIENTE, "otro-cliente"],
+      })
+    ).resolves.not.toBeNull();
   });
 
   it("ve lo que ella misma escondió", async () => {
@@ -431,7 +451,7 @@ describe("una carpeta no se sirve como si fuera un archivo", () => {
   it("ni para la agencia", async () => {
     conUnaSubcarpeta();
     await expect(
-      archivoAutorizado("sub", { tipo: "agencia" as const })
+      archivoAutorizado("sub", { tipo: "agencia" as const, raices: [CLIENTE] })
     ).resolves.toBeNull();
   });
 

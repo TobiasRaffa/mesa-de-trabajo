@@ -593,6 +593,80 @@ describe("las puertas", () => {
     ).toEqual([]);
   });
 
+  it("la gestión pide los clientes por un solo lugar", () => {
+    // **Es el mismo problema que la puerta, con otra forma.** Los roles separan
+    // secciones; el alcance separa clientes. Si cada pantalla filtrara por su
+    // cuenta —el árbol, el tablero, los chats, las facturas, cada acción que
+    // recibe una carpeta— el día que una se olvide, alguien ve la carpeta de un
+    // cliente que no lleva. Y no se nota: la pantalla se ve bien.
+    //
+    // Por eso `@/lib/clientes` y `@/lib/carpetas` se piden desde
+    // `@/admin/datos/clientes`, que es el único que recorta.
+    const deGestion = TODOS.filter((f) => {
+      const r = relativo(f);
+      return (
+        (r.startsWith("src/admin/") || r.startsWith("src/app/(admin)/")) &&
+        !r.endsWith(".test.ts") &&
+        !r.endsWith(".test.tsx") &&
+        r !== "src/admin/datos/clientes.ts"
+      );
+    });
+    expect(deGestion.length, "No encontré archivos de gestión.").toBeGreaterThan(0);
+
+    // Las que leen clientes o carpetas sin recortar. Las que **escriben** —
+    // `ponerTag`, `habilitarCliente`, `olvidarCarpetas`— no están: no devuelven
+    // datos de nadie, y la acción que las llama ya comprobó el alcance antes.
+    const SIN_RECORTAR = [
+      "clientesHabilitados",
+      "todosLosClientes",
+      "clientePorId",
+      "clienteDeCarpeta",
+      "esCarpetaDelCliente",
+      "idsDeCarpetasReales",
+      // Un aviso nombra al cliente y la carpeta: sin recortar, cuenta lo que
+      // el alcance viene a no mostrar.
+      "losAvisos",
+    ];
+
+    const culpables = deGestion
+      .filter((f) => {
+        const texto = readFileSync(f, "utf8");
+        // Se mira el contenido de cada `import { ... }`, y no línea por línea:
+        // los imports largos vienen partidos en varias, y una comprobación por
+        // línea no encontraría nada justo en los archivos que más importan.
+        for (const m of texto.matchAll(/import\s*\{([\s\S]*?)\}\s*from/g)) {
+          const nombres = m[1].split(",").map((x) => x.trim().replace(/^type\s+/, ""));
+          if (nombres.some((n) => SIN_RECORTAR.includes(n))) return true;
+        }
+        return false;
+      })
+      .map(relativo);
+
+    expect(
+      culpables,
+      "Estos piden los clientes o las carpetas sin recortarlos por el alcance " +
+        "de quien está mirando. Pedilos a @/admin/datos/clientes: misClientes, " +
+        "miCliente, esCarpetaMia, clienteDeMiCarpeta, misCarpetas."
+    ).toEqual([]);
+  });
+
+  it("la agencia no es «todos los clientes» cuando pide un archivo", () => {
+    // **Era un agujero y no se veía.** `quienPide` contestaba `{tipo:
+    // "agencia"}` a secas, y con eso `archivoAutorizado` autorizaba contra las
+    // carpetas de todos: alcanzaba con conocer un identificador de Drive para
+    // bajarse el archivo de un cliente que uno no lleva.
+    const permisos = leer("src/lib/permisos.ts");
+
+    expect(
+      permisos,
+      "QuienPide tiene que traer las raíces de quien pregunta, no un permiso general."
+    ).toContain('tipo: "agencia"; raices: string[]');
+    expect(
+      /raices: \[\]|carpetasAdministradas\(\) : \[quien\.raiz\]/.test(permisos),
+      "archivoAutorizado volvió a autorizar a la agencia contra todas las carpetas."
+    ).toBe(false);
+  });
+
   it("quién entró se decide en un solo lugar", () => {
     // Dos implementaciones de «quién es este» se separan con el tiempo, y la
     // que se quede vieja va a ser la que autoriza.

@@ -4,7 +4,7 @@
 
 import { dondeSeGuarda } from "@/lib/almacen";
 import { variablesFaltantes } from "@/lib/entorno";
-import { clientesHabilitados } from "@/lib/clientes";
+import { misClientes } from "@/admin/datos/clientes";
 // Acá sí corresponde preguntarle a Drive directamente: esta pantalla existe
 // para mirar la conexión con Drive, no el estado del trabajo.
 // eslint-disable-next-line no-restricted-imports
@@ -45,7 +45,7 @@ export default async function Diagnostico() {
 
   if (faltantes.length === 0) {
     try {
-      archivos = await listarCarpeta((await clientesHabilitados())[0]?.id ?? "");
+      archivos = await listarCarpeta((await misClientes())[0]?.id ?? "");
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }

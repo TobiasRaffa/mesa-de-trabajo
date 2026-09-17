@@ -9,14 +9,14 @@
 // títulos con el mismo nombre, uno encima del otro, es lo que pasa cuando algo
 // se muda de lugar y nadie saca lo que quedó.
 
-import { losAvisos } from "@/lib/avisos";
+import { misAvisos } from "@/admin/datos/clientes";
 import { correoConfigurado } from "@/lib/correo";
 import { Bandeja } from "@/admin/Bandeja";
 
 export const dynamic = "force-dynamic";
 
 export default async function Notificaciones() {
-  const avisos = await losAvisos();
+  const avisos = await misAvisos();
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">

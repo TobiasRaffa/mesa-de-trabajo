@@ -28,6 +28,7 @@ import { correoConfigurado, mandarCorreo } from "@/lib/correo";
 import { personaPorId, quienesRecibenTodo, type Persona } from "@/lib/equipo";
 import { cadenaHasta } from "@/lib/permisos";
 import { responsablesDe } from "@/lib/responsables";
+import { alcanzaA } from "@/dominio/roles";
 
 /** Cómo se cuenta cada cosa, en una línea. */
 function comoSeCuenta(clase: ClaseDeAviso, carpeta: string, detalle?: string): string {
@@ -138,7 +139,17 @@ async function aQuienesLesToca(
     quienLlevaEsto(clienteId, carpetaId),
   ]);
 
-  const porId = new Map(todos.map((p) => [p.id, p]));
+  // **«Recibe todo» quiere decir todo lo suyo.** Quien lleva dos cuentas de
+  // ocho no tiene por qué enterarse de lo que pasa en las otras seis: el aviso
+  // nombra al cliente y la carpeta, así que mandárselo sería contarle
+  // exactamente lo que la aplicación no le deja mirar.
+  //
+  // A quien lo lleva no se lo filtra: que alguien esté asignado a un trabajo es
+  // una decisión que tomó una persona, y callarle el aviso por una casilla la
+  // dejaría esperando algo que nunca llega.
+  const porId = new Map(
+    todos.filter((p) => alcanzaA(p.clientes, clienteId)).map((p) => [p.id, p])
+  );
   if (quienLleva) porId.set(quienLleva.id, quienLleva);
   return [...porId.values()];
 }
