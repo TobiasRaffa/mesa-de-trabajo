@@ -202,14 +202,14 @@ const almacen = coleccion<EstadoDePieza>("piezas", esPieza);
  */
 export async function estadosDe(
   carpetaId: string,
-  piezas: Array<{ id: string; archivos: string[] }>
+  piezas: Array<{ id: string; archivos: string[]; masVieja?: string }>
 ): Promise<Record<string, EstadoDePieza>> {
   const todo = await almacen.todo();
 
   const salida: Record<string, EstadoDePieza> = {};
   const aGuardar: Record<string, EstadoDePieza> = {};
 
-  for (const { id, archivos } of piezas) {
+  for (const { id, archivos, masVieja } of piezas) {
     const guardada = todo[id] ? normalizar(todo[id]) : null;
 
     if (!guardada) {
@@ -219,10 +219,20 @@ export async function estadosDe(
 
     const conocidos = guardada.archivos ?? [];
 
-    // Guardada antes de que esto existiera: se anota lo que hay y no se decide
-    // nada. Inventar un pasado que nadie guardó sería peor que no tenerlo.
+    // **Guardada antes de que existiera la lista de archivos.**
+    //
+    // No se puede saber si es de estos archivos... salvo por una cosa: un
+    // trabajo no pudo entregarse antes de que existiera el archivo que se
+    // entregó. Si todo lo que hay ahora es más nuevo que lo anotado, lo
+    // anotado es de otro archivo, y adoptarlo pone delante del cliente una
+    // pieza «entregada» que nadie entregó —con su botón de aprobar incluido—.
+    //
+    // Pasó al mover unos archivos a una carpeta donde, meses antes, había
+    // habido otro con el mismo nombre.
     if (conocidos.length === 0) {
-      salida[id] = { ...guardada, archivos };
+      salida[id] = puedeSerDeEstos(guardada, masVieja)
+        ? { ...guardada, archivos }
+        : vuelveAEmpezar(guardada, carpetaId, archivos);
       aGuardar[id] = salida[id];
       continue;
     }
@@ -251,6 +261,25 @@ export async function estadosDe(
 
 const distintos = (a: string[], b: string[]) =>
   a.length !== b.length || a.some((x) => !b.includes(x));
+
+/**
+ * Si lo anotado puede ser de los archivos que hay ahora.
+ *
+ * Contesta que sí salvo cuando es **imposible**: cuando lo más viejo que hay
+ * en Drive es más nuevo que lo primero que se anotó. Ahí no hay duda —nada
+ * pudo pasarle a un archivo antes de que el archivo existiera— y es la única
+ * certeza disponible sin la lista de archivos.
+ *
+ * Sin fecha de Drive contesta que sí: ante la duda, se conserva lo anotado.
+ */
+function puedeSerDeEstos(guardada: EstadoDePieza, masVieja: string | undefined): boolean {
+  if (!masVieja) return true;
+
+  const primero = guardada.historia[0]?.cuando ?? guardada.entregadaEl;
+  if (!primero) return true;
+
+  return masVieja <= primero;
+}
 
 /**
  * La pieza empieza de nuevo, con su historia intacta.

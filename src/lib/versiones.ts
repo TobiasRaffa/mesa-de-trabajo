@@ -271,15 +271,28 @@ export function nombreDePieza(id: string): string {
  * seis veces —una por pantalla—, la séptima se olvida de una mitad, y esa
  * mitad es la que decide si una pieza vuelve a empezar.
  */
-export function conSusArchivos<T extends ConNombre & { id: string }>(
+export function conSusArchivos<
+  T extends ConNombre & { id: string; modifiedTime?: string },
+>(
   carpetaId: string,
   agrupadas: Array<Agrupado<T>>
-): Array<{ id: string; archivos: string[] }> {
-  return agrupadas.map((p) => ({
-    // La identidad la decide el agrupador y no el nombre del primer archivo:
-    // desde que una pieza puede tener vueltas de distinta extensión, «el
-    // nombre del primero» y «el nombre de la pieza» dejaron de ser lo mismo.
-    id: `${carpetaId}::${p.base}`,
-    archivos: p.versiones.map((v) => v.archivo.id),
-  }));
+): Array<{ id: string; archivos: string[]; masVieja?: string }> {
+  return agrupadas.map((p) => {
+    const fechas = p.versiones
+      .map((v) => v.archivo.modifiedTime)
+      .filter((f): f is string => Boolean(f));
+
+    return {
+      // La identidad la decide el agrupador y no el nombre del primer archivo:
+      // desde que una pieza puede tener vueltas de distinta extensión, «el
+      // nombre del primero» y «el nombre de la pieza» dejaron de ser lo mismo.
+      id: `${carpetaId}::${p.base}`,
+      archivos: p.versiones.map((v) => v.archivo.id),
+      // **Desde cuándo existe algo de esta pieza.** Sirve para una sola
+      // pregunta, y es importante: ¿puede lo anotado ser de estos archivos?
+      // Un trabajo no pudo entregarse antes de que existiera el archivo que se
+      // entregó.
+      masVieja: fechas.length > 0 ? fechas.sort()[0] : undefined,
+    };
+  });
 }

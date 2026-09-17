@@ -113,3 +113,80 @@ describe("lo que nadie tocó", () => {
     expect(guardado[PIEZA]).toBeUndefined();
   });
 });
+
+describe("lo anotado de antes no se le cuelga a un archivo nuevo", () => {
+  // **Pasó al mover unos archivos.** En esa carpeta, meses antes, había habido
+  // otro archivo con el mismo nombre, y quedó guardado que se había entregado.
+  // Al aparecer los archivos nuevos, la aplicación adoptó ese estado: la pieza
+  // salió «entregada» delante del cliente —con su botón de aprobar— sin que
+  // nadie la hubiera entregado nunca.
+  //
+  // Sin la lista de archivos no se puede saber si lo anotado es de estos...
+  // salvo por una cosa: **nada pudo pasarle a un archivo antes de que el
+  // archivo existiera**.
+
+  /** Un registro viejo: de antes de que se guardara la lista de archivos. */
+  const guardarLegado = (cuando: string) => {
+    guardado[PIEZA] = {
+      carpetaId: CARPETA,
+      estado: "entregada",
+      ronda: 0,
+      rondasExtra: 0,
+      cambios: [],
+      enviada: false,
+      mudada: false,
+      entregadaEl: cuando,
+      historia: [
+        { id: "h1", que: "entregada", quien: "El equipo", cuando },
+      ],
+    };
+  };
+
+  it("si todo lo que hay es más nuevo que lo anotado, la pieza vuelve a empezar", async () => {
+    guardarLegado("2026-09-16T01:49:00.000Z");
+
+    const r = await estadosDe(CARPETA, [
+      { id: PIEZA, archivos: ["NUEVO"], masVieja: "2026-09-16T03:49:00.000Z" },
+    ]);
+
+    expect(
+      r[PIEZA].estado,
+      "Un trabajo no pudo entregarse antes de que existiera el archivo que se " +
+        "entregó. Adoptarlo pone delante del cliente una pieza entregada que " +
+        "nadie entregó."
+    ).toBe("en_curso");
+    expect(r[PIEZA].entregadaEl).toBeUndefined();
+  });
+
+  it("y no se pierde nada: la historia queda, con el motivo anotado", async () => {
+    guardarLegado("2026-09-16T01:49:00.000Z");
+
+    const r = await estadosDe(CARPETA, [
+      { id: PIEZA, archivos: ["NUEVO"], masVieja: "2026-09-16T03:49:00.000Z" },
+    ]);
+
+    expect(r[PIEZA].historia.map((h) => h.que)).toEqual([
+      "entregada",
+      "archivo_reemplazado",
+    ]);
+  });
+
+  it("si el archivo ya existía cuando se anotó, se conserva lo anotado", async () => {
+    // Es el caso normal de una pieza vieja: lo anotado es suyo.
+    guardarLegado("2026-09-16T03:49:00.000Z");
+
+    const r = await estadosDe(CARPETA, [
+      { id: PIEZA, archivos: ["A"], masVieja: "2026-09-16T01:49:00.000Z" },
+    ]);
+
+    expect(r[PIEZA].estado).toBe("entregada");
+  });
+
+  it("sin fecha de Drive, ante la duda se conserva lo anotado", async () => {
+    guardarLegado("2026-09-16T01:49:00.000Z");
+
+    const r = await estadosDe(CARPETA, [{ id: PIEZA, archivos: ["A"] }]);
+
+    expect(r[PIEZA].estado).toBe("entregada");
+  });
+});

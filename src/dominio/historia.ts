@@ -47,7 +47,8 @@ export const EN_PALABRAS: Record<Hito, string> = {
   devuelta_a_su_carpeta: "Volvió a su carpeta de trabajo",
   no_se_pudo_devolver: "No se pudo sacar de «Entregas finales»",
   archivo_reemplazado:
-    "Se borró el archivo y se subió otro con el mismo nombre: la pieza vuelve a empezar",
+    "El archivo que había ya no está: lo que hay ahora con ese nombre es otro, " +
+    "así que la pieza vuelve a empezar",
 };
 
 /** Lo mínimo de un hito para poder leerlo. */
