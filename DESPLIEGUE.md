@@ -9,41 +9,30 @@ mitad de camino que faltaba un paso.
 
 ---
 
-## ANTES QUE NADA: volver a poner la puerta de gestión
+## La puerta de gestión: ya está
 
-**Hoy `/gestion` abre sin pedir nada.** Se sacó la contraseña a pedido, porque
-adentro de la agencia escribirla todos los días en cada máquina era fastidio y
-nada más: quien llega a la computadora ya está adentro de la oficina.
+**Hecho.** `/gestion` y el diagnóstico piden sesión, y cada persona entra con
+su correo y su contraseña. Lo que hace queda firmado con su nombre en vez de
+«El equipo».
 
-En internet eso no vale. Con la dirección alcanza para entrar, y adentro está
-el árbol de todos los clientes, sus chats, sus links de acceso y el tablero.
+Lo que hay que saber para arrancar:
 
-Lo que hay que hacer, cuando llegue el momento: volver a poner en `src/proxy.ts`
-la puerta que redirige a una pantalla de contraseña. Está en el historial —
-commit «Una puerta por mundo, y nada que pueda esquivarla»— y se puede
-recuperar tal cual estaba.
+1. **La primera vez no hay ninguna contraseña cargada**, así que la puerta
+   acepta `CLAVE_DE_ADMIN` sola y lo dice: «Primera vez».
+2. Adentro, en **Admin → El equipo**, cada persona tiene un botón «Poner
+   contraseña». Quien todavía no tiene una aparece marcada: existe en la lista
+   —se le asigna trabajo, le llegan los avisos— pero no puede entrar.
+3. **En cuanto alguien tiene la suya, el arranque se cierra solo.** De ahí en
+   más se entra con correo y contraseña, y nada más.
 
-**Y hay algo peor que las pantallas abiertas**, encontrado probando: una sola
-visita a `/gestion` —sin clave, sin nada— deja una galleta firmada de treinta
-días que las rutas de archivos aceptan como «soy del equipo». Con esa galleta
-se baja **cualquier archivo de cualquier cliente, incluidos los que se
-escondieron a propósito**:
+Cambiar `CLAVE_DE_ADMIN` echa a todo el mundo en el acto: la firma de las
+sesiones sale de ahí. No hay lista de sesiones abiertas que mantener.
 
-    GET /gestion                        → 200, y te deja la galleta
-    GET /api/archivo/<archivo oculto>   → 200
-    GET /api/miniatura/<archivo oculto> → 200
-
-No es «se ven las pantallas»: es una credencial durable que saltea el
-escondido por archivo.
-
-Mientras tanto, **el proxy no reparte esa marca en producción**: si esto se
-sube sin puerta, gestión se queda sin miniaturas en vez de repartir
-credenciales. Es molesto y se ve, que es exactamente lo contrario de lo que
-pasaba antes —andaba todo y el agujero no se veía—. Poner la puerta devuelve
-las miniaturas.
-
-**Esto es bloqueante.** No es «conviene»: sin esto, subir la aplicación es
-publicar los datos de todos los clientes.
+**Lo que esto cerró**, y era peor de lo que parecía: mientras la puerta estuvo
+sacada, una sola visita a `/gestion` dejaba una galleta de treinta días que las
+rutas de archivos aceptaban como «soy del equipo». Con eso se bajaba cualquier
+archivo de cualquier cliente, incluidos los escondidos a propósito. No era «se
+ven las pantallas»: era repartir una credencial.
 
 ---
 
@@ -170,26 +159,10 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
 
 ## Lo que todavía no está
 
-- **Gestión no tiene puerta.** Ver lo primero de este documento: es lo que hay
-  que hacer antes de subirla. Lo único que pide contraseña hoy es ver o cambiar
-  la clave de un cliente.
-- **Nadie entra con usuario y contraseña propios**, así que no se sabe quién de
-  las tres hizo cada cosa: todo queda firmado «El equipo».
-
-  Está preparado para que eso cambie sin tocar nada de lo que ya funciona.
-  Todo lo que queda anotado —los mensajes al cliente, las entregas, las
-  reaperturas— pasa por `firmaDeAgencia()` en `src/lib/sesion.ts`, y hay una
-  prueba que falla si alguien escribe el nombre a mano en otro lado. Lo que
-  falta es:
-
-  1. Una pantalla de entrada que pida correo y contraseña. **El correo ya
-     existe**: es el de cada persona en Admin → El equipo. Esa lista es la
-     lista de usuarios; no hay que inventar otra.
-  2. Guardar la contraseña de cada persona, cifrada, junto a su ficha.
-  3. Al entrar, dejar una galleta **firmada** con su identificador.
-  4. Que `quienSoy()` lea esa galleta. Es lo único que toca el código de hoy.
-
-  Va junto con Supabase, que es donde van a vivir las contraseñas.
+- **El freno de intentos de la puerta vive en memoria**, igual que el del
+  portal. Frena ocho intentos por minuto y por correo en una computadora; en
+  Netlify, donde cada pedido puede caer en otra máquina, no frena nada. Los dos
+  se arreglan igual: moviéndolo al almacén.
 - **Dos personas escribiendo el mismo hilo de chat en el mismo instante.** Al
   mandar un mensaje se lee la conversación entera y se vuelve a guardar. Si el
   cliente y la agencia mandan uno en la misma fracción de segundo, uno de los

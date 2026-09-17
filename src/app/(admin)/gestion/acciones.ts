@@ -78,6 +78,7 @@ const RONDAS_INCLUIDAS = RONDAS_INCLUIDAS_POR_DEFECTO;
 import { agruparVersiones, conSusArchivos, identidadDePieza } from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
 import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
+import { LARGO_MINIMO_DE_CLAVE, ponerClave, sacarClave } from "@/lib/claves";
 import { correoValido } from "@/lib/equipo";
 import { firmaDeAgencia } from "@/lib/sesion";
 import {
@@ -890,6 +891,37 @@ export async function guardarResponsable(
 // ---------------------------------------------------------------------------
 // El equipo
 
+/**
+ * Le pone o le cambia la contraseña a alguien del equipo.
+ *
+ * **Cualquiera del equipo puede cambiársela a cualquiera**, y es a propósito:
+ * son tres personas en una oficina que ya comparten los clientes, los archivos
+ * y la caja. La que se la olvida gira la silla y se la piden a la de al lado.
+ * Un correo de recuperación sería un camino de entrada más para cuidar, a
+ * cambio de resolver algo que se resuelve girando la silla.
+ *
+ * Nunca se guarda lo escrito: se guarda una huella, y en otro archivo que el
+ * navegador no ve nunca.
+ */
+export async function ponerClaveDePersona(_previo: unknown, formulario: FormData) {
+  const id = String(formulario.get("id") ?? "");
+  const clave = String(formulario.get("clave") ?? "");
+
+  if (!(await elEquipo()).some((p) => p.id === id)) {
+    return { ok: false as const, motivo: "Esa persona no está." };
+  }
+  if (clave.length < LARGO_MINIMO_DE_CLAVE) {
+    return {
+      ok: false as const,
+      motivo: `La contraseña tiene que tener al menos ${LARGO_MINIMO_DE_CLAVE} caracteres.`,
+    };
+  }
+
+  await ponerClave(id, clave);
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
 export async function agregarAlEquipo(_previo: unknown, formulario: FormData) {
   const nombre = String(formulario.get("nombre") ?? "").trim();
   const correo = String(formulario.get("correo") ?? "").trim();
@@ -935,6 +967,9 @@ export async function editarDelEquipo(_previo: unknown, formulario: FormData) {
 
 export async function quitarDelEquipo(_previo: unknown, formulario: FormData) {
   const id = String(formulario.get("id") ?? "");
+  // Y con ella su contraseña: dejarla sería dejar abierta una puerta a nombre
+  // de alguien que ya no está.
+  await sacarClave(id);
   await sacarDelEquipo(id);
   revalidatePath("/gestion", "layout");
   return { ok: true as const };

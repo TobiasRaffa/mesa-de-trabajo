@@ -16,9 +16,15 @@
 // ni al diagnóstico sin la galleta de acá, así que una pantalla nueva nace
 // protegida sin que nadie tenga que acordarse.
 //
-// Sigue siendo **una contraseña compartida por el equipo**, no un usuario por
-// persona. Eso es a propósito y está decidido: son tres personas. Lo que no
-// puede ser es que no haya ninguna.
+// **Ya no es la llave del equipo: ahora cada una entra con la suya.** Esto
+// quedó para dos cosas. Una, seguir protegiendo la clave de un cliente. La
+// otra, firmar la galleta de sesión: como la firma sale de acá, cambiar
+// `CLAVE_DE_ADMIN` echa a todo el mundo en el acto, sin una lista de sesiones
+// abiertas que después nadie mantiene.
+//
+// Y sirve de llave de arranque: mientras nadie del equipo tenga contraseña, la
+// puerta la acepta para poder cargar la primera. Ese camino se cierra solo en
+// cuanto alguien tiene la suya.
 //
 // Sale de una variable de entorno y no del código: una contraseña escrita en
 // el fuente termina en el repositorio, y de ahí no sale más.
@@ -53,29 +59,61 @@ export function contrasenaCorrecta(escrita: string): boolean {
 export const GALLETA_DE_GESTION = "mdt_gestion";
 
 /**
- * Lo que se guarda en la galleta cuando alguien acierta la contraseña.
+ * Quién entró con la llave del equipo y no con la suya.
  *
- * Es una firma de la contraseña, no la contraseña. Leer la galleta no sirve
- * para deducirla, y fabricarla sin conocerla no se puede. Como se deriva de
- * ella, **cambiar la contraseña echa a todo el mundo en el acto**: no hace
- * falta una lista de sesiones abiertas que después nadie mantiene.
- *
- * `null` cuando no hay contraseña configurada, que es lo que hace que sin
- * configurar no se abra nada.
+ * Es el arranque: la primera vez no hay ninguna contraseña cargada, así que
+ * alguien tiene que poder entrar a ponerlas. Lo que haga queda firmado «El
+ * equipo», igual que antes de que existiera el login, porque de verdad no se
+ * sabe quién es.
  */
-export function valorDeGalletaDeGestion(): string | null {
-  const clave = process.env.CLAVE_DE_ADMIN?.trim();
-  if (!clave) return null;
-  return createHmac("sha256", clave).update("entro a gestion").digest("base64url");
+export const SIN_PERSONA = "equipo";
+
+/**
+ * Lo que se guarda en la galleta cuando alguien entra.
+ *
+ * Es el identificador de la persona **más una firma nuestra**. Leerla no sirve
+ * para nada y fabricarla sin la llave no se puede: cambiar el identificador a
+ * mano rompe la firma. Antes era una marca igual para todos —servía para decir
+ * «este navegador es del equipo» y nada más—, así que hacerse pasar por otro
+ * era imposible porque no había otro por quien pasarse.
+ *
+ * `null` cuando no hay `CLAVE_DE_ADMIN`, que es lo que hace que sin configurar
+ * no se abra nada.
+ */
+export function valorDeSesion(personaId: string): string | null {
+  const firma = firmarSesion(personaId);
+  return firma && `${personaId}.${firma}`;
 }
 
-/** Si esta galleta la firmamos nosotros. Comparación en tiempo constante. */
-export function galletaDeGestionValida(valor: string | undefined): boolean {
-  if (!valor) return false;
-  const esperado = valorDeGalletaDeGestion();
-  if (!esperado) return false;
+/**
+ * De quién es esta galleta, o `null` si no la firmamos nosotros.
+ *
+ * Devuelve el identificador y no un sí o un no, porque quien pregunta casi
+ * siempre quiere saber **quién**: es lo que hace que lo anotado deje de decir
+ * «El equipo».
+ */
+export function personaDeLaGalleta(valor: string | undefined): string | null {
+  if (!valor) return null;
 
-  const a = Buffer.from(esperado);
-  const b = Buffer.from(valor);
-  return a.length === b.length && timingSafeEqual(a, b);
+  const corte = valor.lastIndexOf(".");
+  if (corte <= 0) return null;
+
+  const personaId = valor.slice(0, corte);
+  const firma = valor.slice(corte + 1);
+  const esperada = firmarSesion(personaId);
+  if (!esperada) return null;
+
+  const a = Buffer.from(esperada);
+  const b = Buffer.from(firma);
+  return a.length === b.length && timingSafeEqual(a, b) ? personaId : null;
+}
+
+/** Si esta galleta la firmamos nosotros. */
+export const galletaDeGestionValida = (valor: string | undefined): boolean =>
+  personaDeLaGalleta(valor) !== null;
+
+function firmarSesion(personaId: string): string | null {
+  const clave = process.env.CLAVE_DE_ADMIN?.trim();
+  if (!clave) return null;
+  return createHmac("sha256", clave).update(`entro:${personaId}`).digest("base64url");
 }

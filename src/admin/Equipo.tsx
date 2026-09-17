@@ -13,9 +13,11 @@ import { useActionState, useState } from "react";
 import {
   agregarAlEquipo,
   editarDelEquipo,
+  ponerClaveDePersona,
   quitarDelEquipo,
 } from "@/app/(admin)/gestion/acciones";
 import type { Persona } from "@/lib/equipo";
+import { LARGO_MINIMO_DE_CLAVE } from "@/dominio/claves";
 
 const CAMPO =
   "min-w-0 flex-1 border border-linea bg-lienzo px-3 py-2 text-normal transition-colors " +
@@ -25,7 +27,14 @@ const BOTON =
   "shrink-0 min-h-toque border-2 border-tinta px-4 text-normal font-bold tracking-tight " +
   "text-tinta transition-colors hover:bg-hueco disabled:opacity-40";
 
-export function FilaDePersona({ persona }: { persona: Persona }) {
+export function FilaDePersona({
+  persona,
+  tieneClave,
+}: {
+  persona: Persona;
+  /** Si ya puede entrar. Sin contraseña, existe en la lista pero no entra. */
+  tieneClave: boolean;
+}) {
   const [editando, setEditando] = useState(false);
   const [estado, guardar, guardando] = useActionState(editarDelEquipo, null);
   const [estadoQuitar, quitar, quitando] = useActionState(quitarDelEquipo, null);
@@ -40,6 +49,14 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
             {persona.enDrive && ` · en Drive: ${persona.enDrive}`}
             {persona.avisaDeTodo && " · recibe todos los avisos"}
           </p>
+          {/* **Sin contraseña existe en la lista pero no entra.** Se le puede
+              asignar trabajo y le llegan los avisos, pero la puerta no la
+              conoce. Decirlo acá evita el «no me deja entrar» de mañana. */}
+          {!tieneClave && (
+            <p className="mt-1 text-micro font-extrabold uppercase tracking-wider text-espera">
+              todavía no puede entrar: ponele una contraseña
+            </p>
+          )}
         </div>
         <button type="button" onClick={() => setEditando(true)} className={BOTON}>
           Editar
@@ -95,6 +112,8 @@ export function FilaDePersona({ persona }: { persona: Persona }) {
         <button type="button" onClick={() => setEditando(false)} className={BOTON}>
           Cancelar
         </button>
+
+        <Clave persona={persona} tieneClave={tieneClave} />
 
         <form action={quitar}>
           <input type="hidden" name="id" value={persona.id} />
@@ -174,5 +193,57 @@ export function SumarPersona() {
         </p>
       )}
     </section>
+  );
+}
+
+/**
+ * Ponerle o cambiarle la contraseña a alguien.
+ *
+ * **No pide la anterior.** Son tres personas en una oficina que ya comparten
+ * los clientes, los archivos y la caja; la que se la olvida gira la silla. Y
+ * quien está escribiendo acá ya entró: pedirle otra contraseña para cambiar
+ * una no agrega nada que la puerta no haya preguntado.
+ */
+function Clave({ persona, tieneClave }: { persona: Persona; tieneClave: boolean }) {
+  const [estado, poner, poniendo] = useActionState(ponerClaveDePersona, null);
+  const [abierto, setAbierto] = useState(false);
+
+  if (!abierto) {
+    return (
+      <button type="button" onClick={() => setAbierto(true)} className={BOTON}>
+        {tieneClave ? "Cambiar contraseña" : "Poner contraseña"}
+      </button>
+    );
+  }
+
+  return (
+    <form action={poner} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="id" value={persona.id} />
+      <input
+        name="clave"
+        type="password"
+        autoComplete="new-password"
+        minLength={LARGO_MINIMO_DE_CLAVE}
+        placeholder={`contraseña nueva (${LARGO_MINIMO_DE_CLAVE} o más)`}
+        aria-label={`Contraseña de ${persona.nombre}`}
+        className={CAMPO}
+      />
+      <button type="submit" disabled={poniendo} className={BOTON}>
+        {poniendo ? "…" : "Guardar"}
+      </button>
+      <button type="button" onClick={() => setAbierto(false)} className={BOTON}>
+        Cancelar
+      </button>
+      {estado && (
+        <span
+          aria-live="polite"
+          className={`text-menudo font-semibold ${
+            estado.ok ? "text-acento" : "text-alerta"
+          }`}
+        >
+          {estado.ok ? "Lista." : estado.motivo}
+        </span>
+      )}
+    </form>
   );
 }

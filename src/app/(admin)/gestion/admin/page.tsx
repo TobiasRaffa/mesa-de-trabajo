@@ -16,6 +16,7 @@ import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { FilaDePersona, SumarPersona } from "@/admin/Equipo";
 import { correoConfigurado } from "@/lib/correo";
 import { elEquipo } from "@/lib/equipo";
+import { tieneClave } from "@/lib/claves";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,14 @@ export default async function Admin() {
   } catch (error) {
     return <ErrorDeDrive error={error} />;
   }
+
+  // Quiénes ya pueden entrar. Sin contraseña una persona existe en la lista
+  // —se le asigna trabajo, le llegan los avisos— pero la puerta no la conoce,
+  // y eso hay que poder verlo acá mismo.
+  const conClave = new Set(
+    (await Promise.all(gente.map(async (p) => ((await tieneClave(p.id)) ? p.id : null))))
+      .filter((id): id is string => id !== null)
+  );
 
   const hayCorreo = correoConfigurado();
   const sinCorreo = gente.filter((p) => !p.correo).length;
@@ -95,7 +104,11 @@ export default async function Admin() {
         ) : (
           <ul className="mt-6 border-t border-linea">
             {gente.map((persona) => (
-              <FilaDePersona key={persona.id} persona={persona} />
+              <FilaDePersona
+                key={persona.id}
+                persona={persona}
+                tieneClave={conClave.has(persona.id)}
+              />
             ))}
           </ul>
         )}

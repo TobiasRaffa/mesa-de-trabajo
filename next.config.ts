@@ -75,19 +75,19 @@ const nextConfig: NextConfig = {
    * pestañas abiertas apuntando ahí: el día que se movieron, quien las tenía
    * guardadas se encontró con un «no existe» y no con el lugar nuevo.
    *
-   * **Temporales y no permanentes**, a propósito. Un redirección permanente
-   * la recuerda el navegador para siempre, y `/gestion/entrar` va a volver a
-   * existir cuando se ponga la puerta antes de subir esto a internet: si el
-   * navegador se la aprendió, no habría forma de llegar a la puerta nueva.
+   * **Temporales y no permanentes**, a propósito. Una redirección permanente la
+   * recuerda el navegador para siempre, y una dirección que hoy se mudó puede
+   * volver a existir mañana: si el navegador se la aprendió, no habría forma de
+   * llegar a la nueva.
+   *
+   * Eso pasó, y por eso el párrafo de arriba no es teórico. Había acá una que
+   * mandaba `/gestion/entrar` a `/gestion`, de cuando la puerta se sacó. Al
+   * volver a poner la puerta, esa regla la tapó: entrar redirigía a gestión,
+   * gestión redirigía a entrar, y la aplicación quedó dando vueltas sobre sí
+   * misma. Se salvó de ser permanente por poco.
    */
   async redirects() {
     return [
-      {
-        // Era la pantalla de contraseña. Se sacó la puerta de gestión.
-        source: "/gestion/entrar",
-        destination: "/gestion",
-        permanent: false,
-      },
       {
         // El equipo se mudó a Admin, junto con las claves de los clientes.
         source: "/gestion/equipo",

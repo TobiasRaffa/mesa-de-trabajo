@@ -364,28 +364,63 @@ describe("las fronteras, revisadas a mano", () => {
 describe("las puertas", () => {
   const leer = (relativo: string) => readFileSync(path.join(RAIZ, relativo), "utf8");
 
-  it("el proxy marca gestión entera y el diagnóstico", () => {
+  it("el proxy cierra gestión entera y el diagnóstico", () => {
     // Va en src/ y no en la raíz: la documentación de Next pide que quede al
     // mismo nivel que `app`, y acá `app` vive dentro de `src`. Puesto en la
     // raíz el archivo se ignora en silencio -- ninguna pantalla se protege y
     // nada avisa. Pasó, y por eso esta prueba nombra la ruta exacta.
     const proxy = leer("src/proxy.ts");
 
-    // La puerta de gestión se sacó a pedido: adentro de la agencia era
-    // fastidio y nada más. Lo que quedó es una marca de «este navegador es el
-    // del equipo», y las rutas que sirven archivos la usan para saber quién
-    // pide. Sin ella, gestión se queda sin miniaturas.
     for (const ruta of ['"/gestion"', '"/gestion/:path*"', '"/diagnostico"']) {
       expect(
         proxy,
-        `El proxy no cubre ${ruta}, así que ahí no se marca el navegador del equipo.`
+        `El proxy no cubre ${ruta}, así que ahí se entra sin sesión.`
       ).toContain(ruta);
     }
 
     expect(
       proxy,
-      "La marca se firma con la clave del equipo, no se inventa."
-    ).toContain("valorDeGalletaDeGestion");
+      "La puerta tiene que mirar la galleta de sesión, no dejar pasar a todos."
+    ).toContain("galletaDeGestionValida");
+  });
+
+  it("el proxy no reparte la sesión: solo la exige", () => {
+    // **Pasó, y era peor de lo que parecía.** Mientras la puerta estuvo
+    // sacada, el proxy le entregaba la marca de «soy del equipo» a cualquiera
+    // que escribiera la dirección, con treinta días de vida. Las rutas de
+    // archivos la aceptan, así que con eso se bajaba cualquier archivo de
+    // cualquier cliente, incluidos los escondidos a propósito. No era «se ven
+    // las pantallas»: era repartir una credencial.
+    const proxy = leer("src/proxy.ts");
+
+    expect(
+      /cookies\.set|valorDeSesion/.test(proxy),
+      "El proxy está firmando o poniendo la galleta. La sesión la da entrar, " +
+        "que es lo único que pregunta quién sos; el proxy solo la exige."
+    ).toBe(false);
+  });
+
+  it("la puerta queda afuera de la puerta", () => {
+    // Si la pantalla de entrada exigiera sesión, no habría forma de conseguir
+    // una: la aplicación quedaría cerrada con la llave adentro.
+    const proxy = leer("src/proxy.ts");
+    expect(proxy).toContain("/gestion/entrar");
+  });
+
+  it("nada redirige la puerta a otro lado", () => {
+    // **Pasó, y dejó la aplicación dando vueltas sobre sí misma.** Quedaba en
+    // `next.config.ts` una redirección de cuando la puerta se había sacado:
+    // mandaba `/gestion/entrar` a `/gestion`. Al volver a poner la puerta, esa
+    // regla la tapó —entrar iba a gestión, gestión volvía a entrar— y no había
+    // forma de llegar a ninguna pantalla. Se salvó de ser permanente por poco.
+    const config = leer("next.config.ts");
+    const reglas = [...config.matchAll(/source:\s*"([^"]+)"/g)].map((m) => m[1]);
+
+    expect(
+      reglas.filter((r) => r === "/gestion/entrar"),
+      "Hay una redirección que se lleva la pantalla de entrada a otro lado. " +
+        "Con la puerta puesta, eso deja a la aplicación dando vueltas."
+    ).toEqual([]);
   });
 
   it("toda acción del portal pregunta quién entró", () => {

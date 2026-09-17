@@ -16,6 +16,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { salir } from "@/app/(admin)/gestion/entrar/acciones";
 
 /** El trabajo de todos los días. */
 const SECCIONES = [
@@ -57,7 +58,12 @@ function esLaActual(ruta: string, seccion: Seccion): boolean {
   return ruta === seccion.href || ruta.startsWith(`${seccion.href}/`);
 }
 
-export function BarraLateral() {
+export function BarraLateral({
+  quien,
+}: {
+  /** Quién entró. `null` con la llave del equipo, que no es de nadie. */
+  quien: string | null;
+}) {
   const ruta = usePathname();
 
   // En la puerta no hay a dónde ir todavía. Mostrar el menú de secciones a
@@ -85,6 +91,22 @@ export function BarraLateral() {
           lo separa para que se lea como otro grupo. */}
       <div className="mt-2 border-t border-lienzo/15 pt-2 lg:mt-auto lg:pt-4">
         <Secciones cuales={ABAJO} ruta={ruta} etiqueta="Administración" />
+
+        {/* **Quién entró, a la vista.** Lo que se hace queda firmado con ese
+            nombre: si la máquina quedó con la sesión de otra, hay que poder
+            darse cuenta antes de entregarle algo a un cliente en su nombre. */}
+        <form action={salir} className="mt-4 flex items-center gap-2 border-t border-lienzo/15 pt-4">
+          <span className="min-w-0 flex-1 truncate text-micro text-lienzo/45">
+            {quien ?? "El equipo"}
+          </span>
+          <button
+            type="submit"
+            className="shrink-0 text-micro font-extrabold uppercase tracking-widest
+                       text-lienzo/45 transition-colors hover:text-lienzo"
+          >
+            Salir
+          </button>
+        </form>
       </div>
     </aside>
   );
