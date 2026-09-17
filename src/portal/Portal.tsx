@@ -18,7 +18,7 @@
 // cuántas quedan, qué se puede enviar. Dos copias del mismo número es la forma
 // segura de que un día no coincidan.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Evento, Pieza } from "@/dominio/pieza";
 import { Ampliada, type Lamina } from "@/ui/Ampliada";
 import { Boton, BotonEnlace } from "@/ui/Boton";
@@ -177,6 +177,20 @@ function Revision({
   const [ocupada, setOcupada] = useState<string | null>(null);
 
   /**
+   * Si ya hay algo en camino, ahora mismo.
+   *
+   * **No alcanza con apagar el botón.** Apagarlo pasa por un dibujado, y cinco
+   * clics en el mismo instante —un doble clic nervioso, una conexión lenta—
+   * salen todos antes de que eso ocurra. El primero aprobaba y los demás
+   * volvían rechazados por el dominio, que hace bien su trabajo: la pieza
+   * quedaba aprobada una sola vez... y con un cartel rojo encima diciendo que
+   * no se podía. Tocaste, funcionó, y la pantalla te dice que salió mal.
+   *
+   * Una marca que se lee y se escribe en el acto no espera a ningún dibujado.
+   */
+  const enCamino = useRef(false);
+
+  /**
    * La conversación vive en el servidor, no en este navegador.
    *
    * Tiene que ser así porque tiene dos lados: el cliente escribe acá y la
@@ -271,6 +285,8 @@ function Revision({
    * muestra lo que de verdad quedó, no lo que esperábamos que quedara.
    */
   async function mover(id: string, evento: Evento) {
+    if (enCamino.current) return;
+    enCamino.current = true;
     setOcupada(id);
     try {
       const r = await moverPieza(carpeta.id, id, evento);
@@ -283,11 +299,14 @@ function Revision({
     } catch {
       setRechazo("No pudimos guardar eso. Probá de nuevo.");
     } finally {
+      enCamino.current = false;
       setOcupada(null);
     }
   }
 
   async function cambiosDe(id: string, siguientes: Cambio[]) {
+    if (enCamino.current) return;
+    enCamino.current = true;
     setOcupada(id);
     try {
       const r = await guardarCambiosDePieza(carpeta.id, id, siguientes);
@@ -300,12 +319,15 @@ function Revision({
     } catch {
       setRechazo("No pudimos guardar los cambios. Probá de nuevo.");
     } finally {
+      enCamino.current = false;
       setOcupada(null);
     }
   }
 
   async function enviar(soloEsta?: string) {
     setConfirmando(null);
+    if (enCamino.current) return;
+    enCamino.current = true;
     setOcupada(soloEsta ?? "todas");
     try {
       const r = await enviarRevision(carpeta.id, soloEsta);
@@ -324,6 +346,7 @@ function Revision({
     } catch {
       setRechazo("No pudimos enviar la revisión. Probá de nuevo.");
     } finally {
+      enCamino.current = false;
       setOcupada(null);
     }
   }
