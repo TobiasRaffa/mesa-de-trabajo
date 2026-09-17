@@ -60,6 +60,15 @@ export type NombreDeArchivo = {
   version: number;
   /** El nombre lindo para mostrar, sin el sufijo ni la extensión. */
   titulo: string;
+  /**
+   * Si el nombre lleva escrita una marca de versión.
+   *
+   * **No es lo mismo que `version > 1`.** «stickers.pdf» es la vuelta uno
+   * porque no dice nada, y «V1_stickers.pdf» también es la uno, pero lo dice.
+   * Esa diferencia decide si el archivo puede sumarse a una pieza de otra
+   * extensión: escribir el número es la única señal de intención que hay.
+   */
+  marcado: boolean;
 };
 
 export function leerNombre(nombre: string): NombreDeArchivo {
@@ -87,13 +96,14 @@ export function leerNombre(nombre: string): NombreDeArchivo {
   // «V2.jpeg» a secas no es la versión dos de nada: sin nombre al lado, la
   // marca *es* el nombre.
   if (marca && limpio.trim() === "") {
-    return { base: nombre, version: 1, titulo: cuerpo };
+    return { base: nombre, version: 1, titulo: cuerpo, marcado: false };
   }
 
   return {
     base: limpio + extension,
     version: marca ? Number(marca[1]) : 1,
     titulo: limpio,
+    marcado: Boolean(marca),
   };
 }
 
@@ -102,6 +112,21 @@ export type ConNombre = { name: string };
 export type Agrupado<T> = {
   /** El nombre de la pieza, sin sufijo ni extensión. */
   titulo: string;
+  /**
+   * Cómo se identifica la pieza: el nombre de su vuelta **más baja**.
+   *
+   * Sale de acá y no se vuelve a calcular afuera, porque **cuál archivo manda
+   * dejó de ser obvio**: una pieza puede tener vueltas de distinta extensión,
+   * y calcularlo en dos lados es como un día una pantalla pregunta por
+   * «stickers.pdf» y la otra por «stickers.jpeg».
+   *
+   * **La más baja y no la que llegó primero.** Si dependiera del orden en que
+   * Drive devuelve los archivos, la identidad de una pieza podría cambiar sola
+   * al subir una vuelta nueva —Drive ordena por nombre— y con ella se perdería
+   * de vista todo lo anotado: la historia, las rondas, lo que pidió el
+   * cliente. No se borraría; dejaría de encontrarse, que es peor.
+   */
+  base: string;
   /** De la más vieja a la más nueva. La última es la que se está mirando. */
   versiones: Array<{ numero: number; archivo: T }>;
 };
@@ -109,27 +134,76 @@ export type Agrupado<T> = {
 /**
  * Junta los archivos de una carpeta en piezas, agrupando las versiones.
  *
+ * **La marca de versión manda sobre la extensión.** «V3_stickers.jpeg» es la
+ * tercera vuelta de «stickers.pdf», aunque cambie el formato: el diseñador
+ * exporta en lo que le sirve para esa vuelta —un JPG para mirar rápido, el PDF
+ * para imprenta— y escribir «V3» adelante es decir, explícitamente, que eso es
+ * una vuelta de aquello. Antes la extensión partía la pieza en dos, y el
+ * resultado era el peor posible: la vuelta nueva se guardaba **en otro lado**,
+ * la pantalla seguía mostrando la vieja, y nada decía por qué.
+ *
+ * **Sin marca, la extensión sigue contando.** «stickers.pdf» y «stickers.jpg»,
+ * los dos sin número, son dos piezas: es el mismo trabajo entregado en dos
+ * formatos —uno para mirar, otro para imprimir— y juntarlos sería mentir sobre
+ * qué se está aprobando. La diferencia entre los dos casos es que en uno
+ * alguien escribió un número y en el otro no, y eso no es una casualidad del
+ * nombre: es la única señal de intención que hay.
+ *
  * Conserva el orden en que llegaron los archivos —Drive los devuelve por
  * nombre—, tomando el lugar de la primera versión de cada pieza. Así la lista
  * no se reordena sola cuando alguien sube una vuelta nueva.
  */
 export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agrupado<T>> {
+  type Leido = { archivo: T; base: string; titulo: string; version: number; marcado: boolean };
+
+  const leidos: Leido[] = archivos.map((archivo) => {
+    const { base, version, titulo, marcado } = leerNombre(archivo.name);
+    return { archivo, base, titulo, version, marcado };
+  });
+
+  // **Las mayúsculas no parten una pieza.** «banner dia del padre.pdf» y
+  // «V2 Banner Dia Del Padre.pdf» son lo mismo escrito por dos personas, y
+  // separarlos le mostraba al cliente dos trabajos donde hay uno, sin poder
+  // comparar. Se agrupa sin distinguir caja; el nombre que se muestra sigue
+  // siendo el de la primera vuelta, tal como lo escribieron.
   const porBase = new Map<string, Agrupado<T>>();
+  const orden: string[] = [];
 
-  for (const archivo of archivos) {
-    const { base, version, titulo } = leerNombre(archivo.name);
-    // **Las mayúsculas no parten una pieza.** «banner dia del padre.pdf» y
-    // «V2 Banner Dia Del Padre.pdf» son lo mismo escrito por dos personas, y
-    // separarlos le mostraba al cliente dos trabajos donde hay uno, sin poder
-    // comparar. Se agrupa sin distinguir caja; el nombre que se muestra sigue
-    // siendo el de la primera vuelta, tal como lo escribieron.
-    const pieza = porBase.get(base.toLowerCase());
+  const abrir = (clave: string, leido: Leido) => {
+    porBase.set(clave, { titulo: leido.titulo, base: leido.base, versiones: [] });
+    orden.push(clave);
+  };
 
-    if (pieza) {
-      pieza.versiones.push({ numero: version, archivo });
-    } else {
-      porBase.set(base.toLowerCase(), { titulo, versiones: [{ numero: version, archivo }] });
-    }
+  // Primero las que no llevan marca: son las que fundan una pieza y le dan su
+  // nombre. Recién después se reparten las marcadas, que necesitan saber qué
+  // piezas existen para elegir a cuál sumarse.
+  for (const leido of leidos.filter((l) => !l.marcado)) {
+    const clave = leido.base.toLowerCase();
+    if (!porBase.has(clave)) abrir(clave, leido);
+    porBase.get(clave)!.versiones.push({ numero: leido.version, archivo: leido.archivo });
+  }
+
+  for (const leido of leidos.filter((l) => l.marcado)) {
+    const mismoNombre = orden.filter(
+      (clave) => porBase.get(clave)!.titulo.toLowerCase() === leido.titulo.toLowerCase()
+    );
+
+    // Su propia extensión primero; si no hay ninguna con ese nombre todavía,
+    // funda la suya; si hay una sola, se suma a esa aunque cambie el formato;
+    // si hay varias y ninguna es la suya, **no adivina**: con «stickers.pdf» y
+    // «stickers.jpg» al lado, sumar «V3_stickers.png» a una de las dos sería
+    // elegir por el usuario, y elegir mal significa guardar la vuelta nueva
+    // debajo del trabajo equivocado.
+    const propia = leido.base.toLowerCase();
+    const elegida =
+      porBase.has(propia) && mismoNombre.includes(propia)
+        ? propia
+        : mismoNombre.length === 1
+          ? mismoNombre[0]
+          : propia;
+
+    if (!porBase.has(elegida)) abrir(elegida, leido);
+    porBase.get(elegida)!.versiones.push({ numero: leido.version, archivo: leido.archivo });
   }
 
   for (const pieza of porBase.values()) {
@@ -137,9 +211,13 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
     // «9304 V1.jpeg»—. Se ordena de forma estable para que el resultado no
     // dependa del orden en que Drive los devolvió.
     pieza.versiones.sort((a, b) => a.numero - b.numero);
+
+    // Y recién acá se fija la identidad: la de la vuelta más baja, que es la
+    // misma cualquiera sea el orden en que llegaron los archivos.
+    pieza.base = leerNombre(pieza.versiones[0].archivo.name).base;
   }
 
-  return [...porBase.values()];
+  return orden.map((clave) => porBase.get(clave)!);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +276,10 @@ export function conSusArchivos<T extends ConNombre & { id: string }>(
   agrupadas: Array<Agrupado<T>>
 ): Array<{ id: string; archivos: string[] }> {
   return agrupadas.map((p) => ({
-    id: identidadDePieza(carpetaId, p.versiones[0].archivo.name),
+    // La identidad la decide el agrupador y no el nombre del primer archivo:
+    // desde que una pieza puede tener vueltas de distinta extensión, «el
+    // nombre del primero» y «el nombre de la pieza» dejaron de ser lo mismo.
+    id: `${carpetaId}::${p.base}`,
     archivos: p.versiones.map((v) => v.archivo.id),
   }));
 }

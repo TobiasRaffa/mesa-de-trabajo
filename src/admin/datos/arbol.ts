@@ -116,6 +116,21 @@ export type NodoArchivo = {
    * Ordenadas por número de vuelta, igual que se agrupan.
    */
   versiones: Array<{ id: string; nombre: string; numero: number }>;
+  /**
+   * La última que se subió no es la vuelta más alta.
+   *
+   * **Es el error que no se nota.** Alguien sube «V3_stickers.jpeg» sobre una
+   * pieza que ya tenía una V4: el archivo queda guardado, pero la vuelta que
+   * se muestra y se entrega sigue siendo la V4, así que desde afuera parece
+   * que no pasó nada. Sin decirlo, el que subió se entera tres días después
+   * -o no se entera-.
+   *
+   * La aplicación **no lo corrige sola**: el número del nombre es lo que
+   * manda, y cambiarlo por «el último que llegó» haría que dos personas
+   * subiendo el mismo día se pisen sin darse cuenta. Lo dice, y lo arregla
+   * una persona renombrando.
+   */
+  vueltaAtrasada?: { subida: string; actual: string };
   /** Si el cliente lo ve. Se apaga y se prende igual que una carpeta. */
   visible: boolean;
   /**
@@ -306,6 +321,15 @@ async function archivosDeCarpeta(
 
     const suyos = pieza.versiones.map((v) => v.archivo.id);
 
+    // Cuál se tocó al final en Drive. Si no es la vuelta más alta, alguien
+    // subió con un número que ya estaba superado.
+    const conFecha = pieza.versiones.filter((v) => v.archivo.modifiedTime);
+    const ultimaTocada = conFecha.reduce<(typeof conFecha)[number] | null>(
+      (mas, v) =>
+        !mas || (v.archivo.modifiedTime ?? "") > (mas.archivo.modifiedTime ?? "") ? v : mas,
+      null
+    );
+
     return {
       id: suya,
       nombre: pieza.titulo,
@@ -315,6 +339,10 @@ async function archivosDeCarpeta(
         nombre: v.archivo.name,
         numero: v.numero,
       })),
+      vueltaAtrasada:
+        ultimaTocada && ultimaTocada.archivo.id !== ultima.id
+          ? { subida: ultimaTocada.archivo.name, actual: ultima.name }
+          : undefined,
       // Si alguna vuelta está escondida, la pieza se muestra como escondida:
       // mitad visible y mitad no es un estado que nadie quiso.
       visible: !suyos.some((a) => escondidos.has(a)),

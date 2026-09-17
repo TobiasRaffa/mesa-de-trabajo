@@ -432,6 +432,19 @@ function Ficha({
           letra micro y gris: «Nari» y «vence 17 sept» no se veían, y son justo
           lo que se pregunta después del nombre.
         */}
+        {/*
+          **Lo primero, porque es lo que hay que arreglar antes que nada.** Un
+          archivo subido que no llega a ningún lado no es un detalle del
+          trabajo: es trabajo hecho que el cliente no va a ver.
+        */}
+        {p.vueltaAtrasada && (
+          <p className="border-l-4 border-alerta bg-alerta-tenue px-3 py-2 text-menudo font-semibold text-alerta">
+            Se subió «{p.vueltaAtrasada.subida}», pero la vuelta que se muestra y se
+            entrega sigue siendo «{p.vueltaAtrasada.actual}», que tiene un número más
+            alto. Renombrala con un número mayor para que sea la última.
+          </p>
+        )}
+
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-menudo">
           <Dato rotulo="A cargo de">{p.responsableA ?? "sin asignar"}</Dato>
           {p.vence && <Dato rotulo="Vence">{enPalabrasElDia(p.vence)}</Dato>}

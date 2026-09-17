@@ -12,6 +12,7 @@ describe("leerNombre", () => {
       base: "9304.jpeg",
       version: 1,
       titulo: "9304",
+      marcado: false,
     });
   });
 
@@ -20,6 +21,7 @@ describe("leerNombre", () => {
       base: "9304.jpeg",
       version: 2,
       titulo: "9304",
+      marcado: true,
     });
   });
 
@@ -45,6 +47,7 @@ describe("leerNombre", () => {
       base: "Verano 2026.jpg",
       version: 1,
       titulo: "Verano 2026",
+      marcado: false,
     });
   });
 
@@ -75,6 +78,7 @@ describe("leerNombre", () => {
       base: "V2025 balance.xlsx",
       version: 1,
       titulo: "V2025 balance",
+      marcado: false,
     });
   });
 
@@ -93,6 +97,7 @@ describe("leerNombre", () => {
       base: "V2.jpeg",
       version: 1,
       titulo: "V2",
+      marcado: false,
     });
   });
 
@@ -101,6 +106,7 @@ describe("leerNombre", () => {
       base: "boceto",
       version: 2,
       titulo: "boceto",
+      marcado: true,
     });
   });
 
@@ -383,5 +389,131 @@ describe("nombreDePieza", () => {
 
   it("lo que no tiene separador se devuelve tal cual", () => {
     expect(nombreDePieza("suelto")).toBe("suelto");
+  });
+});
+
+describe("cambiar de formato entre vueltas", () => {
+  // **Pasó, y fue el peor resultado posible.** El estudio subió
+  // «V3_stickers.jpeg» como tercera vuelta de «stickers.pdf». La extensión
+  // partía la pieza en dos: la vuelta nueva se guardó bajo un trabajo aparte,
+  // la pantalla siguió mostrando la V2 vieja, y nada dijo por qué. Tres días
+  // de ida y vuelta para descubrir que el archivo estaba, pero en otro lado.
+  const nombres = (piezas: Array<{ versiones: Array<{ archivo: { name: string } }> }>) =>
+    piezas.map((p) => p.versiones.map((v) => v.archivo.name));
+
+  it("la marca de versión manda sobre la extensión", () => {
+    const piezas = agruparVersiones([
+      { name: "stickers.pdf" },
+      { name: "V2_stickers.pdf" },
+      { name: "V3_stickers.jpeg" },
+    ]);
+
+    expect(
+      nombres(piezas),
+      "Escribir «V3» adelante es decir que eso es una vuelta de aquello. " +
+        "Partirlo por el formato guarda la vuelta nueva en otro lado."
+    ).toEqual([["stickers.pdf", "V2_stickers.pdf", "V3_stickers.jpeg"]]);
+  });
+
+  it("y la pieza sigue llamándose como su primera vuelta", () => {
+    // La identidad no puede cambiar porque cambió el formato: todo lo anotado
+    // —la historia, las rondas, lo que pidió el cliente— cuelga de ella.
+    const [pieza] = agruparVersiones([
+      { name: "stickers.pdf" },
+      { name: "V3_stickers.jpeg" },
+    ]);
+    expect(pieza.base).toBe("stickers.pdf");
+  });
+
+  it("dos archivos SIN marca y con distinta extensión siguen siendo dos piezas", () => {
+    // El mismo trabajo entregado en dos formatos —uno para mirar, otro para
+    // imprimir—. Juntarlos sería mentir sobre qué se está aprobando.
+    expect(
+      nombres(agruparVersiones([{ name: "stickers.pdf" }, { name: "stickers.jpg" }]))
+    ).toEqual([["stickers.pdf"], ["stickers.jpg"]]);
+  });
+
+  it("una vuelta marcada se suma a la de su propia extensión, si la hay", () => {
+    expect(
+      nombres(
+        agruparVersiones([
+          { name: "stickers.pdf" },
+          { name: "stickers.jpg" },
+          { name: "V2_stickers.jpg" },
+        ])
+      )
+    ).toEqual([["stickers.pdf"], ["stickers.jpg", "V2_stickers.jpg"]]);
+  });
+
+  it("con dos candidatas y ninguna de su formato, no adivina", () => {
+    // Sumarla a una de las dos sería elegir por el usuario, y elegir mal
+    // significa guardar la vuelta nueva debajo del trabajo equivocado. Queda
+    // aparte, que se ve y se corrige renombrando.
+    expect(
+      nombres(
+        agruparVersiones([
+          { name: "stickers.pdf" },
+          { name: "stickers.jpg" },
+          { name: "V2_stickers.png" },
+        ])
+      )
+    ).toEqual([["stickers.pdf"], ["stickers.jpg"], ["V2_stickers.png"]]);
+  });
+
+  it("si todas llevan marca, son una sola pieza igual", () => {
+    // Con la convención nueva del estudio no hay ninguna sin marca: la V1
+    // también se llama «V1_stickers».
+    expect(
+      nombres(
+        agruparVersiones([
+          { name: "V1_stickers.pdf" },
+          { name: "V2_stickers.pdf" },
+          { name: "V3_stickers.jpeg" },
+        ])
+      )
+    ).toEqual([["V1_stickers.pdf", "V2_stickers.pdf", "V3_stickers.jpeg"]]);
+  });
+
+  it("dos trabajos con nombres distintos no se tocan", () => {
+    expect(
+      nombres(
+        agruparVersiones([
+          { name: "stickers.pdf" },
+          { name: "V2_banner.jpg" },
+          { name: "V2_stickers.jpg" },
+        ])
+      )
+    ).toEqual([["stickers.pdf", "V2_stickers.jpg"], ["V2_banner.jpg"]]);
+  });
+
+  it("el orden no depende de cómo los devuelva Drive", () => {
+    const alReves = agruparVersiones([
+      { name: "V3_stickers.jpeg" },
+      { name: "V2_stickers.pdf" },
+      { name: "stickers.pdf" },
+    ]);
+
+    expect(nombres(alReves)).toEqual([
+      ["stickers.pdf", "V2_stickers.pdf", "V3_stickers.jpeg"],
+    ]);
+  });
+
+  it("y la identidad tampoco", () => {
+    // **Es lo que no puede cambiar nunca.** Si la identidad dependiera del
+    // orden en que Drive devuelve los archivos, subir una vuelta nueva podría
+    // cambiarla sola, y con ella se perdería de vista todo lo anotado: la
+    // historia, las rondas, lo que pidió el cliente. No se borraría; dejaría
+    // de encontrarse, que es peor.
+    const archivos = [
+      { name: "V1_stickers.pdf" },
+      { name: "V2_stickers.pdf" },
+      { name: "V3_stickers.jpeg" },
+    ];
+
+    const derecho = agruparVersiones(archivos)[0].base;
+    const alReves = agruparVersiones([...archivos].reverse())[0].base;
+
+    expect(derecho).toBe("stickers.pdf");
+    expect(alReves).toBe(derecho);
   });
 });

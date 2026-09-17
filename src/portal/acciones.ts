@@ -24,7 +24,6 @@ import {
 import {
   agruparVersiones,
   conSusArchivos,
-  identidadDePieza,
   nombreDePieza,
 } from "@/lib/versiones";
 import { enPalabrasLoRevisado, versionQueMira } from "@/dominio/historia";
@@ -145,9 +144,7 @@ async function piezaDeLaCarpeta(
   try {
     const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
     for (const pieza of agrupadas) {
-      if (identidadDePieza(carpetaId, pieza.versiones[0].archivo.name) !== piezaId) {
-        continue;
-      }
+      if (`${carpetaId}::${pieza.base}` !== piezaId) continue;
       // El archivo de la última vuelta: es el que se muda al aprobar. La pieza
       // no es un archivo, así que su identificador no sirve para ir a buscarlo.
       return { archivoActual: pieza.versiones[pieza.versiones.length - 1].archivo.id };

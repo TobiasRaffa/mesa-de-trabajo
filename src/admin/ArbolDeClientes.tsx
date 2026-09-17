@@ -879,6 +879,16 @@ function FilaArchivo({
               en finales
             </span>
           )}
+          {/* El archivo está, pero no es el que se muestra: sin decirlo, el
+              que lo subió no se entera de que no llegó a ningún lado. */}
+          {archivo.vueltaAtrasada && (
+            <span
+              title={`Se subió «${archivo.vueltaAtrasada.subida}» pero la vuelta que se muestra sigue siendo «${archivo.vueltaAtrasada.actual}»: tiene un número más alto. Renombrala para que sea la última.`}
+              className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta"
+            >
+              vuelta atrasada
+            </span>
+          )}
           <span className="text-micro text-apagado">
             {archivo.vueltas > 1 && `v${archivo.vueltas} · `}
             {archivo.diasQueCorren} {archivo.diasQueCorren === 1 ? "día" : "días"}
