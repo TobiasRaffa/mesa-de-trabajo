@@ -312,7 +312,13 @@ export function RevisarPieza({
                 </p>
               )}
 
-              {(pidiendoCambios || (pieza.enviada && pieza.cambios.length > 0)) && (
+              {/* **Si hay algo anotado, se ve.** Se mostraba solo mientras el
+                  cliente estuviera pidiendo cambios, o después de mandarlos.
+                  Con lo que escribe en Drive eso dejó de alcanzar: su
+                  comentario entra a esta lista sin que él toque nada acá, y la
+                  pieza se abría sin rastro de él. Iba a aprobar sobre un
+                  pedido suyo sin contestar. */}
+              {(pidiendoCambios || pieza.cambios.length > 0) && (
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-titulo font-extrabold tracking-tight">
