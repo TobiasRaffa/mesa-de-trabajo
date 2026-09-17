@@ -103,6 +103,19 @@ export type NodoArchivo = {
    * dos porque son dos preguntas.
    */
   nombreCompleto: string;
+  /**
+   * Cada vuelta de la pieza, con el nombre que tiene en Drive.
+   *
+   * **Es la única forma de ver qué agrupó la aplicación.** Una pieza se arma
+   * juntando archivos por su nombre sin la marca de versión, y hasta ahora lo
+   * único que se veía era el resultado: «v2». Cuáles dos, no. Y ahí es donde
+   * pasa el error que no se puede diagnosticar: subir «V3_stickers.jpeg»
+   * cuando las anteriores eran «.pdf» arma una pieza nueva —la extensión
+   * cuenta— y la pantalla sigue mostrando la vieja sin decir por qué.
+   *
+   * Ordenadas por número de vuelta, igual que se agrupan.
+   */
+  versiones: Array<{ id: string; nombre: string; numero: number }>;
   /** Si el cliente lo ve. Se apaga y se prende igual que una carpeta. */
   visible: boolean;
   /**
@@ -297,6 +310,11 @@ async function archivosDeCarpeta(
       id: suya,
       nombre: pieza.titulo,
       nombreCompleto: ultima.name,
+      versiones: pieza.versiones.map((v) => ({
+        id: v.archivo.id,
+        nombre: v.archivo.name,
+        numero: v.numero,
+      })),
       // Si alguna vuelta está escondida, la pieza se muestra como escondida:
       // mitad visible y mitad no es un estado que nadie quiso.
       visible: !suyos.some((a) => escondidos.has(a)),

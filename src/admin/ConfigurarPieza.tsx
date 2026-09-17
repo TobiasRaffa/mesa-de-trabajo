@@ -114,6 +114,37 @@ export function ConfigurarPieza({
             </div>
           </section>
 
+          {/*
+            **Qué archivos son esta pieza.** La pantalla decía «v2» y nada
+            más: cuáles dos archivos, no. Y ahí es donde vive el error que no
+            se puede diagnosticar solo —subir la vuelta nueva con otra
+            extensión, o con un número más bajo que el que ya había— porque
+            desde afuera se ve igual que si no hubiera pasado nada.
+          */}
+          {archivo.versiones.length > 1 && (
+            <section>
+              <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+                Las vueltas de esta pieza
+              </h4>
+              <ol className="mt-2 flex flex-col gap-1">
+                {archivo.versiones.map((v) => (
+                  <li
+                    key={v.id}
+                    className="flex items-baseline gap-2 text-menudo text-tinta-suave"
+                  >
+                    <span className="cifras shrink-0 font-extrabold text-apagado">
+                      v{v.numero}
+                    </span>
+                    <span className="min-w-0 break-all">{v.nombre}</span>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-1 text-micro text-apagado">
+                La última es la que se muestra y la que se entrega.
+              </p>
+            </section>
+          )}
+
           {pieza && pieza.historia.length > 0 && (
             <Plegable
               titulo={<span className="text-normal">Lo que pasó</span>}

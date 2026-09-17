@@ -398,15 +398,22 @@ function Ficha({
 
   return (
     <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-8">
+      {/* Los rótulos llevan el nombre del archivo y no «v1» a secas: comparar
+          dos imágenes parecidas sin saber cuál archivo es cuál es la mitad de
+          la comparación. */}
       <div className={`grid gap-1 self-start ${aLaPar ? "grid-cols-2" : ""}`}>
         {aLaPar && (
-          <Vuelta archivo={anterior} nombre={p.nombre} rotulo={`v${p.vueltas - 1}`} />
+          <Vuelta
+            archivo={anterior}
+            nombre={p.nombre}
+            rotulo={p.versiones[p.versiones.length - 2]?.nombre ?? `v${p.vueltas - 1}`}
+          />
         )}
         <Vuelta
           archivo={archivo}
           nombre={p.nombre}
           modificado={p.modificado}
-          rotulo={aLaPar ? `v${p.vueltas}` : undefined}
+          rotulo={aLaPar ? p.nombreCompleto : undefined}
         />
       </div>
 
@@ -541,7 +548,7 @@ function Vuelta({
         className="absolute inset-0 h-full w-full object-contain p-1"
       />
       {rotulo && (
-        <span className="absolute left-0 top-0 bg-tinta px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+        <span className="absolute left-0 right-0 top-0 truncate bg-tinta px-1.5 py-0.5 text-micro font-extrabold tracking-wider text-lienzo">
           {rotulo}
         </span>
       )}
