@@ -68,6 +68,15 @@ export type EstadoDePieza = {
    */
   entregadaEl?: string;
   /**
+   * Qué número de vuelta se le entregó al cliente.
+   *
+   * **Es lo único que contesta «¿hay algo nuevo para entregar?».** Se deducía
+   * de la ronda, y eso vale solo mientras las versiones vayan una por ronda:
+   * con una versión de más, el tablero ofrecía entregarle al cliente el mismo
+   * archivo que acababa de devolver.
+   */
+  versionEntregada?: number;
+  /**
    * El archivo de Drive que se mudó a «Entregas finales», si se mudó.
    *
    * Hace falta porque el identificador de la pieza ya no es el de un archivo:
@@ -175,6 +184,10 @@ function normalizar(v: EstadoDePieza): EstadoDePieza {
     enviada: crudo.enviada === true,
     mudada: crudo.mudada === true,
     entregadaEl: typeof crudo.entregadaEl === "string" ? crudo.entregadaEl : undefined,
+    versionEntregada:
+      typeof crudo.versionEntregada === "number" && crudo.versionEntregada >= 1
+        ? crudo.versionEntregada
+        : undefined,
     archivoMudado:
       typeof crudo.archivoMudado === "string" ? crudo.archivoMudado : undefined,
     archivos: Array.isArray(crudo.archivos)
@@ -202,15 +215,20 @@ const almacen = coleccion<EstadoDePieza>("piezas", esPieza);
  */
 export async function estadosDe(
   carpetaId: string,
-  piezas: Array<{ id: string; archivos: string[]; masVieja?: string }>
+  piezas: Array<{ id: string; archivos: string[]; masVieja?: string; version?: number }>
 ): Promise<Record<string, EstadoDePieza>> {
   const todo = await almacen.todo();
 
   const salida: Record<string, EstadoDePieza> = {};
   const aGuardar: Record<string, EstadoDePieza> = {};
 
-  for (const { id, archivos, masVieja } of piezas) {
-    const guardada = todo[id] ? normalizar(todo[id]) : null;
+  for (const { id, archivos, masVieja, version } of piezas) {
+    const tal = todo[id] ? normalizar(todo[id]) : null;
+    const guardada = tal ? conLaVueltaEntregada(tal, version) : null;
+    // Lo completado hay que guardarlo, no solo mostrarlo: si se recalculara en
+    // cada lectura, la vuelta nueva que suban mañana quedaría anotada como «lo
+    // que ya se entregó» y nunca se ofrecería para entregar.
+    const seCompleto = Boolean(tal && guardada && tal !== guardada);
 
     if (!guardada) {
       salida[id] = sinTocar(carpetaId);
@@ -250,6 +268,7 @@ export async function estadosDe(
       aGuardar[id] = salida[id];
     } else {
       salida[id] = guardada;
+      if (seCompleto) aGuardar[id] = guardada;
     }
   }
 
@@ -257,6 +276,29 @@ export async function estadosDe(
   if (Object.keys(aGuardar).length > 0) await almacen.guardarVarios(aGuardar);
 
   return salida;
+}
+
+/**
+ * Completa qué vuelta se le entregó, en las piezas guardadas de antes.
+ *
+ * **Sin esto, todo lo entregado antes de que este dato existiera parecía tener
+ * algo nuevo para entregar.** La pregunta «¿hay una versión más alta que la
+ * entregada?» con «entregada» en blanco contesta que sí siempre, y el tablero
+ * volvía a ofrecer el mismo archivo que el cliente acababa de devolver.
+ *
+ * Se asume que lo entregado fue lo que hay ahora, que es lo más probable y
+ * además el error seguro: peor que no ofrecer una entrega es ofrecer una que
+ * le manda al cliente lo mismo. Y se anota, así la próxima vuelta que suban sí
+ * se detecta.
+ */
+function conLaVueltaEntregada(
+  pieza: EstadoDePieza,
+  version: number | undefined
+): EstadoDePieza {
+  if (!pieza.entregadaEl || pieza.versionEntregada !== undefined || !version) {
+    return pieza;
+  }
+  return { ...pieza, versionEntregada: version };
 }
 
 const distintos = (a: string[], b: string[]) =>

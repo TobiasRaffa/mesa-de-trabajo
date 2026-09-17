@@ -425,33 +425,51 @@ describe("hay algo para entregar", () => {
   // La pieza vuelve a nosotros cuando el cliente manda sus cambios, y ahí la
   // aplicación ofrecía entregarla de nuevo en el acto: le mandaba al cliente el
   // mismo archivo que acababa de devolver, sin una línea cambiada.
-  it("el original recién subido se puede entregar", () => {
-    expect(hayAlgoParaEntregar("en_curso", 0, 1)).toBe(true);
+  //
+  // La pregunta se contesta comparando **la versión que hay contra la que se
+  // le entregó**. Se comparaba contra la ronda, y eso vale solo mientras las
+  // versiones vayan una por ronda: con una de más, volvía el mismo error.
+
+  it("el original recién subido, sin entregar nada todavía", () => {
+    expect(hayAlgoParaEntregar("en_curso", 1, undefined)).toBe(true);
   });
 
-  it("devuelta con cambios y sin V2 todavía, no", () => {
+  it("devuelta con cambios y sin vuelta nueva, no", () => {
     expect(hayAlgoParaEntregar("en_curso", 1, 1)).toBe(false);
   });
 
   it("con la V2 arriba, sí", () => {
-    expect(hayAlgoParaEntregar("en_curso", 1, 2)).toBe(true);
+    expect(hayAlgoParaEntregar("en_curso", 2, 1)).toBe(true);
   });
 
-  it("la V3 después de la segunda vuelta", () => {
+  it("y una vez entregada la V2, otra vez no", () => {
     expect(hayAlgoParaEntregar("en_curso", 2, 2)).toBe(false);
-    expect(hayAlgoParaEntregar("en_curso", 2, 3)).toBe(true);
+  });
+
+  it("sobrarle versiones al historial no la hace entregable", () => {
+    // **Es el caso que rompía.** Una pieza que volvió a empezar conserva sus
+    // archivos: cuatro vueltas en Drive y una ronda. Contra la ronda daba «hay
+    // algo para entregar» al segundo siguiente de que el cliente devolviera la
+    // última, y lo que se le mandaba era ese mismo archivo.
+    expect(hayAlgoParaEntregar("en_curso", 5, 5)).toBe(false);
+  });
+
+  it("los saltos de numeración no la confunden", () => {
+    // «V2» y después «V5», sin V3 ni V4: son dos vueltas, no cinco, y lo único
+    // que importa es que la de arriba sea más alta que la entregada.
+    expect(hayAlgoParaEntregar("en_curso", 5, 2)).toBe(true);
   });
 
   it("lo que ya está del lado del cliente no se entrega de nuevo", () => {
     // Aunque sobren versiones: ya la tiene.
-    expect(hayAlgoParaEntregar("entregada", 0, 3)).toBe(false);
-    expect(hayAlgoParaEntregar("en_revision", 1, 5)).toBe(false);
-    expect(hayAlgoParaEntregar("cambios_marcados", 1, 5)).toBe(false);
-    expect(hayAlgoParaEntregar("final", 0, 2)).toBe(false);
+    expect(hayAlgoParaEntregar("entregada", 3, undefined)).toBe(false);
+    expect(hayAlgoParaEntregar("en_revision", 5, 1)).toBe(false);
+    expect(hayAlgoParaEntregar("cambios_marcados", 5, 1)).toBe(false);
+    expect(hayAlgoParaEntregar("final", 2, undefined)).toBe(false);
   });
 
   it("una carpeta sin archivos no tiene nada que entregar", () => {
-    expect(hayAlgoParaEntregar("en_curso", 0, 0)).toBe(false);
+    expect(hayAlgoParaEntregar("en_curso", 0, undefined)).toBe(false);
   });
 });
 

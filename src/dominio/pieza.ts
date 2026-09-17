@@ -156,18 +156,27 @@ export function puedeEscribirCambios(estado: Estado, enviada: boolean): boolean 
  * al cliente **el mismo archivo que acaba de devolver**, sin una línea
  * cambiada: el peor mensaje posible, porque parece que se hizo el trabajo.
  *
- * Lo que falta es la vuelta nueva. Cada ronda cerrada pide una versión más:
- * con la vuelta 0 alcanza el archivo original, la vuelta 1 necesita la V2, la
- * 2 necesita la V3. Mientras no aparezca, no hay nada que entregar.
+ * Lo que falta es la vuelta nueva, y la pregunta se contesta con una sola
+ * comparación: **¿hay en Drive una versión más alta que la que se le
+ * entregó?** Si no la hay, lo que se le mandaría es lo mismo que devolvió.
  *
- * `vueltas` son los archivos que hoy forman la pieza, contando el original.
+ * **Se comparaba contra la ronda** —«la vuelta 1 necesita la V2»— y eso vale
+ * solo mientras las versiones vayan una por ronda, sin saltos y sin que la
+ * pieza haya vuelto a empezar. Cuando no, sobran versiones: una pieza con
+ * cuatro archivos y una ronda daba «hay algo para entregar» al segundo
+ * siguiente de que el cliente devolviera la última, con el mismo archivo.
+ *
+ * Sin nada entregado todavía, cualquier versión es nueva para el cliente.
  */
 export function hayAlgoParaEntregar(
   estado: Estado,
-  ronda: number,
-  vueltas: number
+  /** El número de vuelta más alto que hay en Drive. */
+  version: number,
+  /** El que se le entregó al cliente, si se le entregó alguno. */
+  entregada: number | undefined
 ): boolean {
-  return estado === "en_curso" && vueltas > ronda;
+  if (estado !== "en_curso" || version < 1) return false;
+  return entregada === undefined || version > entregada;
 }
 
 /**

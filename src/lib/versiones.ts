@@ -276,7 +276,7 @@ export function conSusArchivos<
 >(
   carpetaId: string,
   agrupadas: Array<Agrupado<T>>
-): Array<{ id: string; archivos: string[]; masVieja?: string }> {
+): Array<{ id: string; archivos: string[]; masVieja?: string; version: number }> {
   return agrupadas.map((p) => {
     const fechas = p.versiones
       .map((v) => v.archivo.modifiedTime)
@@ -288,6 +288,10 @@ export function conSusArchivos<
       // nombre del primero» y «el nombre de la pieza» dejaron de ser lo mismo.
       id: `${carpetaId}::${p.base}`,
       archivos: p.versiones.map((v) => v.archivo.id),
+      // En qué vuelta va, según el nombre del archivo más alto. Sale de acá
+      // porque es donde ya está resuelto cuál es «el último»: calcularlo de
+      // nuevo en cada pantalla es como se separan dos respuestas.
+      version: p.versiones[p.versiones.length - 1]?.numero ?? 1,
       // **Desde cuándo existe algo de esta pieza.** Sirve para una sola
       // pregunta, y es importante: ¿puede lo anotado ser de estos archivos?
       // Un trabajo no pudo entregarse antes de que existiera el archivo que se

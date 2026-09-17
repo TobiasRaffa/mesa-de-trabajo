@@ -351,7 +351,13 @@ export function ResumenDeTrabajo({
                   carpeta={pieza.nombreCompleto}
                   piezaId={pieza.id}
                   cuantas={
-                    hayAlgoParaEntregar(pieza.estado, pieza.ronda, pieza.vueltas) ? 1 : 0
+                    hayAlgoParaEntregar(
+                      pieza.estado,
+                      pieza.versiones[pieza.versiones.length - 1]?.numero ?? 1,
+                      pieza.versionEntregada
+                    )
+                      ? 1
+                      : 0
                   }
                   dias={pieza.diasQueCorren}
                   alEntregar={recargar}

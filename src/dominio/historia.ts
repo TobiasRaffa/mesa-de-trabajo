@@ -55,16 +55,6 @@ export const EN_PALABRAS: Record<Hito, string> = {
 export type HitoLeido = { que: Hito; detalle?: string };
 
 /**
- * Qué versión está mirando el cliente cuando la pieza va en esta ronda.
- *
- * La ronda cuenta las vueltas **cerradas**; la que se está mirando es la
- * siguiente. El `+1` estaba suelto en el portal, escrito a mano cada vez que
- * hacía falta, y con eso alcanza para que un día la historia anote «V2» y el
- * aviso diga «v3» sobre exactamente lo mismo.
- */
-export const versionQueMira = (ronda: number): number => ronda + 1;
-
-/**
  * Cómo se nombra lo que el cliente acaba de revisar.
  *
  * **Sin la versión, el aviso no dice nada accionable.** «Envió la revisión de

@@ -358,8 +358,8 @@ async function ramaDelTablero(
   // con cambios vuelve a `en_curso`, y ofrecerla para entregar ahí le manda el
   // mismo archivo que acaba de devolver. Falta la vuelta nueva.
   const sinEntregar =
-    conArchivos.filter(({ id, archivos: suyos }) =>
-      hayAlgoParaEntregar(estados[id].estado, estados[id].ronda, suyos.length)
+    conArchivos.filter(({ id, version }) =>
+      hayAlgoParaEntregar(estados[id].estado, version, estados[id].versionEntregada)
     ).length + suma(hijas, (h) => h.sinEntregar);
 
   // Lo que ya no está en juego. Sigue existiendo —nada se borra— pero no es

@@ -147,6 +147,8 @@ export type NodoArchivo = {
   estado: Estado;
   /** Cuántos archivos tiene: el original más cada vuelta nueva. */
   vueltas: number;
+  /** El número de vuelta que se le entregó al cliente, si se le entregó alguno. */
+  versionEntregada?: number;
   /**
    * En qué vuelta va la pieza. 0 es la primera, antes de cualquier cambio.
    *
@@ -273,8 +275,8 @@ async function subcarpetasDeCarpeta(
           (p) => p.estado === "entregada" || p.estado === "en_revision"
         ).length,
         terminadas,
-        sinEntregar: suyasConArchivos.filter(({ id, archivos }) =>
-          hayAlgoParaEntregar(estados[id].estado, estados[id].ronda, archivos.length)
+        sinEntregar: suyasConArchivos.filter(({ id, version }) =>
+          hayAlgoParaEntregar(estados[id].estado, version, estados[id].versionEntregada)
         ).length,
         subcarpetas: adentro.length,
       };
@@ -350,6 +352,8 @@ async function archivosDeCarpeta(
       enlaceDrive: ultima.webViewLink,
       modificado: ultima.modifiedTime,
       estado: estado.estado,
+      /** Qué vuelta se le entregó, para saber si hay algo nuevo que mandarle. */
+      versionEntregada: estado.versionEntregada,
       vueltas: pieza.versiones.length,
       ronda: estado.ronda,
       mudada: estado.mudada,

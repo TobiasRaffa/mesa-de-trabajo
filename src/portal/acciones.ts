@@ -21,12 +21,8 @@ import {
   RONDAS_INCLUIDAS_POR_DEFECTO,
   type Evento,
 } from "@/dominio/pieza";
-import {
-  agruparVersiones,
-  conSusArchivos,
-  nombreDePieza,
-} from "@/lib/versiones";
-import { enPalabrasLoRevisado, versionQueMira } from "@/dominio/historia";
+import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { enPalabrasLoRevisado } from "@/dominio/historia";
 import { entroAlCliente } from "@/lib/acceso";
 import { avisar } from "@/lib/avisar";
 import type { ClaseDeAviso } from "@/lib/avisos";
@@ -139,20 +135,47 @@ export type RespuestaDeChat =
 async function piezaDeLaCarpeta(
   carpetaId: string,
   piezaId: string
-): Promise<{ archivoActual: string } | null> {
+): Promise<LaQueMira | null> {
   if (!(await esCarpetaDelCliente(carpetaId))) return null;
   try {
     const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
     for (const pieza of agrupadas) {
       if (`${carpetaId}::${pieza.base}` !== piezaId) continue;
-      // El archivo de la última vuelta: es el que se muda al aprobar. La pieza
-      // no es un archivo, así que su identificador no sirve para ir a buscarlo.
-      return { archivoActual: pieza.versiones[pieza.versiones.length - 1].archivo.id };
+      return laQueMira(pieza);
     }
     return null;
   } catch {
     return null;
   }
+}
+
+/** La vuelta que el cliente tiene delante: la última que hay en Drive. */
+type LaQueMira = {
+  /** El archivo de Drive: es el que se muda al aprobar. La pieza no es un
+   *  archivo, así que su identificador no sirve para ir a buscarlo. */
+  archivoActual: string;
+  /**
+   * Cómo se llama y qué número de vuelta es, **según el archivo**.
+   *
+   * No según la ronda. Se calculaba como «ronda + 1», y eso vale solo mientras
+   * las dos cosas coincidan: el cliente miraba «V5_stickers.jpeg» y el aviso
+   * al equipo decía «la v1 de stickers.pdf», que es el nombre de la identidad
+   * de la pieza y el número de la ronda. Dos datos ciertos que juntos no
+   * nombran nada que exista.
+   */
+  nombre: string;
+  version: number;
+};
+
+function laQueMira<T extends { name: string; id: string }>(pieza: {
+  versiones: Array<{ numero: number; archivo: T }>;
+}): LaQueMira {
+  const ultima = pieza.versiones[pieza.versiones.length - 1];
+  return {
+    archivoActual: ultima.archivo.id,
+    nombre: ultima.archivo.name,
+    version: ultima.numero,
+  };
 }
 
 /**
@@ -248,10 +271,7 @@ export async function moverPieza(
       // Cual pieza y de que vuelta. Decia "una pieza" a secas, y con eso el
       // aviso obligaba a entrar a mirar de que estaba hablando.
       detalle: enPalabrasLoRevisado([
-        {
-          nombre: nombreDePieza(piezaId),
-          version: versionQueMira(guardada.ronda),
-        },
+        { nombre: cual.nombre, version: cual.version },
       ]),
     });
   }
@@ -346,11 +366,19 @@ export async function enviarRevision(
   const donde = await quienEntro(carpetaId);
   if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
-  let piezas: Array<{ id: string; archivos: string[] }>;
+  let piezas: Array<{ id: string; archivos: string[]; masVieja?: string }>;
+  // Cómo se llama y en qué vuelta va cada una, según el archivo que hay en
+  // Drive: es lo que el cliente tiene delante, y lo que el aviso tiene que
+  // nombrar.
+  let laVuelta: Record<string, { nombre: string; version: number }> = {};
   try {
-    piezas = conSusArchivos(
-      carpetaId,
-      agruparVersiones(await piezasDeLaCarpeta(carpetaId))
+    const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+    piezas = conSusArchivos(carpetaId, agrupadas);
+    laVuelta = Object.fromEntries(
+      agrupadas.map((pieza) => {
+        const { nombre, version } = laQueMira(pieza);
+        return [`${carpetaId}::${pieza.base}`, { nombre, version }];
+      })
     );
   } catch {
     return { ok: false, motivo: "No pudimos leer la carpeta. Probá de nuevo." };
@@ -406,13 +434,11 @@ export async function enviarRevision(
       // revisión nueva empieza limpia— y lo único que quedaba era un renglón
       // diciendo que hubo cambios, sin decir cuáles. Dentro de un mes, «¿por
       // qué la v2 salió así?» no tenía respuesta.
-      cambiosEnPalabras(versionQueMira(guardada.ronda), guardada.cambios)
+      cambiosEnPalabras(laVuelta[id]?.version ?? guardada.ronda + 1, guardada.cambios)
     );
 
-    revisadas.push({
-      nombre: nombreDePieza(id),
-      version: versionQueMira(guardada.ronda),
-    });
+    const suya = laVuelta[id];
+    if (suya) revisadas.push(suya);
   }
 
   await guardarPiezas(aGuardar);

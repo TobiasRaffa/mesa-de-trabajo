@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   cambiosPorVuelta,
   enPalabrasLoRevisado,
-  versionQueMira,
   type HitoLeido,
 } from "@/dominio/historia";
 
@@ -114,17 +113,6 @@ describe("lo mandado y todavía sin contestar aparece una sola vez", () => {
 
     expect(r).toHaveLength(2);
     expect(r[1]).toEqual({ version: 2, puntos: ["y el fondo"], abierta: true });
-  });
-});
-
-describe("qué versión está mirando el cliente", () => {
-  // La ronda cuenta las vueltas cerradas: la que se mira es la siguiente.
-  it("sin ninguna vuelta cerrada, mira la v1", () => {
-    expect(versionQueMira(0)).toBe(1);
-  });
-
-  it("con dos cerradas, mira la v3", () => {
-    expect(versionQueMira(2)).toBe(3);
   });
 });
 
