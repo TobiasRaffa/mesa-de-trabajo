@@ -100,7 +100,11 @@ export function Seguimiento({
     );
   }
 
-  const anteriores = vueltas.slice(0, -1);
+  // **Aprobada, la última versión no desaparece del camino.** El paso actual
+  // pasa a decir «Aprobada», y con eso se perdía de vista *cuál* se aprobó:
+  // «esto ya lo habíamos aprobado» sin poder decir qué, que es exactamente la
+  // discusión que esta pantalla vino a cerrar.
+  const anteriores = aprobada ? vueltas : vueltas.slice(0, -1);
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-2">

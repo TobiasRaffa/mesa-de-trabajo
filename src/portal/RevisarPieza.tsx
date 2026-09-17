@@ -542,10 +542,10 @@ export function RevisarPieza({
                   <IconoDescargar />
                   Descargar original
                 </BotonEnlace>
-                <Boton variante="principal" onClick={onEnviarEsta}>
-                  <IconoEnviar />
-                  Enviar revisión
-                </Boton>
+                {/* **Y nada más.** Había también un «Enviar revisión», y sobre
+                    una pieza aprobada no hay nada que enviar: el servidor no
+                    hace nada y la pantalla no dice por qué. Un botón que no
+                    hace nada es peor que no tenerlo. */}
               </>
             )}
 

@@ -61,3 +61,13 @@ describe("cuándo se aclara que la vuelta es adicional", () => {
     expect(pasoActual([1, 2], INCLUIDAS, INCLUIDAS, false)).toBe("V2");
   });
 });
+
+describe("aprobada, sigue diciendo cuál se aprobó", () => {
+  // El paso actual pasa a decir «Aprobada», y con eso se perdía de vista
+  // **cuál**: «esto ya lo habíamos aprobado» sin poder decir qué versión es
+  // justamente la discusión que esta pantalla vino a cerrar. La versión queda
+  // en el camino, que es donde se lee.
+  it("el paso actual dice Aprobada", () => {
+    expect(pasoActual([1, 2, 4, 6], 1, INCLUIDAS, true)).toBe("Aprobada");
+  });
+});
