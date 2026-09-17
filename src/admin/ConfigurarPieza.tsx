@@ -14,6 +14,7 @@
 // el detalle: dejarla donde estaba obligaba a exportar media ficha para poder
 // abrirla desde otro lado.
 
+import { useState } from "react";
 import { EN_PALABRAS } from "@/dominio/historia";
 import { Plegable } from "@/admin/Plegable";
 import { Visibilidad } from "@/admin/Visibilidad";
@@ -24,6 +25,8 @@ import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 import { IconoCerrar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import { Boton } from "@/ui/Boton";
+import { reabrirPieza } from "@/app/(admin)/gestion/acciones";
 import { Fondo } from "@/ui/Fondo";
 import { enPalabrasLaFecha } from "@/admin/cuando";
 
@@ -121,6 +124,18 @@ export function ConfigurarPieza({
             extensión, o con un número más bajo que el que ya había— porque
             desde afuera se ve igual que si no hubiera pasado nada.
           */}
+          {/*
+            **Reabrir vive acá y no solo en la ficha del árbol.** Era lo único
+            que se podía hacer con una pieza y que esta ventana no ofrecía, y
+            esta ventana es donde se la trabaja: había que acordarse de que
+            existía otro panel de configuración, en otra pantalla, con un botón
+            más. Dos lugares para configurar lo mismo es cómo se descubre, tres
+            meses después, que uno de los dos no tiene algo.
+          */}
+          {archivo.estado === "final" && (
+            <Reabrir carpetaId={carpetaId} piezaId={archivo.id} onHecho={onCambio} />
+          )}
+
           {archivo.versiones.length > 1 && (
             <section>
               <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
@@ -169,5 +184,58 @@ export function ConfigurarPieza({
         </div>
       </div>
     </Fondo>
+  );
+}
+
+/**
+ * Devolverle al cliente algo que ya había aprobado.
+ *
+ * **Se avisa de qué se trata antes de tocarlo.** No es deshacer: al cliente le
+ * vuelve a aparecer para decidir, y el archivo sale de «Entregas finales». Es
+ * la única acción de esta ventana que le cambia algo al cliente sin que él
+ * haya hecho nada.
+ */
+function Reabrir({
+  carpetaId,
+  piezaId,
+  onHecho,
+}: {
+  carpetaId: string;
+  piezaId: string;
+  onHecho: () => void;
+}) {
+  const [yendo, setYendo] = useState(false);
+  const [dicho, setDicho] = useState<string | null>(null);
+
+  return (
+    <section>
+      <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+        Aprobada
+      </h4>
+      <p className="mt-1 text-menudo text-apagado">
+        Reabrirla se la devuelve al cliente para que la mire de nuevo, y saca el
+        archivo de «Entregas finales».
+      </p>
+      <div className="mt-2">
+        <Boton
+          variante="contorno"
+          disabled={yendo}
+          onClick={async () => {
+            setYendo(true);
+            const r = await reabrirPieza(carpetaId, piezaId);
+            setYendo(false);
+            setDicho(r.motivo);
+            if (r.ok) onHecho();
+          }}
+        >
+          {yendo ? "…" : "Reabrir"}
+        </Boton>
+      </div>
+      {dicho && (
+        <p aria-live="polite" className="mt-2 text-menudo font-semibold text-tinta-suave">
+          {dicho}
+        </p>
+      )}
+    </section>
   );
 }
