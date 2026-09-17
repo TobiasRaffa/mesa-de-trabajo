@@ -177,7 +177,8 @@ export function RevisarPieza({
           <div className="flex items-center gap-3">
             <span className="hidden bg-white/15 px-3 py-1.5 text-micro font-extrabold uppercase tracking-wider sm:block">
               {pasoActual(
-                pieza.versiones.length,
+                pieza.versiones.map((v) => v.numero),
+                pieza.ronda,
                 pieza.rondasIncluidas,
                 pieza.estado === "final"
               )}
@@ -281,7 +282,9 @@ export function RevisarPieza({
                     <IconoComparar />
                     {comparando
                       ? "Ver solo la última"
-                      : `Comparar con la v${pieza.versiones.length - 1}`}
+                      : `Comparar con la v${
+                          pieza.versiones[pieza.versiones.length - 2]?.numero ?? 1
+                        }`}
                   </Boton>
                 )}
               </div>
@@ -290,7 +293,7 @@ export function RevisarPieza({
             {/* Las decisiones */}
             <div className="flex flex-col gap-5">
               <Seguimiento
-                versiones={pieza.versiones.length}
+                vueltas={pieza.versiones.map((v) => v.numero)}
                 ronda={pieza.ronda}
                 rondasIncluidas={pieza.rondasIncluidas}
                 rondasExtra={pieza.rondasExtra}

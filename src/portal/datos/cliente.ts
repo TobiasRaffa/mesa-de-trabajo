@@ -277,10 +277,14 @@ export async function portalDelCliente(
         enlaceDrive: siDrive(carpeta.webViewLink),
         vista,
         piezas: aLaVista.map(({ pieza, suya }) => {
-          const versiones = pieza.versiones.map((v, i) => ({
-            // Se renumeran de corrido: si alguien salteó la V2, el cliente no
-            // tiene por qué ver un hueco.
-            numero: i + 1,
+          const versiones = pieza.versiones.map((v) => ({
+            // **El número que dice el archivo.** Se renumeraban de corrido
+            // para que el cliente no viera huecos, y el precio era peor que el
+            // hueco: veía «V4» sobre un archivo llamado «V5_stickers.jpeg», y
+            // al hablar con la agencia cada uno nombraba otra cosa. Si el
+            // equipo saltea un número, el salto se ve —está en Drive— y lo
+            // arregla quien nombra los archivos.
+            numero: v.numero,
             driveFileId: v.archivo.id,
             modificado: v.archivo.modifiedTime,
             enlaceDrive: siDrive(v.archivo.webViewLink),
@@ -305,10 +309,20 @@ export async function portalDelCliente(
             // La fecha va con la vuelta que se está mirando: si se subió una
             // V2, es esa la que sale publicada.
             publicaEl: dias[suya] ? fechaDeDia(dias[suya]) : undefined,
-            // La ronda es la mayor entre lo que dice el estado guardado y las
-            // vueltas que hay en Drive: subir una V2 es entrar en la ronda uno
-            // aunque nadie haya tocado el portal todavía.
-            ronda: Math.max(guardado.ronda, versiones.length - 1),
+            // **La ronda es la que dice el dominio, y nada más.**
+            //
+            // Era la mayor entre esa y la cantidad de archivos que hay en
+            // Drive, con la idea de que subir una V2 ya es estar en la ronda
+            // uno. El efecto real era otro: **los archivos le gastaban las
+            // revisiones al cliente**. Una pieza recién entregada, con cuatro
+            // archivos de historia atrás, le llegaba sin ninguna vuelta
+            // incluida y sin el botón de pedir cambios.
+            //
+            // Una revisión la gasta el cliente cuando pide cambios; subir una
+            // versión es trabajo nuestro. Y para *mostrar* en qué versión va,
+            // el camino ya usa los números de los archivos, que es de donde
+            // tiene que salir.
+            ronda: guardado.ronda,
             versiones,
           };
         }),

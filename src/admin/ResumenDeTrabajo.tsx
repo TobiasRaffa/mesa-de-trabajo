@@ -315,9 +315,14 @@ export function ResumenDeTrabajo({
                   onClick={() => setComparando(comparando === pieza.id ? null : pieza.id)}
                 >
                   <IconoComparar />
+                  {/* El número de la vuelta anterior, no cuántas hay: con
+                      «V2» y «V5» en la carpeta, «comparar con la v1» manda a
+                      buscar un archivo que no existe. */}
                   {comparando === pieza.id
                     ? "Ver solo la última"
-                    : `Comparar con la v${pieza.vueltas - 1}`}
+                    : `Comparar con la v${
+                        pieza.versiones[pieza.versiones.length - 2]?.numero ?? 1
+                      }`}
                 </Boton>
               )}
 
@@ -406,7 +411,7 @@ function Ficha({
           <Vuelta
             archivo={anterior}
             nombre={p.nombre}
-            rotulo={p.versiones[p.versiones.length - 2]?.nombre ?? `v${p.vueltas - 1}`}
+            rotulo={p.versiones[p.versiones.length - 2]?.nombre ?? "anterior"}
           />
         )}
         <Vuelta

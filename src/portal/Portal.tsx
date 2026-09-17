@@ -345,7 +345,12 @@ function Revision({
     nombre: p.nombre,
     publicaEl: p.publicaEl!,
     miniatura: urlDeMiniatura(p.driveFileId, 220, p.modificado),
-    paso: pasoActual(p.versiones.length, p.rondasIncluidas, p.estado === "final"),
+    paso: pasoActual(
+      p.versiones.map((v) => v.numero),
+      p.ronda,
+      p.rondasIncluidas,
+      p.estado === "final"
+    ),
     aprobada: p.estado === "final",
   });
 
@@ -622,7 +627,7 @@ function Revision({
                       </span>
                       <span className="mt-1.5 flex flex-wrap items-center gap-2">
                         <Seguimiento
-                          versiones={pieza.versiones.length}
+                          vueltas={pieza.versiones.map((v) => v.numero)}
                           ronda={pieza.ronda}
                           rondasIncluidas={pieza.rondasIncluidas}
                           rondasExtra={pieza.rondasExtra}

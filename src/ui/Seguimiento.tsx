@@ -15,18 +15,32 @@
 // cliente manda sus cambios la ronda avanza en el acto, pero la versión
 // siguiente todavía no está hecha: el camino decía «V3» encima de un archivo
 // que era la V2. La versión la marca el archivo, no la intención.
+//
+// **Con el número que dice el archivo, además.** Los pasos se numeraban de
+// corrido —primero, segundo, tercero— y eso alcanzaba mientras nadie mirara
+// los dos lados: el cliente veía «V4» sobre un archivo llamado
+// «V5_stickers.jpeg», y al hablar por teléfono cada uno nombraba otra cosa.
 
 type Props = {
   /**
-   * Cuántas versiones existen de verdad. La que se está mirando es la última.
+   * Los números de vuelta que hay, en orden: `[1, 2, 4, 5]`.
    *
-   * **No sale de la ronda.** Cuando el cliente manda sus cambios, la ronda
-   * avanza en el acto —es la cuenta de las vueltas pedidas— pero la versión
-   * siguiente todavía no existe: alguien tiene que hacerla y subirla. Con la
-   * ronda mandando, el cliente veía «V3» encima de un archivo que era la V2, y
-   * la V3 no estaba en ningún lado.
+   * **Son los del nombre del archivo, no un conteo.** Antes acá venía cuántas
+   * vueltas había y los pasos se numeraban de corrido, con dos consecuencias:
+   * el cliente veía «V4» sobre un archivo llamado «V5_stickers.jpeg» —y al
+   * hablar con la agencia cada uno nombraba otra cosa— y, peor, la cuenta de
+   * archivos se usaba como si fueran rondas gastadas.
+   *
+   * Si el equipo salta un número, se ve el salto. Es información: el salto
+   * está en Drive y lo arregla quien nombra los archivos.
    */
-  versiones: number;
+  vueltas: number[];
+  /**
+   * Cuántas vueltas **pidió** el cliente. De esto depende si le quedan.
+   *
+   * No sale de cuántos archivos hay: subir una versión es trabajo nuestro, no
+   * una revisión que el cliente haya gastado.
+   */
   ronda: number;
   rondasIncluidas: number;
   rondasExtra: number;
@@ -35,39 +49,44 @@ type Props = {
   compacto?: boolean;
 };
 
-function nombreDelPaso(n: number, rondasIncluidas: number) {
-  // La vuelta 0 es la V1: el archivo tal como se subió, sin marca en el
-  // nombre. De ahí en más, cada vuelta cerrada es la versión siguiente, que es
-  // exactamente lo que dice el nombre del archivo en Drive.
-  const version = `V${n + 1}`;
-  // Las versiones que salieron de una revisión adicional se nombran igual
-  // —son la V4, no otra cosa— pero se aclara de dónde salieron, para que el
-  // cliente vea que fue algo aparte sin que diga la palabra factura.
-  return n <= rondasIncluidas ? version : `${version} · adicional`;
-}
+/**
+ * Si la pieza está corriendo sobre una revisión que hubo que habilitar.
+ *
+ * **Sale de las rondas y no de cuántos archivos hay.** Antes se deducía del
+ * número de versión —«si es la V4 y entraban dos vueltas, la última fue
+ * adicional»—, y eso da falsos: una pieza que volvió a empezar conserva sus
+ * archivos y aparecía como «adicional» sin que nadie hubiera pedido nada.
+ */
+const esAdicional = (ronda: number, rondasIncluidas: number) => ronda > rondasIncluidas;
 
+/**
+ * Cómo se nombra el paso en el que está la pieza.
+ *
+ * Las versiones que salieron de una revisión adicional se nombran igual —son
+ * la V4, no otra cosa— pero se aclara de dónde salieron, para que el cliente
+ * vea que fue algo aparte sin que diga la palabra factura.
+ */
 export function pasoActual(
-  versiones: number,
+  vueltas: number[],
+  ronda: number,
   rondasIncluidas: number,
   aprobada: boolean
 ) {
-  // La versión que hay, no la que se va a hacer. Ver abajo por qué importa.
-  return aprobada ? "Aprobada" : nombreDelPaso(Math.max(versiones, 1) - 1, rondasIncluidas);
+  if (aprobada) return "Aprobada";
+  const version = `V${vueltas[vueltas.length - 1] ?? 1}`;
+  return esAdicional(ronda, rondasIncluidas) ? `${version} · adicional` : version;
 }
 
 export function Seguimiento({
-  versiones,
+  vueltas,
   ronda,
   rondasIncluidas,
   rondasExtra,
   aprobada,
   compacto = false,
 }: Props) {
-  // Las rondas siguen contando las vueltas pedidas: de eso depende si al
-  // cliente le quedan cambios incluidos. Lo que cambia es qué se muestra.
   const quedan = rondasIncluidas + rondasExtra - ronda;
-  const hasta = Math.max(versiones, 1) - 1;
-  const actual = pasoActual(versiones, rondasIncluidas, aprobada);
+  const actual = pasoActual(vueltas, ronda, rondasIncluidas, aprobada);
 
   if (compacto) {
     return (
@@ -81,15 +100,13 @@ export function Seguimiento({
     );
   }
 
-  const anteriores = Array.from({ length: hasta }, (_, i) =>
-    nombreDelPaso(i, rondasIncluidas)
-  );
+  const anteriores = vueltas.slice(0, -1);
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-      {anteriores.map((paso) => (
-        <span key={paso} className="flex items-center gap-2">
-          <span className="text-menudo font-semibold text-apagado">{paso}</span>
+      {anteriores.map((numero) => (
+        <span key={numero} className="flex items-center gap-2">
+          <span className="text-menudo font-semibold text-apagado">V{numero}</span>
           <span aria-hidden="true" className="text-linea">
             ›
           </span>
