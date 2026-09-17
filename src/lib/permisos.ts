@@ -173,6 +173,9 @@ export type QuienPide = { tipo: "cliente"; raiz: string } | { tipo: "agencia" };
  * pedírselos a Google, y hacer que el llamador los pida de nuevo sería pagar
  * dos viajes de red por cada imagen.
  */
+/** Lo que Drive contesta cuando algo es una carpeta y no un archivo. */
+const CARPETA_DE_DRIVE = "application/vnd.google-apps.folder";
+
 export async function archivoAutorizado(
   fileId: string,
   quien: QuienPide
@@ -182,6 +185,13 @@ export async function archivoAutorizado(
 
   try {
     const archivo = await metadatosArchivo(fileId);
+
+    // **Una carpeta no es un archivo.** Pedir una por esta puerta llegaba
+    // hasta el final y reventaba al intentar descargarla: un 502 donde tenía
+    // que haber un «no encontrado». Además contestaba distinto según el id
+    // fuera de una carpeta del cliente o de cualquier otra cosa, que es una
+    // forma de contar qué existe adentro sin mostrarlo.
+    if (archivo.mimeType === CARPETA_DE_DRIVE) return null;
 
     // El archivo en sí puede estar escondido aunque su carpeta se muestre.
     if (!deLaAgencia && (await escondidosEntre([fileId])).has(fileId)) return null;

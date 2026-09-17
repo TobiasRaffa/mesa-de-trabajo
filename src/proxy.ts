@@ -38,6 +38,19 @@ export function proxy(request: NextRequest) {
     return respuesta;
   }
 
+  // **En internet no se reparte.** Acá abajo se le entrega la marca a
+  // cualquiera que escriba la dirección, porque quien llega a la computadora
+  // de la oficina ya está adentro de la oficina. En internet no hay oficina:
+  // ahí eso es entregarle a cualquiera una credencial de treinta días que las
+  // rutas de archivos aceptan como si fuera del equipo —y que **saltea el
+  // escondido por archivo**, así que sirve para bajar cualquier cosa de
+  // cualquier cliente, incluido lo que se apagó a propósito—.
+  //
+  // Mientras no haya puerta de verdad, esto falla cerrado: sin la marca,
+  // gestión se queda sin miniaturas. Es molesto y se ve, que es exactamente lo
+  // contrario de lo que pasaba antes —andaba todo y el agujero no se veía—.
+  if (process.env.NODE_ENV === "production") return respuesta;
+
   const valor = valorDeGalletaDeGestion();
   // Sin `CLAVE_DE_ADMIN` no hay con qué firmar. No se rompe nada: gestión abre
   // igual, y lo único que se pierde son las miniaturas de sus pantallas.
@@ -48,7 +61,9 @@ export function proxy(request: NextRequest) {
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
-    secure: process.env.NODE_ENV === "production",
+    // Acá solo se llega fuera de producción, así que la conexión nunca es
+    // segura: pedir `secure` dejaría la galleta sin poner en http://localhost.
+    secure: false,
   });
   return respuesta;
 }

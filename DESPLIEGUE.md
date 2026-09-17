@@ -23,6 +23,25 @@ la puerta que redirige a una pantalla de contraseña. Está en el historial —
 commit «Una puerta por mundo, y nada que pueda esquivarla»— y se puede
 recuperar tal cual estaba.
 
+**Y hay algo peor que las pantallas abiertas**, encontrado probando: una sola
+visita a `/gestion` —sin clave, sin nada— deja una galleta firmada de treinta
+días que las rutas de archivos aceptan como «soy del equipo». Con esa galleta
+se baja **cualquier archivo de cualquier cliente, incluidos los que se
+escondieron a propósito**:
+
+    GET /gestion                        → 200, y te deja la galleta
+    GET /api/archivo/<archivo oculto>   → 200
+    GET /api/miniatura/<archivo oculto> → 200
+
+No es «se ven las pantallas»: es una credencial durable que saltea el
+escondido por archivo.
+
+Mientras tanto, **el proxy no reparte esa marca en producción**: si esto se
+sube sin puerta, gestión se queda sin miniaturas en vez de repartir
+credenciales. Es molesto y se ve, que es exactamente lo contrario de lo que
+pasaba antes —andaba todo y el agujero no se veía—. Poner la puerta devuelve
+las miniaturas.
+
 **Esto es bloqueante.** No es «conviene»: sin esto, subir la aplicación es
 publicar los datos de todos los clientes.
 

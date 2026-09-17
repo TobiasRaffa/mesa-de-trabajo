@@ -55,12 +55,19 @@ const archivo = (parents: string[] | undefined) => ({
  *
  * Es más honesto que devolver siempre lo mismo: obliga a que la función haga
  * de verdad el recorrido hacia arriba para encontrar la respuesta.
+ *
+ * **Y distingue carpetas de archivos**, que es parte de la decisión que se
+ * prueba: una carpeta no se puede descargar, así que preguntar por una tiene
+ * que dar «no». Decía que todo era carpeta —incluido el archivo por el que se
+ * preguntaba— y con eso la prueba corría sobre un Drive que no existe. Es
+ * carpeta lo que tiene algo colgando; lo demás es un archivo.
  */
 function driveConArbol(arbol: Record<string, string[]>) {
+  const carpetas = new Set(Object.values(arbol).flat());
   mock.mockImplementation(async (id: string) => ({
     id,
     name: id,
-    mimeType: "application/vnd.google-apps.folder",
+    mimeType: carpetas.has(id) ? "application/vnd.google-apps.folder" : "image/jpeg",
     parents: arbol[id],
   }));
 }
@@ -275,7 +282,8 @@ describe("lo escondido no se sirve", () => {
     mock.mockImplementation(async (id: string) => ({
       id,
       name: id === "f" ? "Facturas" : id,
-      mimeType: "application/vnd.google-apps.folder",
+      // El que se pide es un archivo; lo que cuelga arriba, carpetas.
+      mimeType: id === "archivo-1" ? "image/jpeg" : "application/vnd.google-apps.folder",
       parents: { "archivo-1": ["f"], f: [CLIENTE] }[id],
     }));
     await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
@@ -285,7 +293,8 @@ describe("lo escondido no se sirve", () => {
     mock.mockImplementation(async (id: string) => ({
       id,
       name: id === "ef" ? "Entregas finales" : id,
-      mimeType: "application/vnd.google-apps.folder",
+      // El que se pide es un archivo; lo que cuelga arriba, carpetas.
+      mimeType: id === "archivo-1" ? "image/jpeg" : "application/vnd.google-apps.folder",
       parents: { "archivo-1": ["ef"], ef: [CLIENTE] }[id],
     }));
     await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
@@ -384,7 +393,8 @@ describe("la agencia mira con otra vara", () => {
     mock.mockImplementation(async (id: string) => ({
       id,
       name: id === "f" ? "Facturas" : id,
-      mimeType: "application/vnd.google-apps.folder",
+      // El que se pide es un archivo; lo que cuelga arriba, carpetas.
+      mimeType: id === "archivo-1" ? "image/jpeg" : "application/vnd.google-apps.folder",
       parents: { "archivo-1": ["f"], f: [CLIENTE] }[id],
     }));
 
@@ -400,5 +410,35 @@ describe("la agencia mira con otra vara", () => {
     // si mañana alguien le comparte otra carpeta, no entra por acá.
     driveConArbol({ "archivo-1": ["ajena-hija"], "ajena-hija": [AJENA] });
     await expect(archivoAutorizado("archivo-1", comoAgencia)).resolves.toBeNull();
+  });
+});
+
+describe("una carpeta no se sirve como si fuera un archivo", () => {
+  // **Pasó, y contestaba de más.** Pedir una carpeta por la puerta de los
+  // archivos llegaba hasta el final y reventaba al intentar descargarla: un
+  // 502 donde tenía que haber un «no encontrado». Y contestaba **distinto**
+  // según el identificador fuera de una carpeta del cliente o de cualquier
+  // otra cosa, que es una forma de contar qué existe adentro sin mostrarlo.
+  // Una subcarpeta del cliente, con un archivo adentro: el caso en que el
+  // identificador de la carpeta es algo que quien pregunta sí puede ver.
+  const conUnaSubcarpeta = () => driveConArbol({ "archivo-1": ["sub"], sub: [CLIENTE] });
+
+  it("ni para el cliente", async () => {
+    conUnaSubcarpeta();
+    await expect(archivoAutorizado("sub", comoCliente(CLIENTE))).resolves.toBeNull();
+  });
+
+  it("ni para la agencia", async () => {
+    conUnaSubcarpeta();
+    await expect(
+      archivoAutorizado("sub", { tipo: "agencia" as const })
+    ).resolves.toBeNull();
+  });
+
+  it("y el archivo que cuelga de ella sí", async () => {
+    driveConArbol({ "archivo-1": ["sub"], sub: [CLIENTE] });
+    await expect(
+      archivoAutorizado("archivo-1", comoCliente(CLIENTE))
+    ).resolves.not.toBeNull();
   });
 });
