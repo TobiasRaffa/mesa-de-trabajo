@@ -21,6 +21,7 @@
 import { useState, useTransition } from "react";
 import { entregarCarpeta, type ParaAvisar } from "@/app/(admin)/gestion/acciones";
 import { AvisoDeEntrega } from "@/admin/AvisoDeEntrega";
+import { Ventana } from "@/ui/Ventana";
 import { DIAS_POSIBLES } from "@/lib/dias";
 
 export function Entregar({
@@ -110,34 +111,62 @@ export function Entregar({
     });
   }
 
+  // **El botón se queda quieto y lo demás se abre encima.**
+  //
+  // Antes el bloque de confirmación —tres renglones, un desplegable y dos
+  // botones— reemplazaba al botón **en el lugar donde estuviera**: en la barra
+  // de abajo de la ventana del trabajo la hacía crecer de golpe y empujaba
+  // todo, y en el árbol quedaba metido entre dos renglones. Una pregunta que
+  // se contesta sí o no, dibujada adentro de una fila de botones, se lee como
+  // parte de la fila.
+  //
+  // Encima, es lo que es: algo que pide una respuesta antes de seguir. Y el
+  // mensaje para el cliente —lo que de verdad importa después de entregar—
+  // pasa a tener la pantalla entera en vez de un rincón.
   const adentro = (
     <>
-      {recienEntregado ? (
-        <AvisoDeEntrega
-          avisar={recienEntregado.avisar}
-          cuantas={recienEntregado.cuantas}
-          onListo={() => setRecienEntregado(null)}
-        />
-      ) : !confirmando ? (
-        <button
-          type="button"
-          onClick={() => setConfirmando(true)}
-          className="min-h-toque shrink-0 bg-acento px-4 text-normal font-bold tracking-tight
-                     text-white transition-colors hover:bg-acento-hover"
+      <button
+        type="button"
+        onClick={() => setConfirmando(true)}
+        // Entregado, ya no hay nada que entregar: queda apagado mientras se
+        // muestra el aviso, en vez de desaparecer y mover todo de lugar.
+        disabled={cuantas === 0}
+        className="min-h-toque shrink-0 bg-acento px-4 text-normal font-bold tracking-tight
+                   text-white transition-colors hover:bg-acento-hover disabled:opacity-35"
+      >
+        {piezaId ? "Entregar esta" : `Entregar ${cuantas}`}
+      </button>
+
+      {confirmando && (
+        <Ventana
+          titulo={piezaId ? `Entregar ${carpeta}` : `Entregar ${cuantas}`}
+          onCerrar={() => !yendo && setConfirmando(false)}
         >
-          {piezaId ? "Entregar esta" : `Entregar ${cuantas}`}
-        </button>
-      ) : (
-        <Confirmacion
-          carpeta={carpeta}
-          cuantas={piezaId ? 0 : cuantas}
-          dias={diasElegidos}
-          onDias={setDiasElegidos}
-          yendo={yendo}
-          error={error}
-          onSi={entregar}
-          onNo={() => setConfirmando(false)}
-        />
+          <Confirmacion
+            carpeta={carpeta}
+            cuantas={piezaId ? 0 : cuantas}
+            dias={diasElegidos}
+            onDias={setDiasElegidos}
+            yendo={yendo}
+            error={error}
+            onSi={entregar}
+            onNo={() => setConfirmando(false)}
+          />
+        </Ventana>
+      )}
+
+      {recienEntregado && (
+        <Ventana
+          titulo="Falta avisarle"
+          bajada="Entregar y avisar son dos actos, y el segundo es el que se olvida."
+          onCerrar={() => setRecienEntregado(null)}
+        >
+          <AvisoDeEntrega
+            avisar={recienEntregado.avisar}
+            cuantas={recienEntregado.cuantas}
+            onListo={() => setRecienEntregado(null)}
+          />
+        </Ventana>
       )}
     </>
   );
@@ -170,9 +199,11 @@ function Confirmacion({
   onSi: () => void;
   onNo: () => void;
 }) {
+  // Sin recuadro propio: ya está adentro de una ventana, y un borde dentro de
+  // otro borde a dos centímetros se lee como dos cosas y no como una.
   return (
-    <div className="flex flex-col gap-2 border-2 border-acento bg-acento-tenue p-3">
-      <p className="text-menudo font-semibold text-acento">
+    <div className="flex flex-col gap-4">
+      <p className="text-normal font-semibold text-tinta-suave">
         {/* Con 0 se está entregando una sola pieza y `carpeta` es su nombre:
             decir «1 pieza de stickers» sería hablar de una pieza adentro de
             otra. */}
@@ -186,13 +217,13 @@ function Confirmacion({
 
       {/* El plazo, acá y no en otra pantalla: es el momento en que alguien
           sabe cuánto tiempo hay para esto. */}
-      <label className="flex flex-wrap items-center gap-2 text-menudo font-semibold text-acento">
+      <label className="flex flex-wrap items-center gap-2 text-normal font-semibold text-tinta-suave">
         Tiene
         <select
           value={dias}
           disabled={yendo}
           onChange={(e) => onDias(Number(e.target.value))}
-          className="h-8 border-2 border-acento bg-lienzo px-2 text-menudo font-bold
+          className="min-h-toque border-2 border-tinta bg-lienzo px-2 text-normal font-bold
                      tracking-tight text-tinta disabled:opacity-40"
         >
           {DIAS_POSIBLES.map((d) => (

@@ -59,6 +59,7 @@ import {
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { Fondo } from "@/ui/Fondo";
 import { enPalabrasElDia } from "@/admin/cuando";
+import { tonoDeEspera } from "@/ui/tonos";
 import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
@@ -207,13 +208,16 @@ export function ResumenDeTrabajo({
                 {c.cliente} · {c.carpeta}
                 {enOrden.length > 1 && ` · pieza ${donde + 1} de ${enOrden.length}`}
               </p>
-              <h2 className="truncate text-titulo font-extrabold leading-tight tracking-tight">
-                {pieza ? pieza.nombre : c.carpeta}
-                {pieza && pieza.vueltas > 1 && (
-                  <span className="ml-2 align-middle text-menudo font-extrabold uppercase tracking-wider text-lienzo/45">
-                    v{pieza.vueltas}
-                  </span>
-                )}
+              {/* **El nombre de verdad, el de Drive.** Decia «stickers» donde
+                  el archivo se llama «V2_stickers.pdf»: quien lo lee aca y
+                  despues va a buscarlo a Drive tiene que adivinar cual es. Y
+                  no lleva al lado la vuelta en la que va, porque el nombre ya
+                  la dice: era escribir «v2» dos veces en el mismo renglon. */}
+              <h2
+                title={pieza?.nombreCompleto}
+                className="truncate text-titulo font-extrabold leading-tight tracking-tight"
+              >
+                {pieza ? pieza.nombreCompleto : c.carpeta}
               </h2>
             </div>
 
@@ -339,7 +343,7 @@ export function ResumenDeTrabajo({
                 <Entregar
                   key={pieza.id}
                   carpetaId={c.carpetaId}
-                  carpeta={pieza.nombre}
+                  carpeta={pieza.nombreCompleto}
                   piezaId={pieza.id}
                   cuantas={
                     hayAlgoParaEntregar(pieza.estado, pieza.ronda, pieza.vueltas) ? 1 : 0
@@ -543,11 +547,4 @@ function Vuelta({
       )}
     </a>
   );
-}
-
-/** El mismo semáforo que el tablero: dos días avisa, tres alarma. */
-function tonoDeEspera(dias: number): string {
-  if (dias >= 3) return "text-alerta";
-  if (dias >= 2) return "text-espera";
-  return "text-apagado";
 }

@@ -91,7 +91,18 @@ export type NodoCarpeta = {
 
 export type NodoArchivo = {
   id: string;
+  /** El nombre de la pieza: sin la marca de versión ni la extensión. */
   nombre: string;
+  /**
+   * Cómo se llama de verdad el archivo de la última vuelta, en Drive.
+   *
+   * **Es el que hay que buscar en Drive**, y no siempre se parece al de
+   * arriba: la pieza se llama «stickers» y el archivo puede ser
+   * «V2_stickers.pdf». Quien mira la pantalla y después abre Drive necesita el
+   * segundo; quien mira dos vueltas de lo mismo necesita el primero. Están los
+   * dos porque son dos preguntas.
+   */
+  nombreCompleto: string;
   /** Si el cliente lo ve. Se apaga y se prende igual que una carpeta. */
   visible: boolean;
   /**
@@ -285,6 +296,7 @@ async function archivosDeCarpeta(
     return {
       id: suya,
       nombre: pieza.titulo,
+      nombreCompleto: ultima.name,
       // Si alguna vuelta está escondida, la pieza se muestra como escondida:
       // mitad visible y mitad no es un estado que nadie quiso.
       visible: !suyos.some((a) => escondidos.has(a)),

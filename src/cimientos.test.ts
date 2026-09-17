@@ -619,3 +619,58 @@ describe("la ventana del trabajo no vuelve a mezclar mirar con hacer", () => {
     expect(encabezado).toContain("IconoCerrar");
   });
 });
+
+/**
+ * **Cuándo algo quieto alarma se decide en un solo lugar.**
+ *
+ * Los dos números —a los dos días avisa, a los tres alarma— estaban escritos a
+ * mano en tres pantallas: el tablero, la ventana de un trabajo y el árbol. Con
+ * eso alcanza para que un día el mismo archivo se vea naranja en una pantalla
+ * y rojo en la de al lado, y para que nadie sepa cuál de las dos tiene razón.
+ */
+describe("el semáforo de lo que está quieto no se escribe dos veces", () => {
+  it("nadie decide por su cuenta a partir de cuántos días se pone rojo", () => {
+    // **Atrapa la copia, no la palabra.** La primera versión miraba cualquier
+    // comparación contra un número y señalaba `dias.ts` —que valida que el
+    // plazo esté entre 1 y 30, otra regla— y `fechas.ts`. Un guardián que
+    // atrapa lo que no es enseña a ignorarlo. Lo que de verdad no puede
+    // volver a pasar es que una pantalla decida **y pinte** por su cuenta.
+    const culpables = SIN_PRUEBAS.filter((f) => {
+      const relativoF = relativo(f);
+      if (relativoF === "src/dominio/espera.ts" || relativoF === "src/ui/tonos.ts") {
+        return false;
+      }
+
+      const cuerpo = readFileSync(f, "utf8")
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"))
+        .join("\n");
+
+      const compara = /\bdias\b[^\n]{0,24}[><]=?\s*\d/.test(cuerpo);
+      const pinta = /text-(alerta|espera)\b/.test(cuerpo);
+      return compara && pinta;
+    }).map(relativo);
+
+    expect(
+      culpables,
+      "Estos archivos deciden a mano a partir de cuántos días algo se pone " +
+        "naranja o rojo. Tiene que salir de comoVaLaEspera() en " +
+        "@/dominio/espera y pintarse con @/ui/tonos: con una copia más, la " +
+        "misma cantidad de días se ve de dos colores según la pantalla."
+    ).toEqual([]);
+  });
+
+  it("los colores de la espera salen de un solo módulo", () => {
+    const culpables = SIN_PRUEBAS.filter((f) => {
+      if (relativo(f) === "src/ui/tonos.ts") return false;
+      return /function tonoDeEspera|function tonoDelNombre/.test(readFileSync(f, "utf8"));
+    }).map(relativo);
+
+    expect(
+      culpables,
+      "Estos archivos tienen su propia copia de los colores de la espera. " +
+        "Salen de @/ui/tonos: con una copia más, la misma cantidad de días se " +
+        "ve de dos colores según en qué pantalla esté."
+    ).toEqual([]);
+  });
+});

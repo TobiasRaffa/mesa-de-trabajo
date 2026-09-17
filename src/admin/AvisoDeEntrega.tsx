@@ -55,10 +55,10 @@ export function AvisoDeEntrega({
   }
 
   return (
-    <div className="flex flex-col gap-3 border-2 border-tinta bg-lienzo p-3">
-      <p className="text-menudo font-bold tracking-tight">
-        {cuantas === 1 ? "Entregada 1 pieza" : `Entregadas ${cuantas} piezas`}. Falta
-        avisarle.
+    // Sin recuadro propio: se dibuja adentro de una ventana que ya lo tiene.
+    <div className="flex flex-col gap-3">
+      <p className="text-normal font-bold tracking-tight">
+        {cuantas === 1 ? "Entregada 1 pieza" : `Entregadas ${cuantas} piezas`}.
       </p>
 
       {/* El texto se muestra entero y se puede editar antes de copiarlo: quien

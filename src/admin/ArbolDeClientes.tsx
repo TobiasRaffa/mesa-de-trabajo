@@ -826,43 +826,52 @@ function FilaArchivo({
           />
         }
       >
-        <div className="flex flex-wrap items-center gap-2">
-          {/*
-            **El nombre abre la pieza.** Es lo que más se quiere del árbol y no
-            estaba: la flecha muestra qué hay adentro y el engranaje qué se
-            puede cambiar, pero para *ver* el trabajo había que irse al tablero.
-            Subrayado desde el principio, porque sin eso se lee como texto y
-            nadie lo toca.
-          */}
-          {enTrabajo ? (
-            <button
-              type="button"
-              onClick={() => mirar(enTrabajo.carpeta, enTrabajo.clienteId, archivo.id)}
-              title={`Ver ${archivo.nombre}`}
-              className={`truncate text-normal underline decoration-linea underline-offset-4
-                          transition-colors hover:text-acento hover:decoration-acento
-                          focus-visible:outline-2 focus-visible:outline-acento ${
-                            archivo.visible ? "" : "text-apagado"
-                          }`}
-            >
-              {archivo.nombre}
-            </button>
-          ) : (
-            <span
-              className={`truncate text-normal ${archivo.visible ? "" : "text-apagado"}`}
-            >
-              {archivo.nombre}
-            </span>
-          )}
+        {/*
+          **El nombre solo, en su renglón.** Compartía la línea con el estado,
+          la vuelta y «oculto», y con eso el nombre —que es lo que se viene a
+          buscar— quedaba como una etiqueta más entre cuatro. Ahora arriba va
+          el nombre y nada más, y todo lo que lo describe baja al renglón de
+          abajo, que es donde ya estaban los días y quién lo lleva.
+
+          **Y el nombre de verdad, el de Drive.** Decía «stickers» donde el
+          archivo se llama «V2_stickers.pdf»: quien lo lee acá y después lo
+          busca en Drive tiene que adivinar cuál es.
+
+          El nombre abre la pieza. Es lo que más se quiere del árbol y no
+          estaba: la flecha muestra qué hay adentro y el engranaje qué se puede
+          cambiar, pero para *ver* el trabajo había que irse al tablero.
+          Subrayado desde el principio, porque sin eso se lee como texto y
+          nadie lo toca.
+        */}
+        {enTrabajo ? (
+          <button
+            type="button"
+            onClick={() => mirar(enTrabajo.carpeta, enTrabajo.clienteId, archivo.id)}
+            title={`Ver ${archivo.nombreCompleto}`}
+            className={`block max-w-full truncate text-left text-normal font-bold
+                        tracking-tight underline decoration-linea underline-offset-4
+                        transition-colors hover:text-acento hover:decoration-acento
+                        focus-visible:outline-2 focus-visible:outline-acento ${
+                          archivo.visible ? "" : "text-apagado"
+                        }`}
+          >
+            {archivo.nombreCompleto}
+          </button>
+        ) : (
+          <span
+            className={`block max-w-full truncate text-normal font-bold tracking-tight ${
+              archivo.visible ? "" : "text-apagado"
+            }`}
+          >
+            {archivo.nombreCompleto}
+          </span>
+        )}
+
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
           <Estado estado={archivo.estado} />
           {!archivo.visible && (
             <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
               Oculto
-            </span>
-          )}
-          {archivo.vueltas > 1 && (
-            <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
-              v{archivo.vueltas}
             </span>
           )}
           {archivo.mudada && (
@@ -870,13 +879,14 @@ function FilaArchivo({
               en finales
             </span>
           )}
+          <span className="text-micro text-apagado">
+            {archivo.vueltas > 1 && `v${archivo.vueltas} · `}
+            {archivo.diasQueCorren} {archivo.diasQueCorren === 1 ? "día" : "días"}
+            {archivo.vence && ` · vence el ${comoFecha(archivo.vence)}`}
+            {archivo.publicaEl && ` · sale el ${comoFecha(archivo.publicaEl)}`}
+            {archivo.responsableA ? ` · ${archivo.responsableA}` : " · sin asignar"}
+          </span>
         </div>
-        <p className="mt-0.5 text-micro text-apagado">
-          {archivo.diasQueCorren} {archivo.diasQueCorren === 1 ? "día" : "días"}
-          {archivo.vence && ` · vence el ${comoFecha(archivo.vence)}`}
-          {archivo.publicaEl && ` · sale el ${comoFecha(archivo.publicaEl)}`}
-          {archivo.responsableA ? ` · ${archivo.responsableA}` : " · sin asignar"}
-        </p>
       </Fila>
 
       {config && (

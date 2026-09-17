@@ -22,7 +22,12 @@ import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { calcularVencimiento } from "@/lib/fechas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
-import { diasConNosotros, hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
+import {
+  diasConNosotros,
+  hayAlgoParaEntregar,
+  sigueEnJuego,
+  type Estado,
+} from "@/dominio/pieza";
 
 /**
  * De quién es el próximo movimiento.
@@ -129,14 +134,46 @@ export type CarpetaEnElTablero = {
   /** Si el cliente la ve como lista o como calendario. */
   vista: "lista" | "calendario";
   /**
-   * Cuántas carpetas tiene adentro.
+   * Las piezas de **esta** carpeta que siguen en juego, cada una con su reloj.
    *
-   * Hace falta para distinguir una carpeta **vacía** de una que guarda su
-   * trabajo un nivel más abajo. El tablero solo mira los archivos sueltos de
-   * cada carpeta de trabajo, así que las dos dan cero piezas y se parecen; la
-   * primera no tiene nada que hacer y la segunda sí.
+   * **No incluye las de adentro**, y es a propósito: los números de arriba
+   * suman todo para poder avisar, y esto es lo que hace falta para después no
+   * mandar a nadie a revisar cinco archivos por culpa de uno. Con las dos
+   * cosas, el renglón cerrado dice «acá hay un problema» y abierto dice «es
+   * este».
    */
-  subcarpetas: number;
+  piezasEnJuego: PiezaEnElTablero[];
+  /**
+   * Las carpetas que cuelgan de esta, armadas igual.
+   *
+   * El trabajo no siempre está en el primer escalón: «Banners / Septiembre»
+   * es una carpeta de trabajo tanto como «Banners». Antes el tablero solo
+   * miraba los archivos sueltos de cada carpeta, así que todo lo que estuviera
+   * un nivel más abajo no existía para esta pantalla.
+   */
+  hijas: CarpetaEnElTablero[];
+};
+
+/**
+ * Una pieza en el tablero: lo justo para decir si está atrasada y abrirla.
+ *
+ * Es menos de lo que sabe la ficha de una pieza, y eso es lo que la hace
+ * servir acá: el tablero se mira para decidir **a cuál entrar**, no para
+ * trabajarla.
+ */
+export type PiezaEnElTablero = {
+  id: string;
+  /** El nombre del archivo en Drive, que es el que hay que ir a buscar allá. */
+  nombre: string;
+  estado: Estado;
+  /** La última vuelta, para la miniatura. */
+  archivo: string;
+  modificado?: string;
+  /** Hace cuántos días la tenemos nosotros. `null` si está del otro lado. */
+  diasConNosotros: number | null;
+  vence: Date | null;
+  vencida: boolean;
+  porVencer: boolean;
 };
 
 export type Tablero = {
@@ -162,154 +199,15 @@ export async function elTablero(): Promise<Tablero> {
       return Promise.all(
         carpetas
           .filter((c) => !esCarpetaReservada(c.name))
-          .map(async (carpeta): Promise<CarpetaEnElTablero> => {
-            const [archivos, diasDeLaCarpeta, deQuienEsLaCarpeta, ajustes, adentro] =
-              await Promise.all([
-                piezasDeLaCarpeta(carpeta.id),
-                plazoDe(carpeta.id),
-                responsableDe(carpeta.id),
-                ajustesDe(carpeta.id),
-                subcarpetasDe(carpeta.id).catch(() => []),
-              ]);
-
-            const agrupadas = agruparVersiones(archivos);
-            const conArchivos = conSusArchivos(carpeta.id, agrupadas);
-            const identidades = conArchivos.map((p) => p.id);
-            const [estados, propios] = await Promise.all([
-              estadosDe(carpeta.id, conArchivos),
-              plazosDe(identidades),
-            ]);
-
-            const piezas = Object.values(estados);
-
-            // Lo que espera al cliente: se la entregamos y todavía no decidió.
-            const sinRevisar = piezas.filter(
-              (p) => p.estado === "entregada" || p.estado === "en_revision"
-            ).length;
-
-            // Lo que espera a la agencia: el cliente ya habló y falta hacerlo.
-            // «extra_pedida» también es nuestra: el cliente pidió una revisión
-            // adicional y está esperando que alguien la habilite.
-            const enAgencia = piezas.filter(
-              (p) =>
-                p.estado === "en_curso" ||
-                p.estado === "extra_pedida" ||
-                (p.estado === "cambios_marcados" && p.enviada)
-            ).length;
-
-            // Lo que está en Drive y todavía no se entregó. Es un subconjunto
-            // de lo anterior —también es nuestro— pero se cuenta aparte porque
-            // lo que hay que hacer con esto es apretar un botón, no diseñar.
-            // **No alcanza con estar de nuestro lado.** Una pieza que el
-            // cliente devolvió con cambios vuelve a `en_curso`, y ofrecerla
-            // para entregar ahí le manda el mismo archivo que acaba de
-            // devolver. Falta la vuelta nueva.
-            const sinEntregar = conArchivos.filter(({ id, archivos }) =>
-              hayAlgoParaEntregar(estados[id].estado, estados[id].ronda, archivos.length)
-            ).length;
-
-            // Lo que ya no está en juego. Sigue existiendo —nada se borra— pero
-            // no es trabajo pendiente de nadie.
-            const terminadas = piezas.filter((p) => !sigueEnJuego(p.estado)).length;
-
-            // Lo que más tiempo lleva de nuestro lado manda: es lo que hay que
-            // mirar primero cuando algo se está quedando quieto.
-            const ahora = new Date();
-            const esperas = piezas
-              .map((p) =>
-                diasConNosotros(p.estado, p.historia.at(-1)?.cuando, ahora)
-              )
-              .filter((d): d is number => d !== null);
-
-            // Una carpeta **vacía** no está aprobada: no hay nada que aprobar.
-            // Caía en «Aprobado» porque no esperaba nada de nadie, y con ese
-            // título puesto se leía como un trabajo terminado. Lo que le falta
-            // es que alguien suba algo, así que es nuestra.
-            const vacia = piezas.length === 0;
-
-            const cancha: Cancha =
-              sinEntregar > 0
-                ? "sin_entregar"
-                : enAgencia > 0 || vacia
-                  ? "agencia"
-                  : sinRevisar > 0
-                    ? "cliente"
-                    : "listo";
-
-
-            // **El reloj arranca cuando se entrega, no cuando se sube.**
-            // Salía de la fecha de modificación del archivo, con dos
-            // consecuencias: subías el jueves y avisabas el lunes, y al
-            // cliente ya se le habían ido cuatro de sus tres días; y volver a
-            // guardar el archivo en Drive corría el vencimiento solo.
-            //
-            // Una pieza sin entregar no vence: todavía no empezó a correr.
-            const fechas = identidades
-              .map((suya) => {
-                const entregada = estados[suya]?.entregadaEl;
-                if (!entregada) return null;
-                const dias = plazoQueCorre(
-                  propios[suya],
-                  diasDeLaCarpeta,
-                  diasDelCliente
-                );
-                return calcularVencimiento(new Date(entregada), dias);
-              })
-              .filter((f): f is Date => f !== null);
-
-            const vence =
-              fechas.length > 0
-                ? new Date(Math.min(...fechas.map((f) => f.getTime())))
-                : null;
-
-            const quien = responsableQueCorre(
-              undefined,
-              deQuienEsLaCarpeta,
-              deQuienEsElCliente
-            );
-            const persona = await personaPorId(quien ?? undefined);
-
-            return {
-              cancha,
-              diasQueCorren: plazoQueCorre(undefined, diasDeLaCarpeta, diasDelCliente),
-              diasConNosotros: esperas.length > 0 ? Math.max(...esperas) : null,
-              enAgencia,
-              sinEntregar,
-              clienteId: cliente.id,
-              cliente: cliente.nombre,
-              carpetaId: carpeta.id,
-              carpeta: carpeta.name,
-              asignadaA: persona?.nombre ?? null,
-              responsableQueCorre: quien ?? null,
-              vence,
-              // Vencida solo cuenta si todavía falta que el cliente decida:
-              // una carpeta terminada con fecha vieja no es un problema.
-              vencida: Boolean(vence && vence < hoyALaMedianoche() && sinRevisar > 0),
-              porVencer: Boolean(
-                vence &&
-                  vence >= hoyALaMedianoche() &&
-                  vence <= enDias(2) &&
-                  sinRevisar > 0
-              ),
-              piezas: piezas.length,
-              enJuego: piezas.length - terminadas,
-              sinRevisar,
-              terminadas,
-              extraPedida: piezas.filter((p) => p.estado === "extra_pedida").length,
-              muestras: agrupadas.slice(0, 4).map((pieza) => {
-                const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
-                return {
-                  archivo: ultima.id,
-                  nombre: pieza.titulo,
-                  modificado: ultima.modifiedTime,
-                };
-              }),
-              sinLeer: sinLeer[cliente.id] ?? 0,
-              visible: ajustes.visible,
-              vista: ajustes.vista,
-              subcarpetas: adentro.length,
-            };
-          })
+          .map((carpeta) =>
+            ramaDelTablero(
+              { id: cliente.id, nombre: cliente.nombre },
+              carpeta,
+              { dias: diasDelCliente, responsable: deQuienEsElCliente },
+              sinLeer[cliente.id] ?? 0,
+              0
+            )
+          )
       );
     })
   );
@@ -331,10 +229,237 @@ export async function elTablero(): Promise<Tablero> {
     // atrasando. Lo que no está de nuestro lado va después, en su orden.
     carpetas: porCliente
       .flat()
-      .filter((c) => c.piezas > 0 || c.subcarpetas > 0)
+      .filter((c) => c.piezas > 0 || c.hijas.length > 0)
       .sort((a, b) => (b.diasConNosotros ?? -1) - (a.diasConNosotros ?? -1)),
     correoConfigurado: correoConfigurado(),
   };
+}
+
+/**
+ * Hasta dónde baja el tablero.
+ *
+ * El trabajo de verdad está a uno o dos escalones —«Banners / Septiembre»— y
+ * más abajo empieza a ser el archivo del estudio. Un tope evita además que una
+ * carpeta que alguien encadenó sin querer cueste veinte viajes a Drive.
+ */
+const HONDURA = 3;
+
+/**
+ * Una carpeta del tablero, con lo que cuelga de ella.
+ *
+ * **Los números de una carpeta incluyen lo que tiene adentro.** Es la
+ * diferencia entre un tablero que avisa y uno al que hay que abrirle todo para
+ * creerle: si una pieza de «Banners / Septiembre» lleva cinco días quieta,
+ * «Banners» tiene que verse en rojo desde afuera, y el cliente también. Sin
+ * esto, el único lugar donde el problema se veía era el último escalón, que es
+ * justamente el que nadie abre.
+ *
+ * Lo que **no** se suma es `piezasEnJuego`: ahí va lo propio de esta carpeta y
+ * nada más. Así el número de arriba avisa, y al abrir se ve exactamente cuál
+ * está en rojo y cuál no —que es lo que evita salir a revisar cinco archivos
+ * por culpa de uno—.
+ */
+async function ramaDelTablero(
+  cliente: { id: string; nombre: string },
+  carpeta: { id: string; name: string },
+  heredado: { dias: number | undefined; responsable: string | null | undefined },
+  sinLeer: number,
+  hondura: number
+): Promise<CarpetaEnElTablero> {
+  const [archivos, diasDeLaCarpeta, deQuienEsLaCarpeta, ajustes, adentro] =
+    await Promise.all([
+      piezasDeLaCarpeta(carpeta.id),
+      plazoDe(carpeta.id),
+      responsableDe(carpeta.id),
+      ajustesDe(carpeta.id),
+      subcarpetasDe(carpeta.id).catch(() => []),
+    ]);
+
+  const dias = diasDeLaCarpeta ?? heredado.dias;
+  const quien = responsableQueCorre(undefined, deQuienEsLaCarpeta, heredado.responsable);
+
+  // Lo que cuelga de acá, con la herencia ya aplicada. Se pide antes de contar
+  // nada porque los números de esta carpeta incluyen los de abajo.
+  const hijas =
+    hondura >= HONDURA
+      ? []
+      : await Promise.all(
+          adentro
+            .filter((c) => !esCarpetaReservada(c.name))
+            .map((c) =>
+              ramaDelTablero(cliente, c, { dias, responsable: quien }, sinLeer, hondura + 1)
+            )
+        );
+
+  const agrupadas = agruparVersiones(archivos);
+  const conArchivos = conSusArchivos(carpeta.id, agrupadas);
+  const identidades = conArchivos.map((p) => p.id);
+  const [estados, propios] = await Promise.all([
+    estadosDe(carpeta.id, conArchivos),
+    plazosDe(identidades),
+  ]);
+
+  const ahora = new Date();
+
+  // Cada pieza de **esta** carpeta, con su reloj propio. Es lo que se ve al
+  // abrir el renglón, y lo que deja señalar a la que está atrasada en vez de
+  // mandar a mirar las cinco.
+  const piezasEnJuego: PiezaEnElTablero[] = agrupadas.flatMap((pieza, i) => {
+    const suya = identidades[i];
+    const estado = estados[suya];
+    if (!sigueEnJuego(estado.estado)) return [];
+
+    const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
+    const espera = diasConNosotros(estado.estado, estado.historia.at(-1)?.cuando, ahora);
+    const vence = venceLaPieza(estado.entregadaEl, propios[suya], dias);
+    const esperandoAlCliente =
+      estado.estado === "entregada" || estado.estado === "en_revision";
+
+    return [
+      {
+        id: suya,
+        // El nombre de Drive: es el que hay que ir a buscar allá.
+        nombre: ultima.name,
+        estado: estado.estado,
+        archivo: ultima.id,
+        modificado: ultima.modifiedTime,
+        diasConNosotros: espera,
+        vence,
+        vencida: Boolean(vence && vence < hoyALaMedianoche() && esperandoAlCliente),
+        porVencer: Boolean(
+          vence && vence >= hoyALaMedianoche() && vence <= enDias(2) && esperandoAlCliente
+        ),
+      },
+    ];
+  });
+
+  const piezas = Object.values(estados);
+
+  // Lo que espera al cliente: se la entregamos y todavía no decidió.
+  const sinRevisar =
+    piezas.filter((p) => p.estado === "entregada" || p.estado === "en_revision").length +
+    suma(hijas, (h) => h.sinRevisar);
+
+  // Lo que espera a la agencia: el cliente ya habló y falta hacerlo.
+  // «extra_pedida» también es nuestra: el cliente pidió una revisión adicional
+  // y está esperando que alguien la habilite.
+  const enAgencia =
+    piezas.filter(
+      (p) =>
+        p.estado === "en_curso" ||
+        p.estado === "extra_pedida" ||
+        (p.estado === "cambios_marcados" && p.enviada)
+    ).length + suma(hijas, (h) => h.enAgencia);
+
+  // Lo que está en Drive y todavía no se entregó. Es un subconjunto de lo
+  // anterior —también es nuestro— pero se cuenta aparte porque lo que hay que
+  // hacer con esto es apretar un botón, no diseñar.
+  // **No alcanza con estar de nuestro lado.** Una pieza que el cliente devolvió
+  // con cambios vuelve a `en_curso`, y ofrecerla para entregar ahí le manda el
+  // mismo archivo que acaba de devolver. Falta la vuelta nueva.
+  const sinEntregar =
+    conArchivos.filter(({ id, archivos: suyos }) =>
+      hayAlgoParaEntregar(estados[id].estado, estados[id].ronda, suyos.length)
+    ).length + suma(hijas, (h) => h.sinEntregar);
+
+  // Lo que ya no está en juego. Sigue existiendo —nada se borra— pero no es
+  // trabajo pendiente de nadie.
+  const terminadas =
+    piezas.filter((p) => !sigueEnJuego(p.estado)).length +
+    suma(hijas, (h) => h.terminadas);
+
+  const cuantas = piezas.length + suma(hijas, (h) => h.piezas);
+
+  // Una carpeta **vacía** no está aprobada: no hay nada que aprobar. Caía en
+  // «Aprobado» porque no esperaba nada de nadie, y con ese título puesto se
+  // leía como un trabajo terminado. Lo que le falta es que alguien suba algo,
+  // así que es nuestra.
+  const vacia = cuantas === 0;
+
+  const cancha: Cancha =
+    sinEntregar > 0
+      ? "sin_entregar"
+      : enAgencia > 0 || vacia
+        ? "agencia"
+        : sinRevisar > 0
+          ? "cliente"
+          : "listo";
+
+  // Lo que más tiempo lleva de nuestro lado manda, esté donde esté: es lo que
+  // hay que ver primero cuando algo se está quedando quieto.
+  const esperas = [
+    ...piezasEnJuego.map((p) => p.diasConNosotros),
+    ...hijas.map((h) => h.diasConNosotros),
+  ].filter((d): d is number => d !== null);
+
+  // El vencimiento que manda es el más cercano, esté en esta carpeta o abajo.
+  const fechas = [
+    ...piezasEnJuego.map((p) => p.vence),
+    ...hijas.map((h) => h.vence),
+  ].filter((f): f is Date => f !== null);
+
+  const persona = await personaPorId(quien ?? undefined);
+
+  return {
+    cancha,
+    diasQueCorren: plazoQueCorre(undefined, diasDeLaCarpeta, heredado.dias),
+    diasConNosotros: esperas.length > 0 ? Math.max(...esperas) : null,
+    enAgencia,
+    sinEntregar,
+    clienteId: cliente.id,
+    cliente: cliente.nombre,
+    carpetaId: carpeta.id,
+    carpeta: carpeta.name,
+    asignadaA: persona?.nombre ?? null,
+    responsableQueCorre: quien ?? null,
+    vence:
+      fechas.length > 0 ? new Date(Math.min(...fechas.map((f) => f.getTime()))) : null,
+    // Vencida solo cuenta si todavía falta que el cliente decida: una carpeta
+    // terminada con fecha vieja no es un problema.
+    vencida: piezasEnJuego.some((p) => p.vencida) || hijas.some((h) => h.vencida),
+    porVencer: piezasEnJuego.some((p) => p.porVencer) || hijas.some((h) => h.porVencer),
+    piezas: cuantas,
+    enJuego: cuantas - terminadas,
+    sinRevisar,
+    terminadas,
+    extraPedida:
+      piezas.filter((p) => p.estado === "extra_pedida").length +
+      suma(hijas, (h) => h.extraPedida),
+    muestras: piezasEnJuego.slice(0, 4).map((p) => ({
+      archivo: p.archivo,
+      nombre: p.nombre,
+      modificado: p.modificado,
+    })),
+    sinLeer,
+    visible: ajustes.visible,
+    vista: ajustes.vista,
+    piezasEnJuego,
+    hijas,
+  };
+}
+
+const suma = <T,>(xs: T[], de: (x: T) => number) => xs.reduce((n, x) => n + de(x), 0);
+
+/**
+ * Cuándo vence la revisión de una pieza.
+ *
+ * **El reloj arranca cuando se entrega, no cuando se sube.** Salía de la fecha
+ * de modificación del archivo, con dos consecuencias: subías el jueves y
+ * avisabas el lunes, y al cliente ya se le habían ido cuatro de sus tres días;
+ * y volver a guardar el archivo en Drive corría el vencimiento solo.
+ *
+ * Una pieza sin entregar no vence: todavía no empezó a correr.
+ */
+function venceLaPieza(
+  entregadaEl: string | undefined,
+  propio: number | undefined,
+  heredado: number | undefined
+): Date | null {
+  if (!entregadaEl) return null;
+  return calcularVencimiento(
+    new Date(entregadaEl),
+    plazoQueCorre(propio, heredado, undefined)
+  );
 }
 
 /**
