@@ -63,7 +63,13 @@ async function pedir(
 
   if (!r.ok) {
     const detalle = await r.text().catch(() => "");
-    throw new Error(`Supabase devolvió ${r.status}: ${detalle.slice(0, 200)}`);
+    // El código va pegado al error porque hay uno que **no es una falla**: el
+    // 409 de «esa fila ya existe», que en `cambiar` quiere decir que alguien
+    // ganó la carrera y hay que volver a leer.
+    throw Object.assign(
+      new Error(`Supabase devolvió ${r.status}: ${detalle.slice(0, 200)}`),
+      { estado: r.status }
+    );
   }
   // Un DELETE o un upsert sin `return=representation` no traen cuerpo.
   const texto = await r.text();
@@ -71,6 +77,19 @@ async function pedir(
 }
 
 type Fila = { id: string; datos: unknown };
+
+/** Si el error es «esa fila ya existe». */
+const esChoque = (e: unknown) => (e as { estado?: number })?.estado === 409;
+
+/**
+ * Cuántas veces se vuelve a intentar un `cambiar` que perdió la carrera.
+ *
+ * Cinco. Cada reintento pasa porque **otro** guardó, así que cinco seguidas
+ * quiere decir que hay una tormenta de escrituras sobre el mismo documento, y
+ * eso ya no se arregla insistiendo: se avisa. Fallar es correcto; lo que no se
+ * puede es guardar pisando lo del otro.
+ */
+const INTENTOS = 5;
 
 export const enSupabase: Almacen = {
   coleccion<T>(nombre: string, valido: (valor: unknown) => valor is T): Coleccion<T> {
@@ -135,6 +154,65 @@ export const enSupabase: Almacen = {
       async borrar(id) {
         await borrarVarios([id]);
       },
+
+      /**
+       * Leer y escribir en un solo paso.
+       *
+       * Acá no se puede hacer cola como en los archivos: no hay un proceso
+       * solo, y en Netlify cada pedido puede caer en otra máquina. Lo que hay
+       * es el número de versión que lleva cada fila: se lee con su versión, se
+       * escribe **solo si la fila sigue en esa versión**, y si no se vuelve a
+       * leer. Quien pierde la carrera se entera; nadie pisa a nadie.
+       *
+       * La versión la sube la base en cada escritura, no esto: si la mandara
+       * el código, alcanzaría con olvidarse una vez para que dos escrituras
+       * quedaran con el mismo número y la guarda dejara pasar las dos.
+       */
+      async cambiar(id, como) {
+        const suya = `${filtro}&id=eq.${encodeURIComponent(id)}`;
+
+        for (let intento = 0; intento < INTENTOS; intento++) {
+          const filas = (await pedir(`${TABLA}?${suya}&select=datos,version&limit=1`)) as
+            | Array<{ datos: unknown; version: number }>
+            | null;
+          const fila = filas?.[0];
+          const nuevo = como(fila && valido(fila.datos) ? fila.datos : undefined);
+
+          // No estaba. Se inserta **sin** permitir que pise: si otro la creó
+          // mientras tanto, la base contesta 409 y se vuelve a leer.
+          if (!fila) {
+            if (nuevo === undefined) return undefined;
+            try {
+              await pedir(TABLA, {
+                method: "POST",
+                body: JSON.stringify({ coleccion: nombre, id, datos: nuevo }),
+              });
+              return nuevo;
+            } catch (e) {
+              if (!esChoque(e)) throw e;
+              continue;
+            }
+          }
+
+          const condicion = `${suya}&version=eq.${fila.version}`;
+          // `return=representation` es lo que permite saber si se escribió: sin
+          // él la respuesta viene vacía tanto cuando cambió una fila como
+          // cuando no cambió ninguna, que son justamente los dos casos que hay
+          // que distinguir.
+          const tocadas = (await pedir(`${TABLA}?${condicion}`, {
+            method: nuevo === undefined ? "DELETE" : "PATCH",
+            prefer: "return=representation",
+            ...(nuevo === undefined ? {} : { body: JSON.stringify({ datos: nuevo }) }),
+          })) as unknown[] | null;
+
+          if (tocadas && tocadas.length > 0) return nuevo;
+        }
+
+        throw new Error(
+          `No se pudo guardar «${id}» en «${nombre}»: alguien más lo estuvo ` +
+            `cambiando todo el tiempo. No se pisó nada.`
+        );
+      },
     };
   },
 
@@ -152,6 +230,9 @@ export const enSupabase: Almacen = {
       },
       async escribir(valor) {
         await uno.guardar("unico", valor);
+      },
+      async cambiar(como) {
+        return (await uno.cambiar("unico", (actual) => como(actual ?? porOmision)))!;
       },
     };
   },

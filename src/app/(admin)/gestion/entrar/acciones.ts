@@ -46,6 +46,7 @@ import {
 import { cambiarPersona, personaPorCorreo, seccionesDePersona } from "@/lib/equipo";
 import { dondeEmpieza, seccionDeLaRuta, type Seccion } from "@/dominio/roles";
 import { pedirOtraClave } from "@/lib/olvidos";
+import { anotarError, frenado, olvidarErrores, type Limite } from "@/lib/frenos";
 
 export type Rechazo = { ok: false; motivo: string };
 
@@ -62,34 +63,18 @@ const DURACION = 60 * 60 * 24 * 7;
  * **El freno de los intentos.** Sin esto, probar contraseñas contra esta
  * pantalla es gratis y automatizable.
  *
- * Vive en memoria, así que sirve en una computadora y no en internet, donde
- * cada pedido puede caer en otra máquina. Está anotado como pendiente en
- * DESPLIEGUE.md junto al mismo freno del portal, que tiene el mismo problema y
- * se arregla igual: moverlo al almacén.
+ * La cuenta vive en el almacén y no en memoria: en internet cada pedido puede
+ * caer en otra máquina, y ocho intentos repartidos entre ocho máquinas con la
+ * cuenta en cero no los frena nadie. Está explicado en `lib/frenos.ts`.
+ *
+ * Ocho por minuto y por correo. El minuto es corto a propósito: quien se
+ * equivocó de verdad no tiene que irse a tomar un café, y quien viene a probar
+ * un diccionario con ocho por minuto tarda años igual.
  */
-const ESPERA_MS = 60 * 1000;
-const TOPE = 8;
-const intentos = new Map<string, { cuantos: number; hasta: number }>();
+const LIMITE: Limite = { tope: 8, espera: 60 * 1000 };
 
-function frenado(quien: string): boolean {
-  const registro = intentos.get(quien);
-  if (!registro) return false;
-  if (Date.now() > registro.hasta) {
-    intentos.delete(quien);
-    return false;
-  }
-  return registro.cuantos >= TOPE;
-}
-
-function fallo(quien: string): void {
-  const ahora = Date.now();
-  const registro = intentos.get(quien);
-  if (!registro || ahora > registro.hasta) {
-    intentos.set(quien, { cuantos: 1, hasta: ahora + ESPERA_MS });
-    return;
-  }
-  registro.cuantos += 1;
-}
+/** El freno cuenta por correo: probar contra una cuenta no traba a las demás. */
+const paraQuien = (correo: string) => `puerta:${correo || "(sin correo)"}`;
 
 const NO_ES = "El correo o la contraseña no son.";
 const DEMASIADOS = "Demasiados intentos. Probá en un minuto.";
@@ -139,7 +124,9 @@ function aDondeVa(volver: string, secciones: readonly Seccion[]): string {
 export async function mirarCorreo(_previo: unknown, formulario: FormData) {
   const correo = leerCorreo(formulario);
   if (!correo) return { ok: false as const, motivo: "Escribí tu correo." };
-  if (frenado(correo)) return { ok: false as const, motivo: DEMASIADOS };
+  if (await frenado(paraQuien(correo), LIMITE)) {
+    return { ok: false as const, motivo: DEMASIADOS };
+  }
 
   const persona = await personaPorCorreo(correo);
   const primeraVez = Boolean(persona) && !(await tieneClave(persona!.id));
@@ -161,16 +148,15 @@ export async function entrar(_previo: unknown, formulario: FormData) {
     };
   }
 
-  // El freno cuenta por correo: probar contra una cuenta no traba a las demás.
-  const quien = correo || "(sin correo)";
-  if (frenado(quien)) return { ok: false as const, motivo: DEMASIADOS };
+  const quien = paraQuien(correo);
+  if (await frenado(quien, LIMITE)) return { ok: false as const, motivo: DEMASIADOS };
 
   // **El arranque.** Sin nadie con contraseña, la llave del equipo abre para
   // poder dar de alta a la primera persona. Se cierra solo en cuanto alguien
   // tiene la suya.
   if (!(await hayAlguienConClave())) {
     if (!contrasenaCorrecta(clave)) {
-      fallo(quien);
+      await anotarError(quien, LIMITE);
       return {
         ok: false as const,
         motivo:
@@ -206,7 +192,7 @@ export async function entrar(_previo: unknown, formulario: FormData) {
       await cambiarPersona(persona.id, { nombre });
     }
 
-    intentos.delete(quien);
+    await olvidarErrores(quien);
     await abrir(persona.id);
     redirect(aDondeVa(volver, seccionesDePersona(persona)));
   }
@@ -215,11 +201,11 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   // Distinguirlos le dice a quien prueba cuáles correos existen, que es la
   // mitad del trabajo de adivinar.
   if (!persona || !(await claveCorrecta(persona.id, clave))) {
-    fallo(quien);
+    await anotarError(quien, LIMITE);
     return { ok: false as const, motivo: NO_ES };
   }
 
-  intentos.delete(quien);
+  await olvidarErrores(quien);
   await abrir(persona.id);
   redirect(aDondeVa(volver, seccionesDePersona(persona)));
 }
@@ -238,13 +224,15 @@ export async function entrar(_previo: unknown, formulario: FormData) {
 export async function olvide(_previo: unknown, formulario: FormData) {
   const correo = leerCorreo(formulario);
   if (!correo) return { ok: false as const, motivo: "Escribí tu correo." };
-  if (frenado(correo)) return { ok: false as const, motivo: DEMASIADOS };
+  if (await frenado(paraQuien(correo), LIMITE)) {
+    return { ok: false as const, motivo: DEMASIADOS };
+  }
 
   const persona = await personaPorCorreo(correo);
   if (persona) await pedirOtraClave(persona.id);
   // Se cuenta como intento igual: si no, esto sería una forma de probar
   // correos sin gastar el freno de la contraseña.
-  fallo(correo);
+  await anotarError(paraQuien(correo), LIMITE);
 
   return {
     ok: true as const,

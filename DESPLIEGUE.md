@@ -95,9 +95,14 @@ Entonces: **Supabase primero, Netlify después.**
    más cercana —Brasil (São Paulo) para Buenos Aires—.
 2. Guardar la contraseña de la base que pide al crearlo. No la vamos a usar
    acá, pero perderla es un lío.
-3. Abrir **SQL Editor** y pegar entero el archivo
-   `supabase/migraciones/001_documentos.sql`. Ejecutarlo. Crea una sola tabla,
-   `documentos`, que es todo lo que la aplicación necesita.
+3. Abrir **SQL Editor** y pegar, **en orden y de a uno**, los archivos de
+   `supabase/migraciones/`. Hoy son dos:
+
+   - `001_documentos.sql` — crea la única tabla, `documentos`.
+   - `002_version.sql` — le agrega el número de versión de cada documento, que
+     es lo que impide que dos personas escribiendo a la vez se pisen. Sin esto
+     la aplicación arranca igual, y el día que el cliente y la agencia escriban
+     en el mismo instante se pierde un mensaje.
 4. Ir a **Project Settings → API** y copiar dos cosas:
    - **Project URL** → va en `SUPABASE_URL`
    - **`service_role` key** → va en `SUPABASE_SERVICE_KEY`
@@ -115,23 +120,34 @@ chat, ni en un correo, ni en el código.
 Si para entonces hay datos cargados en esta computadora —clientes, tags,
 calendarios, chats— hay que subirlos: la base arranca vacía.
 
-Son los archivos de la carpeta `datos/`, uno por colección. Cada archivo es
-`{ "identificador": {...} }`, y cada par de esos es una fila:
+Lo hace un script, `supabase/subir-datos.mjs`. **Antes de tocar nada, copiá la
+carpeta `datos/` a otro lado**: es el único lugar donde está eso.
 
-| en el archivo         | en la tabla         |
-| --------------------- | ------------------- |
-| el nombre del archivo | `coleccion`         |
-| la clave              | `id`                |
-| el valor              | `datos`             |
+Primero mirar qué haría, sin escribir nada:
 
-`clientes.json` → filas con `coleccion = 'clientes'`. `secreto.json` y
-`leidos.json` tienen una sola clave, `unico`, y son una fila cada uno.
+```bash
+node supabase/subir-datos.mjs
+```
 
-Decime cuándo y lo hago; es un rato, pero conviene hacerlo con cuidado y una
-sola vez, no a mano.
+Imprime cuántos documentos hay en cada colección. Si el número pinta bien:
 
-**Antes de tocar nada, copiá la carpeta `datos/` a otro lado.** Es el único
-lugar donde está eso.
+```bash
+node supabase/subir-datos.mjs --escribir
+```
+
+Necesita `SUPABASE_URL` y `SUPABASE_SERVICE_KEY` cargadas, las mismas del paso
+anterior. **No escribe si la base ya tiene algo**: si la migración ya se hizo,
+avisa y no hace nada.
+
+Cada archivo de `datos/` es una colección y cada clave adentro es un documento
+—`clientes.json` → filas con `coleccion = 'clientes'`—, salvo `secreto.json` y
+`leidos.json`, que son un documento solo y van como una fila `unico`. Eso lo
+sabe el script, y hay una prueba que verifica que la lista siga siendo la que
+el código usa.
+
+Después de subir, abrí la aplicación con las variables puestas y mirá tres
+cosas: que estén los clientes, que el tablero muestre lo que tiene que
+mostrar, y que una conversación tenga sus mensajes.
 
 ---
 
@@ -194,30 +210,45 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
 
 ---
 
+## Lo que se arregló para poder subirla
+
+Cuatro cosas que andaban bien en esta computadora y **no hubieran andado en
+internet**, o que iban a molestar con el uso:
+
+- **Los frenos de intentos.** Los dos —la puerta de la agencia y la clave del
+  cliente— contaban en memoria. En Netlify cada pedido puede caer en otra
+  máquina, cada una con su cuenta en cero: el que prueba mil contraseñas no
+  toca ocho veces la misma cuenta, toca una vez mil cuentas distintas. El freno
+  estaba puesto y no frenaba, que es peor que no tenerlo. Ahora la cuenta vive
+  en la base, que es la misma para todas las máquinas.
+- **Dos personas escribiendo el mismo chat en el mismo instante.** Mandar un
+  mensaje era leer el hilo, sumarle el mensaje y guardarlo: el segundo en
+  guardar se llevaba puesto el del primero, sin error y sin aviso. Ahora se
+  escribe en un solo paso, y en la base eso lo garantiza el número de versión
+  de cada documento.
+- **El techo de una conversación.** Cada mensaje reescribía el hilo entero, así
+  que un hilo de tres años hacía lento cada guardado. Ahora lo viejo se muda a
+  un tramo aparte —**no se borra nada**— y se lee con «Ver lo anterior».
+- **Los comentarios de las versiones de antes.** Se leían solo del último
+  archivo de cada pieza: lo que el cliente escribía encima de la V1
+  desaparecía de la aplicación al subir la V2, y seguía en Drive esperando una
+  respuesta que nadie iba a dar. Ahora se leen todas las vueltas, y el pedido
+  dice de cuál salió cuando no es la última.
+
+Y una que no era del despliegue pero molestaba: **un renombre que parte un
+trabajo en dos** ahora tiene botón. Cuando dos trabajos de una carpeta se
+llaman igual en distinto formato, el aviso trae «Es el mismo trabajo:
+unirlos», que le devuelve la marca de versión al archivo en Drive —que es de
+donde salió el problema— y el grupo se rehace solo. Lo anotado no se muda de un
+lado a otro: eso sigue sin hacerse solo, a propósito.
+
+---
+
 ## Lo que todavía no está
 
-- **El freno de intentos de la puerta vive en memoria**, igual que el del
-  portal. Frena ocho intentos por minuto y por correo en una computadora; en
-  Netlify, donde cada pedido puede caer en otra máquina, no frena nada. Los dos
-  se arreglan igual: moviéndolo al almacén.
-- **Dos personas escribiendo el mismo hilo de chat en el mismo instante.** Al
-  mandar un mensaje se lee la conversación entera y se vuelve a guardar. Si el
-  cliente y la agencia mandan uno en la misma fracción de segundo, uno de los
-  dos se pierde. Las escrituras a archivos distintos ya no se pisan —hacen
-  cola—, pero eso no alcanza para dos cambios al **mismo** documento.
-
-  Se arregla con una operación de «leer y escribir en un solo paso» en el
-  contrato del almacén. Conviene hacerlo junto con Supabase, que es donde hay
-  transacciones de verdad.
-
-- **Una conversación crece sin techo.** Los avisos tienen tope; los mensajes
-  no. No es un problema con el uso normal, pero conviene decidir un límite
-  antes de que un hilo de tres años haga lento cada guardado.
-
-- **El freno de intentos vive en memoria.** Sirve en una computadora. En
-  Netlify, donde cada pedido puede caer en una máquina distinta, no frena nada:
-  hay que moverlo al almacén antes de mandarle el primer link a un cliente
-  real.
+- **Nadie mira los avisos por correo todavía.** Sin `RESEND_API_KEY` la
+  aplicación funciona igual y los avisos quedan en la bandeja de adentro, pero
+  nadie se entera sin abrirla.
 - **Los archivos siguen en Drive.** La aplicación no guarda ninguno: muestra lo
   que hay en Drive y anota qué pasó con cada cosa. Perder la aplicación no
   pierde ningún archivo.

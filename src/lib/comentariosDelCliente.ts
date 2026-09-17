@@ -27,6 +27,13 @@
 //      ya copiado, volvería a aparecer en la lectura siguiente y el cliente
 //      vería resucitar un pedido que ya le contestamos.
 //
+// **Se miran todas las versiones, no solo la última.** Un comentario vive en
+// un archivo, y una pieza tiene un archivo por vuelta: leyendo solo el último,
+// lo que el cliente escribió encima de la V1 desaparecía de la aplicación en
+// cuanto se subía la V2 —y seguía ahí en Drive, esperando una respuesta que
+// nadie iba a dar—. Los de versiones de antes se marcan con cuál, porque puede
+// que hablen de algo que ya se cambió.
+//
 // **Mientras la revisión sigue abierta, los dos lados son el mismo.** Si el
 // cliente corrige lo que escribió en Drive, o lo borra, acá pasa lo mismo: son
 // una sola cosa mirada desde dos lugares, y dos textos distintos para el mismo
@@ -46,6 +53,18 @@ import { puedeEscribirCambios } from "@/dominio/pieza";
 import { comoFirmaElEquipo } from "@/lib/equipo";
 import { comentariosDeArchivo, type ComentarioDeDrive } from "@/lib/google";
 import { guardarPiezas, type EstadoDePieza } from "@/lib/piezas";
+
+/** Una pieza, con todos sus archivos: uno por vuelta. */
+export type PiezaConArchivos = {
+  id: string;
+  /**
+   * Los archivos de la pieza, de la versión más vieja a la más nueva.
+   *
+   * Cada uno con qué número de versión es, para poder decirlo en el pedido
+   * cuando no es el último.
+   */
+  archivos: Array<{ id: string; version: number }>;
+};
 
 export type ConComentarios = {
   estados: Record<string, EstadoDePieza>;
@@ -72,23 +91,37 @@ export type ConComentarios = {
  * comentarios y se sigue.
  */
 export async function conLosComentariosDelCliente(
-  piezas: Array<{ id: string; ultimoArchivo: string }>,
+  piezas: PiezaConArchivos[],
   estados: Record<string, EstadoDePieza>
 ): Promise<ConComentarios> {
   if (piezas.length === 0) return { estados, sinCopiar: {} };
 
   const [firmas, porPieza] = await Promise.all([
     comoFirmaElEquipo(),
-    Promise.all(piezas.map((p) => comentariosDeArchivo(p.ultimoArchivo))),
+    Promise.all(
+      piezas.map(async (p) => {
+        // Una pregunta por archivo. Son más que antes —una por vuelta en vez
+        // de una por pieza— y es el precio de no perder lo que el cliente
+        // escribió sobre las versiones de antes. Salen todas juntas.
+        const porArchivo = await Promise.all(
+          p.archivos.map(async (a) =>
+            (await comentariosDeArchivo(a.id)).map((c) => ({ ...c, version: a.version }))
+          )
+        );
+        return porArchivo.flat();
+      })
+    ),
   ]);
 
   const salida = { ...estados };
   const sinCopiar: Record<string, ComentarioDeDrive[]> = {};
   const aGuardar: Record<string, EstadoDePieza> = {};
 
-  piezas.forEach(({ id }, i) => {
+  piezas.forEach(({ id, archivos }, i) => {
     const estado = salida[id];
     if (!estado) return;
+
+    const ultima = archivos[archivos.length - 1]?.version;
 
     const delCliente = porPieza[i].filter((c) => !esDelEquipo(c, firmas));
     const yaCopiados = new Set(estado.comentariosCopiados ?? []);
@@ -106,7 +139,7 @@ export async function conLosComentariosDelCliente(
       if (!vieneDeDrive(cambio.id)) return [cambio];
       const suyo = enDrive.get(idDeDrive(cambio.id));
       if (!suyo || suyo.resuelto || !suyo.texto.trim()) return [];
-      return [{ ...cambio, texto: comoPedido(suyo) }];
+      return [{ ...cambio, texto: comoPedido(suyo, ultima) }];
     });
 
     // Un comentario resuelto en Drive es una conversación terminada: entrarlo
@@ -119,7 +152,7 @@ export async function conLosComentariosDelCliente(
     const cambios = [
       ...alDia,
       ...(sePuedeEscribir
-        ? nuevos.map((c) => ({ id: idDelComentario(c.id), texto: comoPedido(c) }))
+        ? nuevos.map((c) => ({ id: idDelComentario(c.id), texto: comoPedido(c, ultima) }))
         : []),
     ];
 

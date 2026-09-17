@@ -20,6 +20,7 @@
 // guarda el tag, guarda «este navegador ya acertó el de este link»: leerla no
 // sirve para entrar a otro lado, y fabricarla necesita la llave del servidor.
 
+import { anotarError, frenado, olvidarErrores, type Limite } from "@/lib/frenos";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { documento } from "@/lib/almacen";
 import { ajustesDe } from "@/lib/ajustes";
@@ -161,40 +162,30 @@ export async function galletaValida(token: string, valor: string | undefined): P
 // ---------------------------------------------------------------------------
 
 /**
- * Cuántas veces se erró el tag de cada link, para no dejar probar de a mil.
+ * Cuántas veces se erró la clave de cada link, para no dejar probar de a mil.
  *
- * Vive en memoria a propósito: es un freno, no un registro. Se pierde al
- * reiniciar y no pasa nada —el link sigue siendo lo caro de adivinar—.
+ * La cuenta vive en el almacén y no en memoria: en internet cada pedido puede
+ * caer en otra máquina, y ocho intentos repartidos entre ocho máquinas con la
+ * cuenta en cero no los frena nadie. Está explicado en `lib/frenos.ts`.
+ *
+ * Diez minutos, y no un minuto como la puerta de la agencia: del lado del
+ * cliente el que erra ocho veces seguidas no es alguien que se equivocó, es
+ * alguien probando. Y el cliente tiene la clave anotada donde la agencia se la
+ * mandó, así que esperar no le cuesta lo que le costaría a quien la recuerda
+ * de memoria.
  */
-const intentos = new Map<string, { cuantos: number; hasta: number }>();
+const LIMITE: Limite = { tope: 8, espera: 10 * 60 * 1000 };
 
-const TOPE = 8;
-const ESPERA_MS = 10 * 60 * 1000;
+const porLink = (token: string) => `portal:${token}`;
 
-export function estaFrenado(token: string): boolean {
-  const registro = intentos.get(token);
-  if (!registro) return false;
-  if (registro.hasta < Date.now()) {
-    intentos.delete(token);
-    return false;
-  }
-  return registro.cuantos >= TOPE;
-}
+export const estaFrenado = (token: string): Promise<boolean> =>
+  frenado(porLink(token), LIMITE);
 
-export function anotarIntentoFallido(token: string): void {
-  const ahora = Date.now();
-  const registro = intentos.get(token);
-  if (!registro || registro.hasta < ahora) {
-    intentos.set(token, { cuantos: 1, hasta: ahora + ESPERA_MS });
-    return;
-  }
-  registro.cuantos += 1;
-  registro.hasta = ahora + ESPERA_MS;
-}
+export const anotarIntentoFallido = (token: string): Promise<void> =>
+  anotarError(porLink(token), LIMITE);
 
-export function olvidarIntentos(token: string): void {
-  intentos.delete(token);
-}
+export const olvidarIntentos = (token: string): Promise<void> =>
+  olvidarErrores(porLink(token));
 
 // ---------------------------------------------------------------------------
 

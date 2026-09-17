@@ -36,12 +36,38 @@ export type Coleccion<T> = {
    */
   guardarVarios(cambios: Record<string, T | undefined>): Promise<void>;
   borrar(id: string): Promise<void>;
+  /**
+   * Leer y escribir en un solo paso, sin que nadie se meta en el medio.
+   *
+   * **Es la única forma correcta de cambiar algo a partir de lo que ya
+   * había.** Leer, pensar y guardar en tres pasos parece lo mismo y no lo es:
+   * si entre el primero y el tercero alguien más guarda, lo suyo se pisa sin
+   * error, sin aviso y sin rastro. Pasó con el chat —el cliente y la agencia
+   * escribiendo en la misma fracción de segundo, y un mensaje que no llegó
+   * nunca— y es la peor clase de falla que puede tener esto, porque lo que se
+   * pierde es algo que alguien escribió.
+   *
+   * `como` recibe lo que hay —`undefined` si no hay nada— y devuelve lo que
+   * tiene que quedar; devolver `undefined` lo borra. Devuelve lo que quedó
+   * guardado.
+   *
+   * **`como` tiene que poder correr más de una vez.** En Supabase, si alguien
+   * ganó la carrera, se vuelve a leer y se vuelve a llamar con lo nuevo. Así
+   * que no puede mandar un correo, ni escribir en otro lado, ni contar nada
+   * hacia afuera: eso va después, con lo que esto devuelve.
+   */
+  cambiar(
+    id: string,
+    como: (actual: T | undefined) => T | undefined
+  ): Promise<T | undefined>;
 };
 
 /** Un solo documento suelto: el secreto de las galletas, las marcas de leído. */
 export type Documento<T> = {
   leer(): Promise<T>;
   escribir(valor: T): Promise<void>;
+  /** Lo mismo que el de la colección, y por lo mismo. */
+  cambiar(como: (actual: T) => T): Promise<T>;
 };
 
 /**

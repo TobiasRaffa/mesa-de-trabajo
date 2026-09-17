@@ -37,7 +37,21 @@ const pieza = (x: Partial<EstadoDePieza> = {}): EstadoDePieza => ({
   ...x,
 });
 
-const LA_PIEZA = [{ id: "carpeta::logo.pdf", ultimoArchivo: "archivo1" }];
+const LA_PIEZA = [
+  { id: "carpeta::logo.pdf", archivos: [{ id: "archivo1", version: 1 }] },
+];
+
+/** La misma pieza con tres vueltas: V1, V2 y V3, cada una su archivo. */
+const CON_TRES_VUELTAS = [
+  {
+    id: "carpeta::logo.pdf",
+    archivos: [
+      { id: "archivo1", version: 1 },
+      { id: "archivo2", version: 2 },
+      { id: "archivo3", version: 3 },
+    ],
+  },
+];
 
 const conDrive = (...cs: ComentarioDeDrive[]) =>
   vi.mocked(comentariosDeArchivo).mockResolvedValue(cs);
@@ -335,5 +349,69 @@ describe("una vez mandada la revisión, lo pedido queda firme", () => {
     });
 
     expect(estados["carpeta::logo.pdf"].cambios).toHaveLength(1);
+  });
+});
+
+describe("los comentarios de las versiones de antes", () => {
+  // **Se perdían.** Un comentario vive en un archivo, y una pieza tiene un
+  // archivo por vuelta: leyendo solo el último, lo que el cliente escribió
+  // encima de la V1 desaparecía de la aplicación en cuanto se subía la V2 —y
+  // seguía ahí en Drive, esperando una respuesta que nadie iba a dar—.
+  const porArchivo = (cuales: Record<string, ComentarioDeDrive[]>) =>
+    vi.mocked(comentariosDeArchivo).mockImplementation(async (id) => cuales[id] ?? []);
+
+  it("lo escrito sobre la V1 entra igual", async () => {
+    porArchivo({ archivo1: [comentario({ id: "viejo", texto: "el verde no" })] });
+
+    const { estados } = await conLosComentariosDelCliente(CON_TRES_VUELTAS, {
+      "carpeta::logo.pdf": pieza(),
+    });
+
+    expect(
+      estados["carpeta::logo.pdf"].cambios.map((c) => c.id),
+      "Sin esto, el cliente escribió algo y la agencia no se entera nunca."
+    ).toEqual(["drive:viejo"]);
+  });
+
+  it("dice de qué versión salió, cuando no es la última", async () => {
+    // Es el único aviso de que ese pedido se escribió sobre un archivo de
+    // antes y puede estar hablando de algo que ya se cambió.
+    porArchivo({
+      archivo1: [comentario({ id: "v1", texto: "el verde no", hoja: 2 })],
+      archivo3: [comentario({ id: "v3", texto: "más chico" })],
+    });
+
+    const { estados } = await conLosComentariosDelCliente(CON_TRES_VUELTAS, {
+      "carpeta::logo.pdf": pieza(),
+    });
+
+    expect(estados["carpeta::logo.pdf"].cambios).toEqual([
+      { id: "drive:v1", texto: "V1 · Hoja 2: el verde no" },
+      { id: "drive:v3", texto: "más chico" },
+    ]);
+  });
+
+  it("se pregunta por todas las vueltas, no solo por la última", async () => {
+    porArchivo({});
+
+    await conLosComentariosDelCliente(CON_TRES_VUELTAS, {
+      "carpeta::logo.pdf": pieza(),
+    });
+
+    expect(vi.mocked(comentariosDeArchivo).mock.calls.map((c) => c[0]).sort()).toEqual([
+      "archivo1",
+      "archivo2",
+      "archivo3",
+    ]);
+  });
+
+  it("uno ya copiado no vuelve a entrar por venir de otra versión", async () => {
+    porArchivo({ archivo1: [comentario({ id: "viejo" })] });
+
+    const { estados } = await conLosComentariosDelCliente(CON_TRES_VUELTAS, {
+      "carpeta::logo.pdf": pieza({ comentariosCopiados: ["viejo"] }),
+    });
+
+    expect(estados["carpeta::logo.pdf"].cambios).toEqual([]);
   });
 });

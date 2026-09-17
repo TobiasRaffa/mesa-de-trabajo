@@ -163,6 +163,16 @@ function Revision({
   const [conversando, setConversando] = useState(false);
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   /**
+   * Si se pidió ver lo de antes.
+   *
+   * Una vez pedido, **también se pregunta entero cada vez**: si no, la vuelta
+   * siguiente del reloj traería solo el hilo vivo y le borraría de la pantalla
+   * lo que acababa de traer.
+   */
+  const [conversacionEntera, setConversacionEntera] = useState(false);
+  const [hayAnteriores, setHayAnteriores] = useState(false);
+  const [trayendoAnteriores, setTrayendoAnteriores] = useState(false);
+  /**
    * Hasta cuándo leyó este cliente.
    *
    * Del lado del portal no hay sesión de persona, así que la marca vive en el
@@ -203,13 +213,20 @@ function Revision({
 
     async function traer() {
       try {
-        const r = await fetch(`/api/conversacion/${datos.cliente.id}`, {
-          cache: "no-store",
-        });
+        const desde = `/api/conversacion/${datos.cliente.id}${
+          conversacionEntera ? "?entera=si" : ""
+        }`;
+        const r = await fetch(desde, { cache: "no-store" });
         if (!r.ok) return;
-        const { mensajes: llegaron } = (await r.json()) as { mensajes: Mensaje[] };
+        const llegado = (await r.json()) as {
+          mensajes: Mensaje[];
+          hayAnteriores?: boolean;
+        };
         // Si la pantalla ya se desmontó, guardar sería escribir en el aire.
-        if (vivo) setMensajes(llegaron);
+        if (vivo) {
+          setMensajes(llegado.mensajes);
+          setHayAnteriores(llegado.hayAnteriores === true);
+        }
       } catch {
         // Sin conexión no se rompe nada: se sigue viendo lo último que llegó.
       }
@@ -224,7 +241,26 @@ function Revision({
       vivo = false;
       clearInterval(cada);
     };
-  }, [datos.cliente.id, conversando]);
+  }, [datos.cliente.id, conversando, conversacionEntera]);
+
+  /** Trae los mensajes viejos, los que quedaron guardados aparte. */
+  async function verLoAnterior() {
+    setTrayendoAnteriores(true);
+    try {
+      const r = await fetch(`/api/conversacion/${datos.cliente.id}?entera=si`, {
+        cache: "no-store",
+      });
+      if (!r.ok) return;
+      const { mensajes: llegaron } = (await r.json()) as { mensajes: Mensaje[] };
+      setMensajes(llegaron);
+      setHayAnteriores(false);
+      setConversacionEntera(true);
+    } catch {
+      // Se queda como estaba: el botón sigue ahí para volver a intentar.
+    } finally {
+      setTrayendoAnteriores(false);
+    }
+  }
 
   // Hasta cuándo leyó este navegador. Se recupera una vez, al montar.
   useEffect(() => {
@@ -750,6 +786,11 @@ function Revision({
           enviando={enviandoMensaje}
           onEnviar={enviarMensaje}
           onCerrar={() => setConversando(false)}
+          anteriores={{
+            hay: hayAnteriores,
+            trayendo: trayendoAnteriores,
+            onTraer: verLoAnterior,
+          }}
         />
       )}
 

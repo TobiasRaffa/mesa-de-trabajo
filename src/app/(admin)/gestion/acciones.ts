@@ -49,7 +49,9 @@ import {
 } from "@/lib/clientes";
 import {
   agregarMensaje,
+  hayAnteriores,
   leerConversacion,
+  leerConversacionEntera,
   LARGO_MAXIMO,
   type Mensaje,
 } from "@/lib/conversaciones";
@@ -80,7 +82,12 @@ import {
  * dejando pedir cambios que el servidor rechaza, o al revés.
  */
 const RONDAS_INCLUIDAS = RONDAS_INCLUIDAS_POR_DEFECTO;
-import { agruparVersiones, conSusArchivos, identidadDePieza } from "@/lib/versiones";
+import {
+  agruparVersiones,
+  comoVueltaDe,
+  conSusArchivos,
+  identidadDePieza,
+} from "@/lib/versiones";
 import { esDeAlgunCliente } from "@/lib/permisos";
 import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
 import { sacarClave } from "@/lib/claves";
@@ -107,7 +114,7 @@ import {
 import { diasValidos, ponerPlazo } from "@/lib/plazos";
 import { ponerResponsable } from "@/lib/responsables";
 import { marcarLeido } from "@/lib/conversaciones";
-import { subcarpetasDe } from "@/lib/google";
+import { renombrarArchivo, subcarpetasDe } from "@/lib/google";
 import {
   esDiaValido,
   guardarPublicaciones,
@@ -1080,6 +1087,89 @@ async function dejariaSinAdmin(
   };
 }
 
+/**
+ * Vuelve a juntar un trabajo que un renombre partió en dos.
+ *
+ * **Se arregla donde se rompió: en el nombre del archivo.** Un trabajo se arma
+ * juntando los archivos que, después de la marca de versión, dicen lo mismo, y
+ * sacarle la marca a uno lo saca del grupo y funda otro trabajo. La aplicación
+ * no muda lo anotado de un lado al otro —sería lo más delicado que podría
+ * hacer, y un renombre raro se llevaría una historia a un lugar inesperado—:
+ * le devuelve la marca al archivo, y el grupo se rehace solo.
+ *
+ * **Lo decide una persona, y por eso es un botón y no algo automático.** Desde
+ * afuera no se puede saber si «stickers.pdf» y «stickers.jpg» son un trabajo
+ * partido o el mismo trabajo entregado en dos formatos, que es algo que pasa
+ * todo el tiempo. Acá la persona ya miró los dos.
+ *
+ * Si hay más de dos con ese nombre no hace nada: no hay a cuál unir sin
+ * adivinar, y adivinar mal deja las vueltas colgadas del trabajo equivocado.
+ */
+export async function unirConLaOtra(
+  carpetaId: string,
+  piezaId: string
+): Promise<Resultado> {
+  if (!(await esCarpetaDelCliente(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no es de un cliente." };
+  }
+
+  try {
+    // Por piezasDeLaCarpeta y no por Drive en crudo: una vuelta que se mudó a
+    // «Entregas finales» sigue siendo parte del trabajo, y renombrar sin verla
+    // le daría a otra el número que ya tenía.
+    const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+    const suelta = agrupadas.find((p) => `${carpetaId}::${p.base}` === piezaId);
+    if (!suelta) return { ok: false, motivo: "Ese trabajo ya no está." };
+
+    const otras = agrupadas.filter(
+      (p) => p !== suelta && p.titulo.toLowerCase() === suelta.titulo.toLowerCase()
+    );
+    if (otras.length !== 1) {
+      return {
+        ok: false,
+        motivo:
+          otras.length === 0
+            ? "Ya no hay otro trabajo con ese nombre."
+            : "Hay más de dos con ese nombre: renombralos a mano, no puedo adivinar.",
+      };
+    }
+
+    const destino = otras[0];
+
+    // **Cada archivo conserva su número si puede.** Lo natural sería numerarlos
+    // uno atrás del otro desde la última vuelta del destino, y eso renumera: la
+    // V6 que el cliente ya vio en su portal pasaría a ser la V4, sin que nadie
+    // se lo dijera. Solo se cambia el número del que chocaría con uno que ya
+    // existe, que es cuando no hay alternativa.
+    const tomados = new Set(destino.versiones.map((v) => v.numero));
+    let libre = Math.max(...tomados) + 1;
+
+    // De la vuelta más vieja a la más nueva, para que el orden se conserve.
+    for (const v of suelta.versiones) {
+      let numero = v.numero;
+      if (tomados.has(numero)) {
+        while (tomados.has(libre)) libre += 1;
+        numero = libre;
+      }
+      tomados.add(numero);
+
+      await renombrarArchivo(
+        v.archivo.id,
+        comoVueltaDe(v.archivo.name, destino.titulo, numero)
+      );
+    }
+
+    olvidarCarpetas();
+    revalidatePath("/gestion", "layout");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      motivo: error instanceof Error ? error.message : "No pude renombrar en Drive.",
+    };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // La bandeja
 
@@ -1208,13 +1298,28 @@ export async function cambiarVisibilidad(
  * acción: es el otro lado del mostrador y no tiene esa sesión.
  */
 export async function traerConversacion(
-  clienteId: string
-): Promise<{ ok: true; mensajes: Mensaje[] } | { ok: false; motivo: string }> {
+  clienteId: string,
+  /**
+   * Traer también lo de antes.
+   *
+   * Por omisión llega solo el hilo vivo: lo viejo se pide a mano desde «ver lo
+   * anterior». Preguntarlo cada seis segundos con tres años de charla adentro
+   * sería pagar justo el precio que el techo vino a sacar.
+   */
+  entera = false
+): Promise<
+  | { ok: true; mensajes: Mensaje[]; hayAnteriores: boolean }
+  | { ok: false; motivo: string }
+> {
   if (!(await esClienteReal(clienteId))) {
     return { ok: false, motivo: "Ese cliente no existe." };
   }
   try {
-    return { ok: true, mensajes: await leerConversacion(clienteId) };
+    const [mensajes, hay] = await Promise.all([
+      entera ? leerConversacionEntera(clienteId) : leerConversacion(clienteId),
+      hayAnteriores(clienteId),
+    ]);
+    return { ok: true, mensajes, hayAnteriores: hay && !entera };
   } catch {
     return { ok: false, motivo: "No pude leer la conversación." };
   }

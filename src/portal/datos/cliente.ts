@@ -231,7 +231,9 @@ export async function portalDelCliente(
       const { estados: guardados } = await conLosComentariosDelCliente(
         agrupadas.map((pieza, i) => ({
           id: identidades[i],
-          ultimoArchivo: pieza.versiones[pieza.versiones.length - 1].archivo.id,
+          // Todas las versiones, no solo la última: lo que el cliente escribió
+          // encima de la V1 no puede desaparecer porque se subió la V2.
+          archivos: pieza.versiones.map((v) => ({ id: v.archivo.id, version: v.numero })),
         })),
         deLaBase
       );

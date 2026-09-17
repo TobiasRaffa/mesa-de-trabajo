@@ -113,6 +113,31 @@ export function leerNombre(nombre: string): NombreDeArchivo {
   };
 }
 
+/**
+ * Cómo tiene que llamarse un archivo para ser una vuelta de otra pieza.
+ *
+ * **Es el arreglo del renombre que parte un trabajo en dos.** Un trabajo se
+ * arma juntando los archivos que, después de la marca de versión, dicen lo
+ * mismo: sacarle la marca a uno —«V4_stickers.jpeg» → «stickers.jpeg»— lo saca
+ * del grupo y funda otro trabajo. La aplicación no muda lo anotado de un lado
+ * al otro, que sería lo más delicado que podría hacer; le devuelve la marca al
+ * archivo, que es de donde salió el problema, y el grupo se rehace solo.
+ *
+ * Conserva la extensión del archivo: una vuelta puede estar en otro formato
+ * —un JPG para mirar rápido, el PDF para imprenta— y eso es válido.
+ */
+export function comoVueltaDe(
+  nombreDelArchivo: string,
+  /** Cómo se llama la pieza a la que se suma, sin marca ni extensión. */
+  titulo: string,
+  /** Qué número de vuelta le toca. */
+  version: number
+): string {
+  const punto = nombreDelArchivo.lastIndexOf(".");
+  const extension = punto > 0 ? nombreDelArchivo.slice(punto) : "";
+  return `V${version}_${titulo}${extension}`;
+}
+
 export type ConNombre = { name: string };
 
 export type Agrupado<T> = {

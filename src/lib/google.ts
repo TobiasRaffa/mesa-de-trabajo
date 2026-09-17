@@ -239,6 +239,34 @@ export type MetadatosArchivo = {
 
 // Datos de un archivo puntual, incluidas las carpetas que lo contienen.
 // Los `parents` son lo que permite verificar que el pedido sea legítimo.
+/**
+ * Le cambia el nombre a un archivo en Drive.
+ *
+ * **Es la única escritura de nombres que hace la aplicación**, y existe para
+ * una sola cosa: volver a juntar un trabajo que un renombre partió en dos. Lo
+ * pide una persona, con el botón de «unir», después de mirar los dos.
+ *
+ * Se escribe en el Drive del cliente, así que lo que se manda es exactamente
+ * lo que se calculó: nada de armar el nombre acá adentro.
+ */
+export async function renombrarArchivo(fileId: string, nombre: string): Promise<void> {
+  // Lo recordado quedó viejo en el momento en que esto cambia algo.
+  olvidarDrive();
+  const token = await tokenDeGoogle();
+  const r = await fetch(
+    `${DRIVE}/files/${fileId}?fields=id,name&supportsAllDrives=true`,
+    {
+      method: "PATCH",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nombre }),
+    }
+  );
+  const data = await r.json();
+  if (!r.ok) {
+    throw new Error("Drive: " + (data.error?.message ?? "no pude renombrar el archivo"));
+  }
+}
+
 export async function metadatosArchivo(fileId: string): Promise<MetadatosArchivo> {
   return conMemoria(`archivo:${fileId}`, () => pedirMetadatos(fileId));
 }

@@ -36,7 +36,7 @@ export async function entrarConTag(
   const token = String(formulario.get("token") ?? "");
   const escrito = String(formulario.get("tag") ?? "");
 
-  if (estaFrenado(token)) {
+  if (await estaFrenado(token)) {
     return {
       ok: false,
       motivo: "Probaste muchas veces. Esperá unos minutos y volvé a intentar.",
@@ -49,11 +49,11 @@ export async function entrarConTag(
   const tagDelCliente = puerta ? normalizarTag(puerta.cliente.tag) : "";
 
   if (!puerta || !tagDelCliente || normalizarTag(escrito) !== tagDelCliente) {
-    anotarIntentoFallido(token);
+    await anotarIntentoFallido(token);
     return { ok: false, motivo: "Esa clave no es. Fijate con el equipo." };
   }
 
-  olvidarIntentos(token);
+  await olvidarIntentos(token);
 
   const galletas = await cookies();
   galletas.set(await nombreDeGalleta(token), await valorDeGalleta(token), {

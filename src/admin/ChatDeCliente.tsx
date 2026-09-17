@@ -40,6 +40,16 @@ export function ChatDeCliente({
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [leidos, setLeidos] = useState(false);
+  /**
+   * Si se pidió ver lo de antes.
+   *
+   * Una vez pedido, **también se pregunta entero cada vez**: si no, la vuelta
+   * siguiente del reloj traería solo el hilo vivo y le borraría de la pantalla
+   * lo que acababa de traer.
+   */
+  const [entera, setEntera] = useState(false);
+  const [hayAnteriores, setHayAnteriores] = useState(false);
+  const [trayendo, setTrayendo] = useState(false);
 
   // Mientras el chat está abierto se pregunta cada seis segundos: es cuando
   // importa enterarse rápido de que el cliente contestó.
@@ -51,8 +61,11 @@ export function ChatDeCliente({
       try {
         // Por acción y no por la ruta del portal: esa pide la galleta del
         // cliente, y la agencia está del otro lado del mostrador.
-        const r = await traerConversacion(clienteId);
-        if (r.ok && vivo) setMensajes(r.mensajes);
+        const r = await traerConversacion(clienteId, entera);
+        if (r.ok && vivo) {
+          setMensajes(r.mensajes);
+          setHayAnteriores(r.hayAnteriores);
+        }
       } catch {}
     }
 
@@ -65,7 +78,21 @@ export function ChatDeCliente({
       vivo = false;
       clearInterval(cada);
     };
-  }, [abierto, clienteId]);
+  }, [abierto, clienteId, entera]);
+
+  async function verLoAnterior() {
+    setTrayendo(true);
+    try {
+      const r = await traerConversacion(clienteId, true);
+      if (r.ok) {
+        setMensajes(r.mensajes);
+        setHayAnteriores(false);
+        setEntera(true);
+      }
+    } finally {
+      setTrayendo(false);
+    }
+  }
 
   async function enviar(texto: string) {
     setEnviando(true);
@@ -103,6 +130,7 @@ export function ChatDeCliente({
           enviando={enviando}
           onEnviar={enviar}
           onCerrar={() => setAbierto(false)}
+          anteriores={{ hay: hayAnteriores, trayendo, onTraer: verLoAnterior }}
           firma={
             <p className="mb-2 text-micro font-extrabold uppercase tracking-wider text-apagado">
               Sale firmado por <span className="text-tinta">{firma}</span>

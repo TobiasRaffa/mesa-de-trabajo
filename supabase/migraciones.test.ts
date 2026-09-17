@@ -46,3 +46,46 @@ describe("migraciones", () => {
     expect(sentencias.length).toBeGreaterThan(0);
   });
 });
+
+describe("el script que sube los datos", () => {
+  const script = readFileSync(join(import.meta.dirname, "subir-datos.mjs"), "utf8");
+
+  it("sabe cuáles son un solo documento y cuáles una colección", () => {
+    // **Es la diferencia entre migrar bien y migrar en silencio mal.**
+    // `leidos.json` no es «muchos documentos con su identificador», es uno: su
+    // objeto tiene adentro los dos lados. Subido como colección se parte en
+    // dos filas —«agencia» y «cliente»— y la aplicación, que pide la fila
+    // «unico», no encuentra ninguna. El día después de la mudanza todos los
+    // chats aparecen con todo sin leer y nadie sabe por qué.
+    //
+    // Se compara contra el código de verdad: la lista escrita a mano envejece
+    // el día que alguien agrega un `documento(...)` nuevo.
+    const fuente = readdirSync(join(import.meta.dirname, "..", "src", "lib"))
+      .filter((n) => n.endsWith(".ts") && !n.endsWith(".test.ts"))
+      .map((n) => readFileSync(join(import.meta.dirname, "..", "src", "lib", n), "utf8"))
+      .join("\n");
+
+    const enElCodigo = [...fuente.matchAll(/\bdocumento<[^>]*>\(\s*"([^"]+)"/g)]
+      .map((m) => m[1])
+      .sort();
+    expect(enElCodigo.length, "No encontré ningún documento suelto.").toBeGreaterThan(0);
+
+    const enElScript = script.match(/const SUELTOS = new Set\(\[([^\]]*)\]\)/);
+    expect(enElScript, "El script ya no tiene la lista de documentos sueltos.").toBeTruthy();
+
+    const declarados = [...enElScript![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
+
+    expect(
+      declarados,
+      "La lista del script no coincide con los `documento(...)` del código. " +
+        "El que falte se va a subir partido en pedazos, y la aplicación no lo " +
+        "va a encontrar."
+    ).toEqual(enElCodigo);
+  });
+
+  it("no escribe si no se lo piden", () => {
+    // Un script de migración que escribe con solo llamarlo es el que un día se
+    // corre por accidente encima de la base buena.
+    expect(script).toContain('process.argv.includes("--escribir")');
+  });
+});

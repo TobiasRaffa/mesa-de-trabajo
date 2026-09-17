@@ -19,6 +19,15 @@ export type ComentarioParaDecidir = {
   texto: string;
   /** La hoja del PDF, si Drive la dice. */
   hoja?: number;
+  /**
+   * Sobre qué versión se escribió.
+   *
+   * Un comentario no vive en «la pieza» sino en **un archivo**, y una pieza
+   * tiene uno por vuelta. Sin esto, un pedido escrito sobre la V1 se lee igual
+   * que uno escrito sobre la V3, y no es lo mismo: puede estar hablando de algo
+   * que ya se cambió.
+   */
+  version?: number;
 };
 
 /**
@@ -59,10 +68,26 @@ const parejo = (x?: string) => (x ?? "").trim().toLowerCase();
  * lee antes que el pedido, que es el orden en que hace falta.
  *
  * Si Drive no dice la hoja no se inventa ninguna: queda el texto solo.
+ *
+ * **La versión se nombra solo cuando no es la última.** Escribir «V3» en todos
+ * los pedidos de la V3 es ruido —es la que se está mirando—; escribirlo en el
+ * que quedó sobre la V1 es el único aviso de que ese pedido se escribió sobre
+ * un archivo de antes y puede estar hablando de algo que ya se cambió.
  */
-export function comoPedido(comentario: Pick<ComentarioParaDecidir, "texto" | "hoja">): string {
+export function comoPedido(
+  comentario: Pick<ComentarioParaDecidir, "texto" | "hoja" | "version">,
+  /** La versión que está arriba de todo, para no nombrarla. */
+  ultimaVersion?: number
+): string {
   const texto = comentario.texto.trim();
-  return comentario.hoja === undefined ? texto : `Hoja ${comentario.hoja}: ${texto}`;
+  const conHoja = comentario.hoja === undefined ? texto : `Hoja ${comentario.hoja}: ${texto}`;
+
+  const vieja =
+    comentario.version !== undefined &&
+    ultimaVersion !== undefined &&
+    comentario.version < ultimaVersion;
+
+  return vieja ? `V${comentario.version} · ${conHoja}` : conHoja;
 }
 
 /**

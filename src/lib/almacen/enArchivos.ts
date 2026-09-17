@@ -113,6 +113,18 @@ export const enArchivos: Almacen = {
           await escribirCrudo(archivo, actual);
         });
       },
+      // Leer y escribir adentro de la misma vuelta de la fila: nadie puede
+      // guardar entre lo que esto lee y lo que esto escribe.
+      async cambiar(id, como) {
+        return enFila(archivo, async () => {
+          const actual = await todo();
+          const nuevo = como(actual[id]);
+          if (nuevo === undefined) delete actual[id];
+          else actual[id] = nuevo;
+          await escribirCrudo(archivo, actual);
+          return nuevo;
+        });
+      },
     };
   },
 
@@ -122,13 +134,25 @@ export const enArchivos: Almacen = {
     porOmision: T
   ): Documento<T> {
     const archivo = path.join(CARPETA, `${nombre}.json`);
+
+    async function leer(): Promise<T> {
+      const crudo = await leerCrudo(archivo);
+      return valido(crudo) ? crudo : porOmision;
+    }
+
     return {
-      async leer() {
-        const crudo = await leerCrudo(archivo);
-        return valido(crudo) ? crudo : porOmision;
-      },
+      leer,
       async escribir(valor) {
-        await escribirCrudo(archivo, valor);
+        // También en fila: si no, un `escribir` suelto se mete entre el leer y
+        // el escribir de un `cambiar` y se pierde uno de los dos.
+        await enFila(archivo, () => escribirCrudo(archivo, valor));
+      },
+      async cambiar(como) {
+        return enFila(archivo, async () => {
+          const nuevo = como(await leer());
+          await escribirCrudo(archivo, nuevo);
+          return nuevo;
+        });
       },
     };
   },

@@ -69,6 +69,14 @@ type Props = {
    * cliente tiene que saber con quién habló.
    */
   firma?: React.ReactNode;
+  /**
+   * Lo de antes, cuando la conversación es larga.
+   *
+   * Un hilo de años no se trae entero cada vez: lo viejo queda guardado aparte
+   * y se pide con un botón. **No falta nada**, está más atrás; el botón lo dice
+   * con esas palabras justamente para que nadie crea que se perdió algo.
+   */
+  anteriores?: { hay: boolean; trayendo: boolean; onTraer: () => void };
 };
 
 export function Conversacion({
@@ -79,6 +87,7 @@ export function Conversacion({
   onCerrar,
   enviando = false,
   firma,
+  anteriores,
 }: Props) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
   const [texto, setTexto] = useState("");
@@ -105,8 +114,15 @@ export function Conversacion({
 
   // Al abrir, y con cada mensaje nuevo, se mira el final: lo último dicho es
   // lo que importa. Sin esto habría que arrastrar hasta abajo cada vez.
+  //
+  // **Salvo cuando lo que llegó es lo de antes.** Traer el historial y que la
+  // pantalla salte al final es lo contrario de lo que pidió quien apretó el
+  // botón: se queda donde estaba, que es donde está lo que vino a leer.
+  const cuantos = useRef(0);
   useEffect(() => {
-    final.current?.scrollIntoView({ block: "end" });
+    const crecioPorAtras = mensajes.length > cuantos.current + 1;
+    cuantos.current = mensajes.length;
+    if (!crecioPorAtras) final.current?.scrollIntoView({ block: "end" });
   }, [mensajes.length]);
 
   function enviar() {
@@ -145,6 +161,22 @@ export function Conversacion({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-papel px-4 py-4">
+          {/* Arriba de todo, que es donde termina el que sube leyendo. */}
+          {anteriores?.hay && (
+            <div className="mb-3 flex justify-center">
+              <button
+                type="button"
+                onClick={anteriores.onTraer}
+                disabled={anteriores.trayendo}
+                className="min-h-toque border border-linea bg-lienzo px-4 text-menudo
+                           font-semibold text-tinta-suave transition-colors
+                           hover:bg-hueco disabled:opacity-40"
+              >
+                {anteriores.trayendo ? "Buscando…" : "Ver lo anterior"}
+              </button>
+            </div>
+          )}
+
           {mensajes.length === 0 ? (
             <p className="py-10 text-center text-normal text-apagado">
               Todavía no hablaron por acá.

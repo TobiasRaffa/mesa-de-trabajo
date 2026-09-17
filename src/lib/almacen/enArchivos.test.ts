@@ -90,3 +90,70 @@ describe("lo que ya hacía bien", () => {
     expect(await coleccion.todo()).toEqual({ a: { valor: 1 } });
   });
 });
+
+describe("cambiar el mismo documento a la vez", () => {
+  // **Es la carrera que `guardar` no puede resolver.** Dos escrituras al
+  // **mismo** documento: leer, pensar sobre lo leído, escribir. Con `guardar`,
+  // las dos leen lo mismo y la segunda pisa a la primera. Es lo que hacía que
+  // el cliente y la agencia escribiendo en el mismo instante perdieran un
+  // mensaje.
+  const sumar = (n: number) => (actual: Cosa | undefined) => ({
+    valor: (actual?.valor ?? 0) + n,
+  });
+
+  it("veinte sumas al mismo documento suman veinte", async () => {
+    await Promise.all(Array.from({ length: 20 }, () => coleccion.cambiar("cuenta", sumar(1))));
+
+    expect(
+      await coleccion.uno("cuenta"),
+      "Si esto da menos de 20, hay escrituras que se pisaron."
+    ).toEqual({ valor: 20 });
+  });
+
+  it("devuelve lo que quedó guardado", async () => {
+    expect(await coleccion.cambiar("x", sumar(5))).toEqual({ valor: 5 });
+    expect(await coleccion.cambiar("x", sumar(3))).toEqual({ valor: 8 });
+  });
+
+  it("devolver undefined lo borra", async () => {
+    await coleccion.guardar("y", { valor: 1 });
+    expect(await coleccion.cambiar("y", () => undefined)).toBeUndefined();
+    expect(await coleccion.uno("y")).toBeUndefined();
+  });
+
+  it("no se lleva puesto lo de al lado", async () => {
+    await coleccion.guardar("vecino", { valor: 99 });
+    await Promise.all([
+      coleccion.cambiar("propio", sumar(1)),
+      coleccion.cambiar("propio", sumar(1)),
+      coleccion.guardar("otro", { valor: 7 }),
+    ]);
+
+    expect(await coleccion.todo()).toEqual({
+      vecino: { valor: 99 },
+      propio: { valor: 2 },
+      otro: { valor: 7 },
+    });
+  });
+});
+
+describe("un documento suelto que se cambia a la vez", () => {
+  // Las marcas de «hasta dónde leyó cada lado» viven en un documento único, y
+  // las escriben los dos lados. Sin esto, el cliente y la agencia marcando
+  // leído al mismo tiempo perdían una de las dos marcas.
+  const doc = enArchivos.documento<Record<string, number>>(
+    "suelto",
+    (v): v is Record<string, number> => Boolean(v) && typeof v === "object",
+    {}
+  );
+
+  it("diez marcas distintas quedan las diez", async () => {
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        doc.cambiar((actual) => ({ ...actual, [`c${i}`]: i }))
+      )
+    );
+
+    expect(Object.keys(await doc.leer())).toHaveLength(10);
+  });
+});

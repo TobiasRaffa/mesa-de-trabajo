@@ -39,6 +39,7 @@ import {
   abrirCarpeta,
   habilitarExtraDePieza,
   historiaDeCarpeta,
+  unirConLaOtra,
 } from "@/app/(admin)/gestion/acciones";
 import { DetalleDePieza } from "@/admin/DetalleDePieza";
 import { ConfigurarPieza } from "@/admin/ConfigurarPieza";
@@ -286,7 +287,13 @@ export function ResumenDeTrabajo({
             )}
 
             {pieza && (
-              <Ficha pieza={pieza} detalle={detalle} comparando={comparando === pieza.id} />
+              <Ficha
+                pieza={pieza}
+                detalle={detalle}
+                comparando={comparando === pieza.id}
+                carpetaId={c.carpetaId}
+                alUnir={recargar}
+              />
             )}
           </div>
 
@@ -398,10 +405,15 @@ function Ficha({
   pieza: p,
   detalle,
   comparando,
+  carpetaId,
+  alUnir,
 }: {
   pieza: NodoArchivo;
   detalle?: PiezaConHistoria;
   comparando: boolean;
+  carpetaId: string;
+  /** Se unió con la otra: hay que volver a pedir la carpeta. */
+  alUnir: () => void;
 }) {
   // La última vuelta es la que se está mirando, y es la que tiene imagen.
   const archivo = p.archivos[p.archivos.length - 1];
@@ -461,15 +473,15 @@ function Ficha({
           nombre, y el cliente puede terminar mirando un archivo distinto del
           que estaba revisando, sin que nadie se entere de nada.
 
-          La aplicación no lo arregla sola —mudar lo anotado de un trabajo a
-          otro es lo más delicado que tiene— pero lo dice, y dice cómo.
+          **El botón renombra en Drive, que es de donde salió el problema.**
+          No muda lo anotado de un trabajo al otro —sería lo más delicado que
+          la aplicación podría hacer— sino que le devuelve la marca de versión
+          al archivo que la perdió, y el grupo se rehace solo. Lo decide una
+          persona porque desde afuera no se puede saber si son un trabajo
+          partido o el mismo entregado en dos formatos, que pasa todo el tiempo.
         */}
         {p.comparteNombre && (
-          <p className="border-l-4 border-alerta bg-alerta-tenue px-3 py-2 text-menudo font-semibold text-alerta">
-            Hay otro trabajo en esta carpeta que también se llama «{p.nombre}», en otro
-            formato. Si son el mismo trabajo, ponele la marca de versión al que le falta
-            —«V2_{p.nombre}»— y se juntan solos. Si de verdad son dos, dejalo así.
-          </p>
+          <Unir carpetaId={carpetaId} pieza={p} alUnir={alUnir} />
         )}
 
         {p.vueltaAtrasada && (
@@ -512,6 +524,96 @@ function Ficha({
 
         {detalle && <DetalleDePieza pieza={detalle} vueltas={p.vueltas} />}
       </div>
+    </div>
+  );
+}
+
+/**
+ * El aviso de que un renombre partió un trabajo en dos, con cómo arreglarlo.
+ *
+ * Renombrar en el Drive del cliente no es poca cosa, así que pide confirmar y
+ * dice exactamente qué va a pasar. Se puede deshacer renombrando de nuevo.
+ */
+function Unir({
+  carpetaId,
+  pieza,
+  alUnir,
+}: {
+  carpetaId: string;
+  pieza: NodoArchivo;
+  alUnir: () => void;
+}) {
+  const [seguro, setSeguro] = useState(false);
+  const [yendo, setYendo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function unir() {
+    setYendo(true);
+    setError(null);
+    try {
+      const r = await unirConLaOtra(carpetaId, pieza.id);
+      if (r.ok) alUnir();
+      else setError(r.motivo);
+    } catch {
+      setError("No pude renombrar en Drive.");
+    } finally {
+      setYendo(false);
+    }
+  }
+
+  return (
+    <div className="border-l-4 border-alerta bg-alerta-tenue px-3 py-2">
+      <p className="text-menudo font-semibold text-alerta">
+        Hay otro trabajo en esta carpeta que también se llama «{pieza.nombre}», en otro
+        formato. Si son el mismo, unilos; si de verdad son dos, dejalo así.
+      </p>
+
+      {!seguro ? (
+        <button
+          type="button"
+          onClick={() => setSeguro(true)}
+          className="mt-2 min-h-toque border-2 border-alerta px-3 text-menudo font-bold
+                     tracking-tight text-alerta transition-colors hover:bg-alerta/10"
+        >
+          Es el mismo trabajo: unirlos
+        </button>
+      ) : (
+        <div className="mt-2">
+          <p className="text-menudo text-alerta">
+            Se le va a poner la marca de versión en Drive a{" "}
+            {pieza.versiones.length === 1
+              ? "este archivo"
+              : `estos ${pieza.versiones.length} archivos`}
+            , para que pasen a ser las vueltas siguientes del otro. Se deshace
+            renombrando de nuevo.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={unir}
+              disabled={yendo}
+              className="min-h-toque bg-alerta px-3 text-menudo font-bold tracking-tight
+                         text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              {yendo ? "Uniendo…" : "Sí, unirlos"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSeguro(false)}
+              className="min-h-toque px-3 text-menudo font-semibold text-alerta underline
+                         underline-offset-2"
+            >
+              Mejor no
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <p aria-live="polite" className="mt-2 text-menudo font-semibold text-alerta">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

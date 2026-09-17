@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agruparVersiones,
+  comoVueltaDe,
   leerNombre,
   identidadDePieza,
   nombreDePieza,
@@ -589,5 +590,63 @@ describe("la versión cero no existe", () => {
 
   it("la V1 escrita sí vale", () => {
     expect(leerNombre("V1_stickers.pdf").marcado).toBe(true);
+  });
+});
+
+describe("volver a juntar un trabajo que un renombre partió", () => {
+  // **El arreglo pasa por el nombre, no por lo anotado.** Un trabajo se arma
+  // juntando los archivos que, después de la marca de versión, dicen lo mismo:
+  // sacarle la marca a uno lo saca del grupo y funda otro trabajo. Devolverle
+  // la marca lo devuelve al grupo, sin tocar nada de lo guardado.
+  it("le devuelve la marca de versión, con su extensión", () => {
+    expect(comoVueltaDe("stickers.jpeg", "stickers", 4)).toBe("V4_stickers.jpeg");
+  });
+
+  it("una vuelta puede estar en otro formato", () => {
+    // Es válido y pasa: un JPG para mirar rápido, el PDF para imprenta.
+    expect(comoVueltaDe("stickers.jpg", "stickers", 5)).toBe("V5_stickers.jpg");
+  });
+
+  it("un archivo sin extensión no gana una", () => {
+    expect(comoVueltaDe("stickers", "stickers", 2)).toBe("V2_stickers");
+  });
+
+  it("y el nombre que sale vuelve a leerse como esa vuelta de esa pieza", () => {
+    // Es la vuelta entera: si lo que se escribe no lo lee el agrupador como la
+    // vuelta que se quiso poner, el renombre parte el trabajo otra vez.
+    const nuevo = comoVueltaDe("stickers.jpeg", "stickers", 4);
+    const leido = leerNombre(nuevo);
+
+    expect(leido.version).toBe(4);
+    expect(leido.titulo).toBe("stickers");
+    expect(leido.marcado).toBe(true);
+  });
+
+  it("los archivos renombrados se agrupan con la pieza de destino", () => {
+    // El caso de verdad: la pieza arranca con un archivo sin marca, y a la
+    // última vuelta —«V4_stickers.jpeg»— alguien le sacó la marca.
+    const enteros = [
+      { name: "stickers.pdf" },
+      { name: "V2_stickers.pdf" },
+      { name: "V3_stickers.pdf" },
+    ];
+    const suelto = { name: "stickers.jpeg" };
+
+    const partido = agruparVersiones([...enteros, suelto]);
+    expect(partido, "Antes de unir son dos trabajos distintos.").toHaveLength(2);
+    expect(partido.every((x) => x.comparteNombre)).toBe(true);
+
+    const unido = agruparVersiones([
+      ...enteros,
+      { name: comoVueltaDe(suelto.name, "stickers", 4) },
+    ]);
+
+    expect(unido).toHaveLength(1);
+    expect(unido[0].versiones.map((v) => v.numero)).toEqual([1, 2, 3, 4]);
+    expect(unido[0].comparteNombre).toBe(false);
+    expect(
+      unido[0].base,
+      "La identidad no se mueve: lo anotado se sigue encontrando."
+    ).toBe("stickers.pdf");
   });
 });

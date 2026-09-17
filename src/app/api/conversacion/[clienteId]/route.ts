@@ -17,16 +17,25 @@
 import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { entroAlCliente } from "@/lib/acceso";
-import { leerConversacion } from "@/lib/conversaciones";
+import {
+  hayAnteriores,
+  leerConversacion,
+  leerConversacionEntera,
+} from "@/lib/conversaciones";
 
 const sinDetalle = (mensaje: string, codigo: number) =>
   new Response(mensaje, { status: codigo, headers: { "Content-Type": "text/plain" } });
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: RouteContext<"/api/conversacion/[clienteId]">
 ) {
   const { clienteId } = await ctx.params;
+
+  // **Por omisión se manda solo el hilo vivo.** Lo de antes se pide a mano,
+  // desde «ver lo anterior»: traer tres años de charla en cada vuelta del
+  // reloj sería pagar justo el precio que el techo vino a sacar.
+  const entera = req.nextUrl.searchParams.get("entera") === "si";
 
   // Igual que con los archivos: si no corresponde, se contesta como si no
   // existiera. Un 403 confirmaría que el cliente existe.
@@ -35,9 +44,12 @@ export async function GET(
   }
 
   try {
-    const mensajes = await leerConversacion(clienteId);
+    const [mensajes, hay] = await Promise.all([
+      entera ? leerConversacionEntera(clienteId) : leerConversacion(clienteId),
+      hayAnteriores(clienteId),
+    ]);
     return Response.json(
-      { mensajes },
+      { mensajes, hayAnteriores: hay && !entera },
       // Una conversación no se cachea: el sentido de preguntar es enterarse
       // de lo último.
       { headers: { "Cache-Control": "no-store" } }

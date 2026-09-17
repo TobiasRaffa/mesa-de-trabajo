@@ -52,13 +52,61 @@ function esMensaje(m: unknown): m is Mensaje {
   );
 }
 
-/** Una conversación es un documento: el hilo entero de un cliente. */
+/** Una conversación es un documento: el hilo vivo de un cliente. */
 type Hilo = { mensajes: Mensaje[] };
 
 const esHilo = (v: unknown): v is Hilo =>
   Boolean(v) && typeof v === "object" && Array.isArray((v as Hilo).mensajes);
 
 const almacen = coleccion<Hilo>("conversaciones", esHilo);
+
+// ---------------------------------------------------------------------------
+// El techo
+//
+// **Una conversación no puede crecer para siempre.** Cada mensaje reescribe el
+// hilo entero, así que un hilo de tres años hace lento cada guardado —y lo hace
+// de a poco, sin que nadie pueda señalar el día en que empezó—.
+//
+// **Nada se borra.** Lo viejo se muda a un tramo aparte y se sigue pudiendo
+// leer: el hilo vivo queda corto, y quien quiere ver lo de antes lo pide. Es la
+// misma regla de siempre: lo que se saca de la vista se marca, no se elimina.
+//
+// El tramo se escribe **antes** de sacar los mensajes del hilo vivo. Al revés
+// —sacar y después escribir—, un corte en el medio se lleva puestos doscientos
+// mensajes de alguien. Así, lo peor que puede pasar es que queden en los dos
+// lados un rato, y eso se arregla solo porque al leer se descartan los
+// repetidos.
+
+/** Cuántos mensajes quedan a mano. */
+const TOPE_VIVO = 300;
+
+/**
+ * Cuánto se deja crecer por encima del tope antes de mudar.
+ *
+ * Sin este margen se mudaría un mensaje en cada mensaje a partir del 301: dos
+ * escrituras por cada cosa que alguien dice, para siempre. Con él se muda una
+ * vez cada cien.
+ */
+const MARGEN = 100;
+
+const tramos = coleccion<Hilo>("conversaciones-antes", esHilo);
+
+/**
+ * Cómo se llama un tramo.
+ *
+ * Por el primer mensaje que lleva adentro, y no por un número que se va
+ * contando: un contador guardado aparte se puede leer dos veces igual y dejar
+ * dos tramos con el mismo nombre, que es un tramo pisando al otro. El
+ * identificador de un mensaje ya es único y no hace falta coordinarlo.
+ */
+const nombreDeTramo = (clienteId: string, primero: Mensaje) =>
+  `${clienteId}::${primero.id}`;
+
+const esDe = (clave: string, clienteId: string) => clave.startsWith(`${clienteId}::`);
+
+/** Lo que sale del almacén se valida y se ordena por cuándo se dijo. */
+const enOrden = (mensajes: Mensaje[]) =>
+  mensajes.filter(esMensaje).sort((a, b) => a.cuando.localeCompare(b.cuando));
 
 export async function leerConversacion(clienteId: string): Promise<Mensaje[]> {
   const hilo = await almacen.uno(clienteId);
@@ -67,11 +115,42 @@ export async function leerConversacion(clienteId: string): Promise<Mensaje[]> {
   return (hilo?.mensajes ?? []).filter(esMensaje);
 }
 
+/** Si este cliente tiene mensajes guardados de antes del hilo vivo. */
+export async function hayAnteriores(clienteId: string): Promise<boolean> {
+  return Object.keys(await tramos.todo()).some((clave) => esDe(clave, clienteId));
+}
+
+/**
+ * La conversación entera, incluidos los tramos viejos.
+ *
+ * Se pide a mano desde la pantalla —«ver lo anterior»— y no se trae siempre: el
+ * sentido del techo es justamente no cargar tres años de charla para escribir
+ * una línea.
+ */
+export async function leerConversacionEntera(clienteId: string): Promise<Mensaje[]> {
+  const [viejos, vivos] = await Promise.all([tramos.todo(), leerConversacion(clienteId)]);
+
+  const todos = Object.entries(viejos)
+    .filter(([clave]) => esDe(clave, clienteId))
+    .flatMap(([, hilo]) => hilo.mensajes)
+    .concat(vivos);
+
+  // Sin repetidos: si se cortó la luz entre escribir el tramo y sacarlos del
+  // hilo vivo, los mismos mensajes están en los dos lados.
+  const porId = new Map(todos.filter(esMensaje).map((m) => [m.id, m]));
+  return enOrden([...porId.values()]);
+}
+
 /**
  * Agrega un mensaje y devuelve la conversación entera.
  *
  * Devuelve todo y no solo el mensaje nuevo para que quien escribió vea al
  * instante lo que el otro lado dijo mientras tanto.
+ *
+ * **Se escribe en un solo paso.** Antes era leer, sumar y guardar: el cliente
+ * y la agencia escribiendo en la misma fracción de segundo leían lo mismo, y
+ * el segundo en guardar se llevaba puesto el mensaje del primero —que no
+ * llegaba nunca, sin error y sin aviso—.
  */
 export async function agregarMensaje(
   clienteId: string,
@@ -82,12 +161,49 @@ export async function agregarMensaje(
   const limpio = texto.trim().slice(0, LARGO_MAXIMO);
   if (!limpio) return leerConversacion(clienteId);
 
-  const mensajes = [
-    ...(await leerConversacion(clienteId)),
-    { id: randomUUID(), de, quien, texto: limpio, cuando: new Date().toISOString() },
-  ];
-  await almacen.guardar(clienteId, { mensajes });
-  return mensajes;
+  const nuevo: Mensaje = {
+    id: randomUUID(),
+    de,
+    quien,
+    texto: limpio,
+    cuando: new Date().toISOString(),
+  };
+
+  const hilo = await almacen.cambiar(clienteId, (actual) => ({
+    mensajes: [...(actual?.mensajes ?? []).filter(esMensaje), nuevo],
+  }));
+
+  const mensajes = hilo?.mensajes ?? [nuevo];
+  if (mensajes.length <= TOPE_VIVO + MARGEN) return mensajes;
+
+  return mudarLoViejo(clienteId, mensajes);
+}
+
+/**
+ * Manda los más viejos a un tramo aparte y devuelve el hilo vivo que quedó.
+ *
+ * Si algo falla, **no se pierde nada y no se avisa**: la conversación ya quedó
+ * guardada, el mensaje llegó, y hacer fallar el envío por no haber podido
+ * ordenar sería romper lo que sí funcionó. Se vuelve a intentar con el mensaje
+ * siguiente.
+ */
+async function mudarLoViejo(clienteId: string, mensajes: Mensaje[]): Promise<Mensaje[]> {
+  const viejos = mensajes.slice(0, mensajes.length - TOPE_VIVO);
+  if (viejos.length === 0) return mensajes;
+
+  try {
+    await tramos.guardar(nombreDeTramo(clienteId, viejos[0]), { mensajes: viejos });
+
+    const mudados = new Set(viejos.map((m) => m.id));
+    const quedo = await almacen.cambiar(clienteId, (actual) => ({
+      // Por identificador y no por posición: entre el tramo y esto pudo entrar
+      // otro mensaje, y cortar por número se lo llevaría puesto.
+      mensajes: (actual?.mensajes ?? []).filter((m) => !mudados.has(m.id)),
+    }));
+    return quedo?.mensajes ?? mensajes;
+  } catch {
+    return mensajes;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -126,9 +242,14 @@ async function leerMarcas(): Promise<Marcas> {
 }
 
 export async function marcarLeido(lado: Lado, clienteId: string): Promise<void> {
-  const actuales = await leerMarcas();
-  actuales[lado][clienteId] = new Date().toISOString();
-  await marcas.escribir(actuales);
+  // En un solo paso: las marcas de los dos lados viven en el mismo documento, y
+  // el cliente y la agencia mirando a la vez perdían una de las dos.
+  const ahora = new Date().toISOString();
+  await marcas.cambiar((actual) => ({
+    ...VACIAS,
+    ...actual,
+    [lado]: { ...(actual?.[lado] ?? {}), [clienteId]: ahora },
+  }));
 }
 
 /** Cuántos mensajes del otro lado quedaron sin leer, por cliente. */
@@ -143,5 +264,8 @@ export async function sinLeerPorCliente(lado: Lado): Promise<Record<string, numb
       (m) => esMensaje(m) && m.de === delOtro && m.cuando > desde
     ).length;
   }
+  // Los tramos viejos no se miran: lo que quedó sin leer de hace trescientos
+  // mensajes ya no es una notificación, y leerlos todos para contar cero sería
+  // pagar justo el precio que el techo vino a sacar.
   return salida;
 }
