@@ -180,6 +180,20 @@ export function hayAlgoParaEntregar(
 }
 
 /**
+ * ¿La tenemos nosotros?
+ *
+ * **Decide cuál de los dos relojes se muestra.** Hay dos y son distintos: el
+ * del cliente —los días que tiene para revisar, que se le vencen— y el
+ * nuestro, que no es un plazo sino una cuenta de cuánto hace que algo no se
+ * mueve. Mostrar el vencimiento del cliente sobre una pieza que está de
+ * nuestro lado es mostrar un reloj que no corre para nadie: el cliente ya
+ * contestó, y lo que falta es trabajo nuestro.
+ */
+export function laTenemosNosotros(estado: Estado): boolean {
+  return estado === "en_curso" || estado === "extra_pedida";
+}
+
+/**
  * Hace cuántos días lo tenemos nosotros.
  *
  * **No es un plazo: es una cuenta.** El cliente tiene días para revisar y se le

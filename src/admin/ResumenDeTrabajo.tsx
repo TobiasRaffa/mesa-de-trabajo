@@ -48,7 +48,12 @@ import { Estado } from "@/ui/Estado";
 import { Miniatura } from "@/ui/Miniatura";
 import { Boton, BotonEnlace } from "@/ui/Boton";
 import { urlDeMiniatura } from "@/lib/miniaturas";
-import { diasConNosotros, hayAlgoParaEntregar, sigueEnJuego } from "@/dominio/pieza";
+import {
+  diasConNosotros,
+  hayAlgoParaEntregar,
+  laTenemosNosotros,
+  sigueEnJuego,
+} from "@/dominio/pieza";
 import {
   IconoCerrar,
   IconoComparar,
@@ -458,15 +463,31 @@ function Ficha({
 
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-menudo">
           <Dato rotulo="A cargo de">{p.responsableA ?? "sin asignar"}</Dato>
-          {p.vence && <Dato rotulo="Vence">{enPalabrasElDia(p.vence)}</Dato>}
-          {p.publicaEl && <Dato rotulo="Sale">{enPalabrasElDia(p.publicaEl)}</Dato>}
-          {/* Hace cuánto que la tenemos nosotros. No es un plazo —no tenemos
-              límite— pero dice si algo se está quedando quieto. */}
-          {nuestros !== null && (
-            <Dato rotulo="Con nosotros" tono={tonoDeEspera(nuestros)}>
-              {nuestros} {nuestros === 1 ? "día" : "días"}
-            </Dato>
+          {/*
+            **Un reloj a la vez, el que de verdad corre.**
+            Hay dos y son distintos: el del cliente —los días que tiene para
+            revisar, que se le vencen— y el nuestro, que no es un plazo sino la
+            cuenta de cuánto hace que algo no se mueve. Se mostraban los dos
+            juntos, así que se leía «vence el 11 oct» sobre una pieza que el
+            cliente ya contestó: un reloj que no corre para nadie.
+          */}
+          {laTenemosNosotros(p.estado) ? (
+            <>
+              {p.entregadaEl && (
+                <Dato rotulo="Se entregó">
+                  {enPalabrasElDia(p.entregadaEl.slice(0, 10))}
+                </Dato>
+              )}
+              {nuestros !== null && (
+                <Dato rotulo="Con nosotros" tono={tonoDeEspera(nuestros)}>
+                  {nuestros} {nuestros === 1 ? "día" : "días"}
+                </Dato>
+              )}
+            </>
+          ) : (
+            p.vence && <Dato rotulo="Vence">{enPalabrasElDia(p.vence)}</Dato>
           )}
+          {p.publicaEl && <Dato rotulo="Sale">{enPalabrasElDia(p.publicaEl)}</Dato>}
         </dl>
 
         {detalle && <DetalleDePieza pieza={detalle} vueltas={p.vueltas} />}

@@ -229,3 +229,111 @@ describe("lo que se descarta", () => {
     expect(comentariosDeArchivo).not.toHaveBeenCalled();
   });
 });
+
+describe("mientras la vuelta esté abierta, los dos lados son el mismo", () => {
+  // Corregir en Drive lo que uno escribió es lo más común del mundo. Sin esto,
+  // la agencia recibía la primera redacción y el cliente veía la segunda: dos
+  // textos distintos para el mismo pedido, que es peor que no tener el segundo.
+
+  const yaCopiado = (texto: string) =>
+    pieza({
+      cambios: [{ id: "drive:c1", texto }],
+      comentariosCopiados: ["c1"],
+    });
+
+  it("si lo corrigen en Drive, se corrige acá", async () => {
+    conDrive(comentario({ id: "c1", texto: "el importe en negrita", hoja: 2 }));
+
+    const { estados } = await conLosComentariosDelCliente(LA_PIEZA, {
+      "carpeta::logo.pdf": yaCopiado("Hoja 1: el importe mas grande"),
+    });
+
+    expect(estados["carpeta::logo.pdf"].cambios).toEqual([
+      { id: "drive:c1", texto: "Hoja 2: el importe en negrita" },
+    ]);
+  });
+
+  it("si lo borran en Drive, se borra acá", async () => {
+    conDrive();
+
+    const { estados } = await conLosComentariosDelCliente(LA_PIEZA, {
+      "carpeta::logo.pdf": yaCopiado("Hoja 1: el importe mas grande"),
+    });
+
+    expect(estados["carpeta::logo.pdf"].cambios).toEqual([]);
+  });
+
+  it("si lo resuelven en Drive, también se va", async () => {
+    conDrive(comentario({ id: "c1", resuelto: true }));
+
+    const { estados } = await conLosComentariosDelCliente(LA_PIEZA, {
+      "carpeta::logo.pdf": yaCopiado("Hoja 1: el importe mas grande"),
+    });
+
+    expect(estados["carpeta::logo.pdf"].cambios).toEqual([]);
+  });
+
+  it("y no se toca lo que el cliente escribió en el portal", async () => {
+    // Solo sigue al comentario lo que salió de un comentario. Lo escrito acá
+    // es suyo y nada de Drive puede borrarlo.
+    conDrive();
+
+    const { estados } = await conLosComentariosDelCliente(LA_PIEZA, {
+      "carpeta::logo.pdf": pieza({
+        cambios: [
+          { id: "propio", texto: "el logo más chico" },
+          { id: "drive:c1", texto: "Hoja 1: algo" },
+        ],
+        comentariosCopiados: ["c1"],
+      }),
+    });
+
+    expect(estados["carpeta::logo.pdf"].cambios).toEqual([
+      { id: "propio", texto: "el logo más chico" },
+    ]);
+  });
+
+  it("sin cambios de verdad, no se escribe nada", async () => {
+    conDrive(comentario({ id: "c1", texto: "el importe mas grande", hoja: 1 }));
+
+    await conLosComentariosDelCliente(LA_PIEZA, {
+      "carpeta::logo.pdf": yaCopiado("Hoja 1: el importe mas grande"),
+    });
+
+    expect(guardarPiezas).not.toHaveBeenCalled();
+  });
+});
+
+describe("una vez mandada la revisión, lo pedido queda firme", () => {
+  // De ahí en más es lo que la agencia está trabajando: cambiarlo por atrás
+  // sería cambiarle el pedido a alguien que ya empezó.
+  const mandada = (texto: string) =>
+    pieza({
+      estado: "cambios_marcados",
+      enviada: true,
+      cambios: [{ id: "drive:c1", texto }],
+      comentariosCopiados: ["c1"],
+    });
+
+  it("corregirlo en Drive ya no lo cambia", async () => {
+    conDrive(comentario({ id: "c1", texto: "otra cosa distinta" }));
+
+    const { estados } = await conLosComentariosDelCliente(LA_PIEZA, {
+      "carpeta::logo.pdf": mandada("Hoja 1: el importe mas grande"),
+    });
+
+    expect(estados["carpeta::logo.pdf"].cambios).toEqual([
+      { id: "drive:c1", texto: "Hoja 1: el importe mas grande" },
+    ]);
+  });
+
+  it("borrarlo en Drive tampoco", async () => {
+    conDrive();
+
+    const { estados } = await conLosComentariosDelCliente(LA_PIEZA, {
+      "carpeta::logo.pdf": mandada("Hoja 1: el importe mas grande"),
+    });
+
+    expect(estados["carpeta::logo.pdf"].cambios).toHaveLength(1);
+  });
+});

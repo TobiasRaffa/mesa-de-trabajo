@@ -75,6 +75,16 @@ export function HistoriaDePiezas({ piezas }: { piezas: PiezaConHistoria[] }) {
                     {pieza.comentarios.map((c) => (
                       <li key={c.id} className="text-menudo text-tinta-suave">
                         <span className="font-bold">{c.quien}</span>
+                        {/* **La hoja, también acá.** Se mostraba en la ventana
+                            del trabajo y no en esta pantalla: el mismo
+                            comentario decía dónde estaba en un lado y en el
+                            otro no, que es la clase de diferencia que hace
+                            desconfiar de las dos. */}
+                        {c.hoja !== undefined && (
+                          <span className="ml-1.5 bg-espera-borde/30 px-1.5 py-0.5 text-micro font-extrabold uppercase tracking-wider text-espera">
+                            hoja {c.hoja}
+                          </span>
+                        )}
                         <span className="text-apagado"> · {enPalabras(c.cuando)}</span>
                         {c.resuelto && (
                           <span className="ml-2 text-micro font-extrabold uppercase tracking-wider text-apagado">

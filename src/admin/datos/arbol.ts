@@ -168,6 +168,8 @@ export type NodoArchivo = {
   diasQueCorren: number;
   /** Cuándo vence, calculado: el día que se subió más los días. */
   vence?: string;
+  /** Cuándo se le entregó al cliente, si se le entregó. ISO. */
+  entregadaEl?: string;
   /** Quién está puesto a mano acá. `null` es «nadie»; ausente es «hereda». */
   responsable?: string | null;
   responsableQueCorre: string | null;
@@ -354,6 +356,7 @@ async function archivosDeCarpeta(
       estado: estado.estado,
       /** Qué vuelta se le entregó, para saber si hay algo nuevo que mandarle. */
       versionEntregada: estado.versionEntregada,
+      entregadaEl: estado.entregadaEl,
       vueltas: pieza.versiones.length,
       ronda: estado.ronda,
       mudada: estado.mudada,

@@ -40,6 +40,7 @@ import { Entregar } from "@/admin/Entregar";
 import { ResumenDeTrabajo, type TrabajoParaMirar } from "@/admin/ResumenDeTrabajo";
 import { Visibilidad } from "@/admin/Visibilidad";
 import { Estado } from "@/ui/Estado";
+import { laTenemosNosotros } from "@/dominio/pieza";
 import { IconoConfig, IconoDrive, IconoFlecha } from "@/ui/Icono";
 
 const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
@@ -892,7 +893,15 @@ function FilaArchivo({
           <span className="text-micro text-apagado">
             {archivo.vueltas > 1 && `v${archivo.vueltas} · `}
             {archivo.diasQueCorren} {archivo.diasQueCorren === 1 ? "día" : "días"}
-            {archivo.vence && ` · vence el ${comoFecha(archivo.vence)}`}
+            {/* **El vencimiento es del cliente, no nuestro.** Cuando la
+                pieza vuelve a nuestro lado ese reloj dejó de correr: lo que
+                importa es desde cuándo la tenemos. Mostrar los dos relojes
+                como si fueran uno hacía leer «vence el 11 oct» sobre algo que
+                el cliente ya contestó. */}
+            {laTenemosNosotros(archivo.estado)
+              ? archivo.entregadaEl &&
+                ` · se entregó el ${comoFecha(archivo.entregadaEl.slice(0, 10))}`
+              : archivo.vence && ` · vence el ${comoFecha(archivo.vence)}`}
             {archivo.publicaEl && ` · sale el ${comoFecha(archivo.publicaEl)}`}
             {archivo.responsableA ? ` · ${archivo.responsableA}` : " · sin asignar"}
           </span>

@@ -76,3 +76,14 @@ export const idDelComentario = (comentarioId: string) => `drive:${comentarioId}`
 
 /** Si este pedido salió de un comentario de Drive. */
 export const vieneDeDrive = (idDelCambio: string) => idDelCambio.startsWith("drive:");
+
+/**
+ * De qué comentario de Drive salió un pedido.
+ *
+ * Es la vuelta de `idDelComentario`, y está acá al lado por eso: son las dos
+ * mitades de la misma decisión. Sirve para seguirle el rastro al comentario
+ * mientras la vuelta está abierta —si lo corrigen o lo borran en Drive, acá
+ * pasa lo mismo—.
+ */
+export const idDeDrive = (idDelCambio: string) =>
+  vieneDeDrive(idDelCambio) ? idDelCambio.slice("drive:".length) : idDelCambio;

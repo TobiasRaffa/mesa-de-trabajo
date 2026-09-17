@@ -26,12 +26,22 @@
 //      vuelta siguiente, pero el comentario sigue en Drive: sin memoria de lo
 //      ya copiado, volvería a aparecer en la lectura siguiente y el cliente
 //      vería resucitar un pedido que ya le contestamos.
+//
+// **Mientras la revisión sigue abierta, los dos lados son el mismo.** Si el
+// cliente corrige lo que escribió en Drive, o lo borra, acá pasa lo mismo: son
+// una sola cosa mirada desde dos lugares, y dos textos distintos para el mismo
+// pedido es peor que no tener el segundo. Cuando manda la revisión se congela:
+// de ahí en más es lo que la agencia está trabajando, y cambiarlo por atrás
+// sería cambiarle el pedido a alguien que ya empezó.
 
 import {
   comoPedido,
   esDelEquipo,
+  idDeDrive,
   idDelComentario,
+  vieneDeDrive,
 } from "@/dominio/comentarios";
+import type { Cambio } from "@/lib/piezas";
 import { puedeEscribirCambios } from "@/dominio/pieza";
 import { comoFirmaElEquipo } from "@/lib/equipo";
 import { comentariosDeArchivo, type ComentarioDeDrive } from "@/lib/google";
@@ -82,6 +92,22 @@ export async function conLosComentariosDelCliente(
 
     const delCliente = porPieza[i].filter((c) => !esDelEquipo(c, firmas));
     const yaCopiados = new Set(estado.comentariosCopiados ?? []);
+    const sePuedeEscribir = puedeEscribirCambios(estado.estado, estado.enviada);
+
+    // **Lo ya copiado sigue al comentario mientras la vuelta esté abierta.**
+    // Corregir en Drive lo que uno escribió es lo más común del mundo, y sin
+    // esto la agencia recibía la primera redacción y el cliente veía la
+    // segunda. Lo borrado en Drive se va; lo reescrito se reescribe.
+    const enDrive = new Map(delCliente.map((c) => [c.id, c]));
+    // Quien congela lo ya mandado es la guarda de más abajo, que es la que
+    // decide si esto se guarda: preguntarlo dos veces era código muerto que
+    // parecía la regla.
+    const alDia = estado.cambios.flatMap((cambio) => {
+      if (!vieneDeDrive(cambio.id)) return [cambio];
+      const suyo = enDrive.get(idDeDrive(cambio.id));
+      if (!suyo || suyo.resuelto || !suyo.texto.trim()) return [];
+      return [{ ...cambio, texto: comoPedido(suyo) }];
+    });
 
     // Un comentario resuelto en Drive es una conversación terminada: entrarlo
     // como pedido nuevo sería reabrir algo que alguien ya cerró. Tampoco se
@@ -90,15 +116,17 @@ export async function conLosComentariosDelCliente(
       (c) => !yaCopiados.has(c.id) && !c.resuelto && c.texto.trim()
     );
 
-    const sePuede = puedeEscribirCambios(estado.estado, estado.enviada);
+    const cambios = [
+      ...alDia,
+      ...(sePuedeEscribir
+        ? nuevos.map((c) => ({ id: idDelComentario(c.id), texto: comoPedido(c) }))
+        : []),
+    ];
 
-    if (sePuede && nuevos.length > 0) {
+    if (sePuedeEscribir && (nuevos.length > 0 || distintos(estado.cambios, cambios))) {
       const copiado: EstadoDePieza = {
         ...estado,
-        cambios: [
-          ...estado.cambios,
-          ...nuevos.map((c) => ({ id: idDelComentario(c.id), texto: comoPedido(c) })),
-        ],
+        cambios,
         comentariosCopiados: [...yaCopiados, ...nuevos.map((c) => c.id)],
       };
       salida[id] = copiado;
@@ -109,8 +137,13 @@ export async function conLosComentariosDelCliente(
     sinCopiar[id] = delCliente.filter((c) => !yaCopiados.has(c.id));
   });
 
-  // Se escribe solo cuando de verdad entró algo, y todo junto.
+  // Se escribe solo cuando de verdad cambió algo, y todo junto.
   if (Object.keys(aGuardar).length > 0) await guardarPiezas(aGuardar);
 
   return { estados: salida, sinCopiar };
 }
+
+/** Si la lista de pedidos quedó distinta de como estaba. */
+const distintos = (antes: Cambio[], ahora: Cambio[]) =>
+  antes.length !== ahora.length ||
+  antes.some((c, i) => c.id !== ahora[i].id || c.texto !== ahora[i].texto);
