@@ -8,6 +8,7 @@
 // Va abajo del todo en la barra, con Admin: no es trabajo de todos los días.
 
 import Link from "next/link";
+import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
 import { lasFacturas } from "@/admin/datos/facturas";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { IconoDrive } from "@/ui/Icono";
@@ -37,14 +38,11 @@ export default async function Facturas() {
   const conAlguna = clientes.filter((c) => c.facturas.length > 0);
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <header className="border-b-2 border-tinta pb-6">
-        <h1 className="text-grande font-extrabold tracking-tight">Facturas</h1>
-        <p className="mt-1 text-menudo text-apagado">
-          Lo que hay en la carpeta «Facturas» de cada cliente, en Drive. El
-          cliente no las ve: su portal las tiene negadas, no solo escondidas.
-        </p>
-      </header>
+    <main className={PANTALLA}>
+      <EncabezadoDePagina
+        titulo="Facturas"
+        bajada="Lo que hay en la carpeta «Facturas» de cada cliente, en Drive. El cliente no las ve: su portal las tiene negadas, no solo escondidas."
+      />
 
       {conAlguna.length === 0 && (
         <p className="mt-8 text-normal text-apagado">

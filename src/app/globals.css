@@ -6,56 +6,93 @@
    solo se usan ahí no se generan: la pantalla se ve a medio armar y nada avisa. */
 @source "../";
 
+/* Todo lo que se toca se ve tocable. Tailwind deja los botones con el cursor
+   de flecha, y una cruz de cerrar que no cambia el cursor parece un dibujo.
+   Vale para toda la aplicación: botones, enlaces, lo que hace de botón y los
+   desplegables. Apagado, queda claro que no. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="link"],
+  a[href],
+  select:not(:disabled),
+  summary,
+  label:has(> input[type="checkbox"]:not(:disabled)),
+  label:has(> input[type="radio"]:not(:disabled)) {
+    cursor: pointer;
+  }
+  button:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
+}
+
 /* ============================================================================
-   Sistema visual — «marcado»
+   Sistema visual — el de Matter
    ============================================================================
 
-   La dirección elegida: contraste alto, tipografía con peso, bloques de color
-   definidos. Sin sombras difusas ni esquinas redondeadas — los bordes se ven.
+   La agencia se llama Matter y tiene una marca: papel crema, lima eléctrico,
+   lila, negro. Titulares pesados y anchos, en mayúsculas. Etiquetas chicas en
+   monoespaciada, como en sus piezas. Tarjetas y botones redondeados, tipo
+   pastilla. Esto es esa marca puesta a trabajar en una herramienta.
 
    Sigue mandando una regla sobre todas: **lo más fuerte de la pantalla tiene
-   que ser el trabajo del cliente**. Por eso el color fuerte se reserva para
-   las bandas de estado y los botones, y el resto es papel: los bocetos tienen
-   sus propios colores y no compiten contra un fondo saturado.
-
-   Los neutros son cálidos, girados al ocre y no al azul. Al lado de una pieza
-   impresa, un gris frío se ve enfermo; este papel se ve papel.
+   que ser el trabajo del cliente**. Por eso la lima se reserva para la acción
+   principal —aprobar, entregar— y para lo que ya está listo; el violeta señala
+   lo que se propone; y el resto es papel. Los bocetos tienen sus propios
+   colores y no compiten contra un fondo saturado.
    ============================================================================ */
 
 @theme {
-  /* Neutros: papel, no pantalla ----------------------------------------- */
-  --color-papel: #f0ede6;
+  /* Neutros: papel, no pantalla. El crema es el fondo de las piezas de Matter. */
+  --color-papel: #f2f0e4;
   --color-lienzo: #ffffff;
-  --color-hueco: #e8e4da;
-  --color-tinta: #16181d;
-  --color-tinta-suave: #45433d;
-  --color-apagado: #8a8578;
-  --color-linea: #d8d2c4;
-  --color-linea-tenue: #e6e1d6;
+  --color-hueco: #e7e4d6;
+  --color-tinta: #121212;
+  --color-tinta-suave: #3f3d37;
+  --color-apagado: #7f7b6e;
+  --color-linea: #d6d1c0;
+  --color-linea-tenue: #e5e1d3;
 
-  /* Acento: verde profundo. Es también el color de aprobar, porque aprobar
-     es la acción principal de todo el portal. ---------------------------- */
-  --color-acento: #1b4d3e;
-  --color-acento-hover: #123528;
-  --color-acento-tenue: #e0eae5;
+  /* La marca ------------------------------------------------------------ */
+  /* Lima: el color del logo. Siempre con tinta encima, nunca con blanco. */
+  --color-lima: #d1fe6f;
+  --color-lima-hover: #c2f455;
+  --color-lima-tenue: #eefdc9;
+  /* Lila: el otro color de las piezas de Matter. */
+  --color-lila: #b9a2f0;
+  --color-lila-tenue: #e9e2fb;
+
+  /* Acento: violeta profundo, sacado del lila. Es lo que se propone y lo que
+     se señala: enlaces, encabezados de ventana, la barra de avance. Va con
+     blanco encima. ------------------------------------------------------- */
+  --color-acento: #4b2fa8;
+  --color-acento-hover: #3a2287;
+  --color-acento-tenue: #e9e2fb;
 
   /* Estados ------------------------------------------------------------- */
-  --color-listo: #1b4d3e;
-  --color-listo-tenue: #e0eae5;
+  /* Listo es lima: lo aprobado se ve del color de la marca. */
+  --color-listo: #d1fe6f;
+  --color-listo-tenue: #eefdc9;
 
   /* Ámbar: lo que está esperando algo. */
-  --color-espera: #7a5c12;
-  --color-espera-tenue: #fbf1d7;
-  --color-espera-borde: #c99a2e;
+  --color-espera: #7a5610;
+  --color-espera-tenue: #fbf0d2;
+  --color-espera-borde: #d19a2a;
 
   /* Rojo: lo que está mal y hay que mirar. Se usa poco, a propósito. */
-  --color-alerta: #99341f;
-  --color-alerta-tenue: #f8e6e1;
+  --color-alerta: #a8321b;
+  --color-alerta-tenue: #f9e4de;
+
+  /* Formas: pastillas para lo que se toca, esquinas amplias para lo que
+     contiene. ----------------------------------------------------------- */
+  --radius-campo: 0.75rem;
+  --radius-tarjeta: 1.25rem;
 
   /* Tipografía ---------------------------------------------------------- */
-  /* La define el layout con next/font, servida desde nuestro dominio. */
+  /* Las define el layout con next/font, servidas desde nuestro dominio. */
   --font-sans: var(--fuente-archivo), "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --font-mono: var(--fuente-mono), ui-monospace, "SF Mono", Menlo, monospace;
 
   --text-micro: 0.6875rem;
   --text-micro--line-height: 1.35;
@@ -94,6 +131,33 @@ body {
   /* Deja libres el borde del teléfono y la barra de gestos. */
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
+}
+
+/* Los titulares, como en las piezas de Matter: pesados, anchos, en mayúsculas.
+   Archivo es variable en ancho y el layout carga ese eje; acá se usa. Los
+   nombres de clientes y de carpetas son titulares también: un nombre en un
+   cartel se ve así. */
+/* En la capa base y no suelto: una regla sin capa le gana a cualquier clase
+   de Tailwind, y entonces un título que pide otro ancho no lo consigue. */
+@layer base {
+  h1,
+  h2 {
+    font-stretch: 112%;
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Lo que se escribe y se elige tiene las esquinas redondeadas. Regla global y
+   no clase por clase, porque los campos están escritos en muchos lugares y
+   cada uno con su propia lista de clases. */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    border-radius: var(--radius-campo);
+  }
 }
 
 /* Un contorno visible al navegar con teclado. Se ve solo cuando hace falta:

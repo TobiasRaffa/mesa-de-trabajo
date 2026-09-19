@@ -20,6 +20,7 @@ import {
   cambiarAccesos,
   darDeAlta,
   editarDelEquipo,
+  generarCodigoDeAlta,
   quitarDelEquipo,
   reiniciarClaveDePersona,
 } from "@/app/(admin)/gestion/acciones";
@@ -29,6 +30,7 @@ import {
   NOMBRE_DE_ROL,
   NOMBRE_DE_SECCION,
   QUE_HAY_EN,
+  ROL_PERSONALIZADO,
   ROLES,
   SECCIONES,
   seccionesDe,
@@ -51,12 +53,18 @@ const MARCA = "mt-1 text-micro font-extrabold uppercase tracking-wider";
 export function FilaDePersona({
   persona,
   tieneClave,
+  codigoDeAlta,
   pidioOtraClave,
   clientes,
 }: {
   persona: Persona;
   /** Si ya eligió su contraseña. Sin ella existe en la lista pero no entró nunca. */
   tieneClave: boolean;
+  /**
+   * Con qué entra la primera vez, ya legible. `null` si tiene contraseña —no
+   * hace falta— o si se dio de alta antes de que existieran los códigos.
+   */
+  codigoDeAlta: string | null;
   /** Dijo que no puede entrar y está esperando que se la reinicien. */
   pidioOtraClave: boolean;
   /** Todos los que hay, para poder elegir a cuáles llega. */
@@ -101,6 +109,7 @@ export function FilaDePersona({
               todavía no entró: elige su contraseña la primera vez
             </p>
           )}
+          {!tieneClave && <CodigoDeAlta persona={persona} codigo={codigoDeAlta} />}
           {pidioOtraClave && (
             <p className={`${MARCA} text-alerta`}>
               pidió que le reinicien la contraseña
@@ -232,6 +241,11 @@ function Accesos({
         <button type="submit" disabled={guardando} className={BOTON}>
           {guardando ? "…" : "Guardar accesos"}
         </button>
+        {rol === ROL_PERSONALIZADO && (
+          <span className="text-menudo text-apagado">
+            Se tilda una por una, y es solo de esta persona.
+          </span>
+        )}
       </div>
 
       <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
@@ -409,9 +423,47 @@ function Contrasena({
           aria-live="polite"
           className={`text-menudo font-semibold ${estado.ok ? "text-acento" : "text-alerta"}`}
         >
-          {estado.ok ? "Lista: elige una nueva cuando entre." : estado.motivo}
+          {estado.ok ? "Lista: elige una nueva con el código de alta que aparece en su fila." : estado.motivo}
         </span>
       )}
+    </form>
+  );
+}
+
+/**
+ * El código con el que alguien entra la primera vez.
+ *
+ * Se muestra en la fila, y no escondido detrás de «Editar»: es lo primero que
+ * quien administra necesita después de dar de alta a alguien. Si la persona
+ * es de antes de que hubiera códigos, acá está el botón para darle uno.
+ */
+function CodigoDeAlta({ persona, codigo }: { persona: Persona; codigo: string | null }) {
+  const [estado, generar, generando] = useActionState(generarCodigoDeAlta, null);
+
+  if (codigo) {
+    return (
+      <p className="mt-1 flex flex-wrap items-baseline gap-2 text-menudo">
+        <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
+          código de alta
+        </span>
+        <span className="cifras bg-hueco px-2 py-0.5 font-bold tracking-wide">{codigo}</span>
+        <span className="text-apagado">lo escribe con su correo la primera vez</span>
+      </p>
+    );
+  }
+
+  return (
+    <form action={generar} className="mt-1 flex flex-wrap items-center gap-2 text-menudo">
+      <input type="hidden" name="id" value={persona.id} />
+      <span className="text-apagado">Sin código de alta: no puede elegir su contraseña.</span>
+      <button
+        type="submit"
+        disabled={generando}
+        className="font-semibold text-acento underline underline-offset-2 disabled:opacity-40"
+      >
+        {generando ? "…" : "Generar código"}
+      </button>
+      {estado && !estado.ok && <span className="font-semibold text-alerta">{estado.motivo}</span>}
     </form>
   );
 }
@@ -419,6 +471,9 @@ function Contrasena({
 export function SumarPersona() {
   const [abierto, setAbierto] = useState(false);
   const [estado, sumar, sumando] = useActionState(darDeAlta, null);
+  // El rol se mira mientras se elige: con «Personalizado» aparecen las
+  // secciones para tildar acá mismo.
+  const [rol, setRol] = useState<Rol>("diseno");
 
   if (!abierto) {
     return (
@@ -433,37 +488,85 @@ export function SumarPersona() {
   return (
     <section className="mt-8 border-t-2 border-tinta pt-6">
       <p className="text-menudo text-apagado">
-        Su correo y qué rol tiene. La contraseña la elige esa persona la primera
-        vez que entra, y no la sabe nadie más.
+        Su nombre, su correo y qué rol tiene. Al darla de alta aparece su código
+        de alta en la lista: se lo pasás, y con el correo y ese código elige su
+        contraseña la primera vez que entra. No la sabe nadie más.
       </p>
 
-      <form action={sumar} className="mt-3 flex flex-wrap items-center gap-2">
-        <input
-          name="correo"
-          type="email"
-          placeholder="correo"
-          aria-label="Correo"
-          required
-          className={CAMPO}
-        />
-        <select
-          name="rol"
-          defaultValue="diseno"
-          aria-label="Rol"
-          className="border border-linea bg-lienzo px-2 py-2 text-normal"
-        >
-          {ROLES.map((r) => (
-            <option key={r} value={r}>
-              {NOMBRE_DE_ROL[r]}
-            </option>
-          ))}
-        </select>
-        <button type="submit" disabled={sumando} className={BOTON}>
-          Dar de alta
-        </button>
-        <button type="button" onClick={() => setAbierto(false)} className={BOTON}>
-          Cancelar
-        </button>
+      <form action={sumar} className="mt-3 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* **El nombre se escribe acá.** Se sacaba del correo y se
+              corregía después; con eso la lista mostraba «nari» hasta que
+              alguien se acordara de editarla. */}
+          <input
+            name="nombre"
+            placeholder="nombre"
+            aria-label="Nombre"
+            required
+            minLength={2}
+            autoFocus
+            className={CAMPO}
+          />
+          <input
+            name="correo"
+            type="email"
+            placeholder="correo"
+            aria-label="Correo"
+            required
+            className={CAMPO}
+          />
+          <select
+            name="rol"
+            value={rol}
+            onChange={(e) => setRol(e.target.value as Rol)}
+            aria-label="Rol"
+            className="border border-linea bg-lienzo px-2 py-2 text-normal"
+          >
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {NOMBRE_DE_ROL[r]}
+              </option>
+            ))}
+          </select>
+          <button type="submit" disabled={sumando} className={BOTON}>
+            Dar de alta
+          </button>
+          <button type="button" onClick={() => setAbierto(false)} className={BOTON}>
+            Cancelar
+          </button>
+        </div>
+
+        {/* **Personalizado: las secciones se eligen acá, para esta persona.**
+            No es un molde compartido: lo que se tilde queda en su ficha y se
+            cambia desde su fila, sin tocar a nadie más. Con los otros roles
+            no hace falta elegir nada: el rol ya dice qué ve. */}
+        {rol === ROL_PERSONALIZADO && (
+          <fieldset className="border-l-4 border-acento bg-acento-tenue/30 py-3 pl-4 pr-3">
+            <legend className="sr-only">Secciones a las que entra</legend>
+            <p className="text-menudo font-semibold">
+              A qué partes entra. Es solo para esta persona: se cambia después
+              desde su fila.
+            </p>
+            <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+              {SECCIONES.map((seccion) => (
+                <li key={seccion}>
+                  <label className="flex items-start gap-2 text-menudo">
+                    <input
+                      type="checkbox"
+                      name="sueltas"
+                      value={seccion}
+                      className="mt-1 h-4 w-4 shrink-0 accent-[var(--color-acento)]"
+                    />
+                    <span className="min-w-0">
+                      <span className="font-semibold">{NOMBRE_DE_SECCION[seccion]}</span>
+                      <span className="block text-micro text-apagado">{QUE_HAY_EN[seccion]}</span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
+        )}
       </form>
 
       {estado && !estado.ok && (

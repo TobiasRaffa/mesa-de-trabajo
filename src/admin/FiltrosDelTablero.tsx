@@ -81,7 +81,7 @@ export function FiltrosDelTablero({
           aria-label="Quién lo lleva"
           value={filtros.quien ?? ""}
           onChange={(e) => onCambiar({ ...filtros, quien: e.target.value || null })}
-          className="h-8 border-2 border-linea bg-lienzo px-2 text-menudo font-bold
+          className="rounded-full h-8 border-2 border-linea bg-lienzo px-2 text-menudo font-bold
                      tracking-tight focus:border-acento focus:outline-none"
         >
           <option value="">Todo el equipo</option>
@@ -102,7 +102,7 @@ export function FiltrosDelTablero({
             visible: e.target.value === "" ? null : e.target.value === "si",
           })
         }
-        className="h-8 border-2 border-linea bg-lienzo px-2 text-menudo font-bold
+        className="rounded-full h-8 border-2 border-linea bg-lienzo px-2 text-menudo font-bold
                    tracking-tight focus:border-acento focus:outline-none"
       >
         <option value="">Visibles y ocultos</option>
@@ -158,7 +158,7 @@ function Interruptor({
       type="button"
       onClick={onTocar}
       aria-pressed={puesto}
-      className={`h-8 border-2 border-linea px-3 text-menudo font-bold tracking-tight
+      className={`rounded-full h-8 border-2 border-linea px-3 text-menudo font-bold tracking-tight
                   transition-colors ${
                     puesto
                       ? "border-tinta bg-tinta text-lienzo"

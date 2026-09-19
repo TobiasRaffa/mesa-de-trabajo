@@ -105,8 +105,8 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
               type="password"
               autoFocus
               autoComplete="off"
-              placeholder="contraseña del equipo"
-              aria-label={`Contraseña para ver la clave de ${cliente.nombre}`}
+              placeholder="tu contraseña"
+              aria-label={`Tu contraseña, para ver la clave de ${cliente.nombre}`}
               className={`${CAMPO} w-56`}
             />
             <button type="submit" disabled={viendo} className={BOTON}>
@@ -145,8 +145,8 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
             name="contrasena"
             type="password"
             autoComplete="off"
-            placeholder="contraseña del equipo"
-            aria-label="Contraseña del equipo"
+            placeholder="tu contraseña"
+            aria-label="Tu contraseña"
             className={`${CAMPO} w-48`}
           />
           <button type="submit" disabled={guardando} className={BOTON}>

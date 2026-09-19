@@ -16,14 +16,13 @@
 import { useState, useTransition } from "react";
 import { guardarResponsable } from "@/app/(admin)/gestion/acciones";
 import type { Persona } from "@/lib/equipo";
-import { CAMPO, ETIQUETA, GUARDAR } from "@/admin/estilos";
+import { CAMPO, GUARDAR } from "@/admin/estilos";
 
 export function Responsable({
   nivel,
   id,
   carpetaId,
   quien,
-  propio,
   equipo,
   alGuardar,
 }: {
@@ -77,9 +76,7 @@ export function Responsable({
         <button type="button" onClick={confirmar} disabled={guardando} className={GUARDAR}>
           {guardando ? "…" : "Guardar"}
         </button>
-      ) : (
-        !propio && quien !== null && <span className={ETIQUETA}>heredado</span>
-      )}
+      ) : null}
 
       {equipo.length === 0 && (
         <span className="text-menudo text-espera">Cargá gente en «Equipo».</span>

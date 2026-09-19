@@ -12,6 +12,7 @@
 // pedir que un cambio de horario lo mueva un día.
 
 import { coleccion } from "@/lib/almacen";
+import { diaEnBuenosAires } from "@/lib/fechas";
 
 /** `AAAA-MM-DD`. */
 export type DiaSuelto = string;
@@ -30,12 +31,13 @@ export function esDiaValido(dia: unknown): dia is DiaSuelto {
   );
 }
 
-/** Arma un día a partir de una fecha, en el huso de acá. */
+/**
+ * Arma un día a partir de una fecha, **en el huso de Buenos Aires** y no en
+ * el del servidor: en internet el servidor vive en tiempo universal, y la
+ * misma fecha era «ayer» a partir de las nueve de la noche.
+ */
 export function diaDe(fecha: Date): DiaSuelto {
-  const y = fecha.getFullYear();
-  const m = String(fecha.getMonth() + 1).padStart(2, "0");
-  const d = String(fecha.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return diaEnBuenosAires(fecha);
 }
 
 /**
@@ -46,8 +48,11 @@ export function diaDe(fecha: Date): DiaSuelto {
  * 11 a las 21. La pieza aparecería un día antes.
  */
 export function fechaDeDia(dia: DiaSuelto): Date {
-  const [a, m, d] = dia.split("-").map(Number);
-  return new Date(a, m - 1, d);
+  // El mediodía de Buenos Aires, a propósito. Un instante que viaja del
+  // servidor al navegador se muestra en el huso del navegador: la medianoche
+  // caía en el día anterior apenas el servidor estuviera en tiempo universal.
+  // Al mediodía, cualquier pantalla de este lado del mundo lee el mismo día.
+  return new Date(`${dia}T12:00:00-03:00`);
 }
 
 const almacen = coleccion<DiaSuelto>("publicaciones", esDiaValido);

@@ -369,6 +369,30 @@ async function mudadasDe(carpetaId: string): Promise<string[]> {
     .map(([id, p]) => p.archivoMudado ?? id);
 }
 
+/**
+ * Cuántas piezas aprobadas de esta carpeta **ya no están en ella**.
+ *
+ * Es la otra mitad de «ya se entregó»: si el equipo movió a «Entregas finales»
+ * el único archivo que había, la pieza desaparece de la carpeta entera y la
+ * única huella que queda es lo guardado acá. Sin esto la carpeta quedaba
+ * vacía, y vacía se lee como «falta subir algo», que es lo contrario.
+ *
+ * `presentes` son las identidades de lo que Drive todavía lista: las de pieza
+ * y las de archivo, porque las guardadas antes van con la clave del archivo.
+ * Lo mudado por la aplicación no cuenta: eso vuelve a listarse solo.
+ */
+export async function aprobadasQueSeFueron(
+  carpetaId: string,
+  presentes: string[]
+): Promise<number> {
+  const quedan = new Set(presentes);
+  const todo = await almacen.todo();
+  return Object.entries(todo).filter(
+    ([id, p]) =>
+      p.carpetaId === carpetaId && p.estado === "final" && !p.mudada && !quedan.has(id)
+  ).length;
+}
+
 export async function guardarPieza(piezaId: string, estado: EstadoDePieza): Promise<void> {
   await almacen.guardar(piezaId, estado);
 }

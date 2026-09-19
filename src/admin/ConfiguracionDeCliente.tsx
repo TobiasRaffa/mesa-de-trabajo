@@ -123,7 +123,7 @@ export function ConfiguracionDeCliente({
           <button
             type="submit"
             disabled={guardandoTel}
-            className="min-h-toque border-2 border-tinta px-4 text-normal font-bold
+            className="rounded-full min-h-toque border-2 border-tinta px-4 text-normal font-bold
                        tracking-tight text-tinta transition-colors hover:bg-hueco disabled:opacity-40"
           >
             {guardandoTel ? "Guardando…" : "Guardar"}
@@ -153,7 +153,7 @@ export function ConfiguracionDeCliente({
             value="si"
             disabled={cambiandoDrive}
             aria-pressed={cliente.verEnDrive}
-            className={`h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
+            className={`rounded-l-full h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
                         transition-colors disabled:opacity-40 ${
                           cliente.verEnDrive
                             ? "bg-tinta text-lienzo"
@@ -168,7 +168,7 @@ export function ConfiguracionDeCliente({
             value="no"
             disabled={cambiandoDrive}
             aria-pressed={!cliente.verEnDrive}
-            className={`h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
+            className={`rounded-r-full h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
                         tracking-tight transition-colors disabled:opacity-40 ${
                           cliente.verEnDrive
                             ? "text-tinta hover:bg-hueco"
@@ -191,7 +191,7 @@ export function ConfiguracionDeCliente({
             value="si"
             disabled={esperando}
             aria-pressed={!apagado}
-            className={`h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
+            className={`rounded-l-full h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
                         transition-colors disabled:opacity-40 ${
                           apagado ? "text-tinta hover:bg-hueco" : "bg-tinta text-lienzo"
                         }`}
@@ -204,7 +204,7 @@ export function ConfiguracionDeCliente({
             value="no"
             disabled={esperando}
             aria-pressed={apagado}
-            className={`h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
+            className={`rounded-r-full h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
                         tracking-tight transition-colors disabled:opacity-40 ${
                           apagado ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
                         }`}

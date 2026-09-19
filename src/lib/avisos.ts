@@ -24,6 +24,9 @@ export type ClaseDeAviso =
   | "pidio_extra"
   | "envio_revision"
   | "escribio"
+  /** Pasó la mitad del plazo y el cliente todavía no decidió. Lo manda el calendario. */
+  | "por_vencer"
+  /** Se cumplió el plazo y todavía falta revisar. Lo manda el calendario. */
   | "vencio";
 
 export type Aviso = {
@@ -51,6 +54,13 @@ export type Aviso = {
   detalleDelCorreo?: string;
   /** Alguien de la agencia ya lo miró. */
   visto: boolean;
+  /**
+   * Cuántas veces pasó lo mismo seguido, cuando el aviso junta varias.
+   *
+   * Sin esto es una. Lo llevan los mensajes: cuatro seguidos del cliente son
+   * un aviso que dice «cuatro», no cuatro renglones iguales.
+   */
+  veces?: number;
 };
 
 /** Cuántos se guardan. Más viejo que esto es historia, y esa vive en la pieza. */
@@ -90,6 +100,65 @@ export async function anotarAviso(
   for (const id of sobran) cambios[id] = undefined;
 
   await almacen.guardarVarios(cambios);
+  return nuevo;
+}
+
+/**
+ * Cuánto tiempo seguido cuenta como «la misma vez». Cinco minutos: lo que
+ * tarda alguien en escribir una idea en cuatro mensajes.
+ */
+export const VENTANA_DE_RACHA = 5 * 60 * 1000;
+
+/**
+ * ¿Este aviso es la continuación de aquel?
+ *
+ * **Cuatro mensajes seguidos del cliente son una sola novedad.** Uno por
+ * mensaje llenaba la bandeja de renglones iguales —«Escribió en la
+ * conversación» cuatro veces— y hacía que el número de sin leer dijera cuatro
+ * cuando lo que había era una persona escribiendo.
+ *
+ * Se suma al anterior cuando es de la misma clase, del mismo cliente, llegó
+ * dentro de la ventana **y nadie lo vio todavía**. Visto, lo nuevo es nuevo:
+ * si alguien miró la bandeja entre un mensaje y el otro, el segundo tiene que
+ * volver a avisarle.
+ */
+export function continuaA(
+  anterior: Pick<Aviso, "clase" | "clienteId" | "cuando" | "visto">,
+  nuevo: { clase: ClaseDeAviso; clienteId: string },
+  ahora: Date,
+  ventana = VENTANA_DE_RACHA
+): boolean {
+  if (anterior.visto) return false;
+  if (anterior.clase !== nuevo.clase || anterior.clienteId !== nuevo.clienteId) return false;
+  const desde = new Date(anterior.cuando).getTime();
+  if (Number.isNaN(desde)) return false;
+  const pasaron = ahora.getTime() - desde;
+  return pasaron >= 0 && pasaron <= ventana;
+}
+
+/**
+ * El aviso más nuevo al que se sumaría uno de esta clase y cliente, si hay.
+ *
+ * Solo tiene sentido para lo que se repite —mensajes—: una aprobación y otra
+ * son dos cosas distintas aunque vengan seguidas, y quien llama decide.
+ */
+export async function avisoQueContinua(
+  nuevo: { clase: ClaseDeAviso; clienteId: string },
+  ahora = new Date()
+): Promise<Aviso | null> {
+  const ultimo = (await losAvisos()).find(
+    (a) => a.clase === nuevo.clase && a.clienteId === nuevo.clienteId
+  );
+  return ultimo && continuaA(ultimo, nuevo, ahora) ? ultimo : null;
+}
+
+/** Reescribe un aviso que ya está: el texto y la hora, que pasa a ser ahora. */
+export async function actualizarAviso(
+  aviso: Aviso,
+  cambios: Partial<Pick<Aviso, "texto" | "cuando" | "veces">>
+): Promise<Aviso> {
+  const nuevo = { ...aviso, ...cambios };
+  await almacen.guardar(aviso.id, nuevo);
   return nuevo;
 }
 

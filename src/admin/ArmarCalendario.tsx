@@ -158,7 +158,7 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
             type="button"
             onClick={() => moverMes(-1)}
             aria-label="Mes anterior"
-            className="grid h-10 w-10 place-items-center border-2 border-tinta text-tinta transition-colors hover:bg-hueco"
+            className="rounded-full grid h-10 w-10 place-items-center border-2 border-tinta text-tinta transition-colors hover:bg-hueco"
           >
             <IconoFlecha className="rotate-180" />
           </button>
@@ -169,7 +169,7 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
             type="button"
             onClick={() => moverMes(1)}
             aria-label="Mes siguiente"
-            className="grid h-10 w-10 place-items-center border-2 border-tinta text-tinta transition-colors hover:bg-hueco"
+            className="rounded-full grid h-10 w-10 place-items-center border-2 border-tinta text-tinta transition-colors hover:bg-hueco"
           >
             <IconoFlecha />
           </button>

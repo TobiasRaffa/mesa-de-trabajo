@@ -126,6 +126,24 @@ export async function guardarAjustesDe(
  * compartir por separado no necesita link, y generarlos todos de entrada
  * llenaría el almacén de tokens que no se usan nunca.
  */
+/**
+ * Qué carpeta abre cada link de carpeta: token → carpeta.
+ *
+ * Sale del almacén y no de Drive: buscar un token recorriendo las carpetas de
+ * cada cliente en Drive costaba un pedido por cliente **en cada visita al
+ * portal**. Acá es una lectura, y después se confirma en Drive solo la
+ * carpeta que el token nombra.
+ */
+export async function carpetasConLink(): Promise<Record<string, string>> {
+  const guardados = await almacen.todo();
+  const salida: Record<string, string> = {};
+  for (const [carpetaId, crudo] of Object.entries(guardados)) {
+    const { token } = normalizar(crudo);
+    if (token) salida[token] = carpetaId;
+  }
+  return salida;
+}
+
 export async function linkDeCarpeta(carpetaId: string): Promise<string> {
   const ajustes = await ajustesDe(carpetaId);
   if (ajustes.token) return ajustes.token;

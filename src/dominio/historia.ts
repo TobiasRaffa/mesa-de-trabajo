@@ -180,3 +180,21 @@ function leerPedido(detalle?: string): { version?: number; puntos: string[] } {
 
   return { version: conVersion ? Number(conVersion[1]) : undefined, puntos };
 }
+
+/**
+ * Cómo queda firmado lo que hace el cliente cuando dice quién es.
+ *
+ * El portal no tiene sesión de persona: del otro lado hay «Cliente». Pero una
+ * aprobación es una decisión con nombre, y quien la toma puede escribirlo. Se
+ * guarda al lado de la base —«Cliente · Juana Pérez»— y nunca en lugar de
+ * ella: que lo escribió el cliente sigue siendo lo primero que se lee.
+ * Vacío, o «cliente» a secas, es la base sola.
+ */
+export function comoFirmaElCliente(base: string, nombre: unknown): string {
+  const limpio = String(nombre ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+  if (!limpio || limpio.toLowerCase() === base.toLowerCase()) return base;
+  return `${base} · ${limpio}`;
+}

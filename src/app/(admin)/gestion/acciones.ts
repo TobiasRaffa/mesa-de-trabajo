@@ -37,6 +37,7 @@ import { olvidarCarpetas } from "@/lib/carpetas";
 import {
   clienteDeMiCarpeta,
   esCarpetaMia,
+  esDeMisClientes,
   miCliente,
   misAvisos,
   misCarpetas,
@@ -93,11 +94,9 @@ import {
   conSusArchivos,
   identidadDePieza,
 } from "@/lib/versiones";
-import { esDeAlgunCliente } from "@/lib/permisos";
-import { contrasenaCorrecta, hayContrasena } from "@/lib/contrasena";
 import { sacarClave } from "@/lib/claves";
 import { correoValido } from "@/lib/equipo";
-import { firmaDeAgencia, puedoVer } from "@/lib/sesion";
+import { contrasenaDeQuienEsta, firmaDeAgencia, puedoVer } from "@/lib/sesion";
 import { darPorAtendido } from "@/lib/olvidos";
 import {
   esRol,
@@ -118,6 +117,7 @@ import {
   cambiarPersona,
   elEquipo,
   personaPorCorreo,
+  renovarCodigoDeAlta,
   sacarDelEquipo,
   seccionesDePersona,
   sumarAlEquipo,
@@ -270,14 +270,8 @@ export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) 
   const tag = String(formulario.get("tag") ?? "").trim();
   const contrasena = String(formulario.get("contrasena") ?? "");
 
-  if (!hayContrasena()) {
-    return {
-      ok: false as const,
-      motivo: "Falta configurar CLAVE_DE_ADMIN en .env.local.",
-    };
-  }
-  if (!contrasenaCorrecta(contrasena)) {
-    return { ok: false as const, motivo: "Esa contraseña no es." };
+  if (!(await contrasenaDeQuienEsta(contrasena))) {
+    return { ok: false as const, motivo: "Esa contraseña no es la tuya." };
   }
   if (!(await esClienteReal(clienteId))) {
     return { ok: false as const, motivo: "Ese cliente no existe." };
@@ -329,11 +323,8 @@ export async function verClaveDeCliente(
   const clienteId = String(formulario.get("clienteId") ?? "");
   const contrasena = String(formulario.get("contrasena") ?? "");
 
-  if (!hayContrasena()) {
-    return { ok: false, motivo: "Falta configurar CLAVE_DE_ADMIN en .env.local." };
-  }
-  if (!contrasenaCorrecta(contrasena)) {
-    return { ok: false, motivo: "Esa contraseña no es." };
+  if (!(await contrasenaDeQuienEsta(contrasena))) {
+    return { ok: false, motivo: "Esa contraseña no es la tuya." };
   }
 
   const cliente = await miCliente(clienteId);
@@ -957,13 +948,21 @@ export async function guardarResponsable(
 export async function darDeAlta(_previo: unknown, formulario: FormData) {
   if (!(await puedoVer("admin"))) return NO_ES_TUYO;
 
+  const nombre = String(formulario.get("nombre") ?? "").trim();
   const correo = String(formulario.get("correo") ?? "").trim();
   const rol = formulario.get("rol");
+  // Las secciones sueltas, para el rol personalizado: se eligen acá mismo, al
+  // dar de alta, y quedan en la ficha de esa persona y de nadie más.
+  const sueltas = formulario.getAll("sueltas").filter(esSeccion);
 
+  if (nombre.length < 2) return { ok: false as const, motivo: "Falta el nombre." };
   if (!correoValido(correo)) {
     return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
   }
   if (!esRol(rol)) return { ok: false as const, motivo: "Elegí un rol." };
+  if (seccionesDe(rol, sueltas).length === 0) {
+    return { ok: false as const, motivo: "Elegí al menos una sección: si no, entra y no tiene a dónde ir." };
+  }
 
   // **Dos personas con el mismo correo es una puerta ambigua**: entrar buscaría
   // por correo y se quedaría con la primera, así que la segunda tendría una
@@ -972,7 +971,7 @@ export async function darDeAlta(_previo: unknown, formulario: FormData) {
     return { ok: false as const, motivo: "Ya hay alguien con ese correo." };
   }
 
-  await sumarAlEquipo({ correo, rol });
+  await sumarAlEquipo({ nombre, correo, rol, sueltas });
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
@@ -1056,6 +1055,28 @@ export async function reiniciarClaveDePersona(_previo: unknown, formulario: Form
 
   await sacarClave(id);
   await darPorAtendido(id);
+  // Vuelve a estar «sin contraseña», y sin código cualquiera que sepa su
+  // correo podría entrar antes que ella. El de antes, si quedaba, no sirve.
+  await renovarCodigoDeAlta(id);
+  revalidatePath("/gestion", "layout");
+  return { ok: true as const };
+}
+
+/**
+ * Un código de alta para quien no lo tiene.
+ *
+ * Existe por las personas dadas de alta antes de que hubiera códigos: están
+ * en la lista, no tienen contraseña, y sin código no pueden elegirla.
+ */
+export async function generarCodigoDeAlta(_previo: unknown, formulario: FormData) {
+  if (!(await puedoVer("admin"))) return NO_ES_TUYO;
+
+  const id = String(formulario.get("id") ?? "");
+  if (!(await elEquipo()).some((p) => p.id === id)) {
+    return { ok: false as const, motivo: "Esa persona no está." };
+  }
+
+  await renovarCodigoDeAlta(id);
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
@@ -1321,7 +1342,9 @@ export async function cambiarVisibilidad(
     // Vale tanto para una carpeta como para un archivo, así que se acepta
     // cualquiera de las dos comprobaciones. Lo que no se acepta es un
     // identificador suelto de Drive que no cuelgue de ningún cliente.
-    const deUnCliente = (await esCarpetaMia(id)) || (await esDeAlgunCliente(id));
+    // De alguno de **sus** clientes: quien lleva dos no esconde cosas del
+    // tercero sabiendo el identificador.
+    const deUnCliente = (await esCarpetaMia(id)) || (await esDeMisClientes(id));
     if (!deUnCliente) return { ok: false, motivo: "Eso no es de ningún cliente." };
   }
 

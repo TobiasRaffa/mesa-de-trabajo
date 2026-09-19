@@ -19,3 +19,22 @@
  * probando— no haga crecer un archivo sin techo.
  */
 export const LARGO_MAXIMO = 4000;
+
+/**
+ * Deja un texto comparable para buscar: sin acentos, sin mayúsculas, sin
+ * espacios de más. «Café Otoño» y «cafe otono» son lo mismo para quien busca.
+ */
+export function normalizarParaBuscar(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Si el texto contiene lo buscado. Con la búsqueda vacía, todo coincide. */
+export function coincide(texto: string, busqueda: string): boolean {
+  const buscado = normalizarParaBuscar(busqueda);
+  return buscado === "" || normalizarParaBuscar(texto).includes(buscado);
+}

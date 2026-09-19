@@ -56,13 +56,17 @@ import {
   sigueEnJuego,
 } from "@/dominio/pieza";
 import {
-  IconoCerrar,
   IconoComparar,
   IconoConfig,
   IconoDrive,
   IconoFlecha,
 } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import {
+  ControlDeVentana,
+  ENLACE_DE_VENTANA,
+  EncabezadoDeVentana,
+} from "@/ui/EncabezadoDeVentana";
 import { Fondo } from "@/ui/Fondo";
 import { enPalabrasElDia } from "@/admin/cuando";
 import { tonoDeEspera } from "@/ui/tonos";
@@ -199,7 +203,7 @@ export function ResumenDeTrabajo({
           role="dialog"
           aria-modal="true"
           aria-label={`${c.cliente}: ${c.carpeta}`}
-          className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden bg-lienzo"
+          className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-tarjeta bg-lienzo sm:rounded-tarjeta"
         >
           {/*
             El encabezado: qué se está mirando y cómo salir. Nada más que eso.
@@ -208,66 +212,42 @@ export function ResumenDeTrabajo({
             sino del trabajo entero: al lado del nombre del trabajo es donde
             alguien la va a buscar.
           */}
-          <header className="flex items-center gap-3 bg-tinta px-5 py-4 text-lienzo">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
+          <EncabezadoDeVentana
+            rotulo={
+              <>
                 {c.cliente} · {c.carpeta}
                 {enOrden.length > 1 && ` · pieza ${donde + 1} de ${enOrden.length}`}
-              </p>
-              {/* **El nombre de verdad, el de Drive.** Decia «stickers» donde
-                  el archivo se llama «V2_stickers.pdf»: quien lo lee aca y
-                  despues va a buscarlo a Drive tiene que adivinar cual es. Y
-                  no lleva al lado la vuelta en la que va, porque el nombre ya
-                  la dice: era escribir «v2» dos veces en el mismo renglon. */}
-              <h2
-                title={pieza?.nombreCompleto}
-                className="truncate text-titulo font-extrabold leading-tight tracking-tight"
-              >
-                {pieza ? pieza.nombreCompleto : c.carpeta}
-              </h2>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-1">
-              {/* Las flechas solo aparecen si hay a dónde ir. */}
-              {enOrden.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => ir(-1)}
-                    aria-label="Pieza anterior"
-                    className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25"
-                  >
-                    <IconoFlecha className="rotate-180" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => ir(1)}
-                    aria-label="Pieza siguiente"
-                    className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25"
-                  >
-                    <IconoFlecha />
-                  </button>
-                </>
-              )}
-              {/* Del mismo alto que la cruz y con fondo propio: son un par, y
-                  contra el fondo oscuro un botón de contorno se pierde. */}
-              <Link
-                href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
-                className="ml-2 inline-flex h-9 items-center bg-lienzo px-3 text-menudo
-                           font-bold tracking-tight text-tinta transition-colors hover:bg-lienzo/90"
-              >
-                Abrir la carpeta
-              </Link>
-              <button
-                type="button"
-                onClick={onCerrar}
-                aria-label="Cerrar"
-                className="grid h-9 w-9 place-items-center bg-lienzo text-tinta transition-colors hover:bg-lienzo/90"
-              >
-                <IconoCerrar />
-              </button>
-            </div>
-          </header>
+              </>
+            }
+            // **El nombre de verdad, el de Drive.** Decía «stickers» donde el
+            // archivo se llama «V2_stickers.pdf»: quien lo lee acá y después
+            // va a buscarlo a Drive tiene que adivinar cuál es.
+            titulo={pieza ? pieza.nombreCompleto : c.carpeta}
+            onCerrar={onCerrar}
+            controles={
+              <>
+                {/* Las flechas solo aparecen si hay a dónde ir. */}
+                {enOrden.length > 1 && (
+                  <>
+                    <ControlDeVentana onClick={() => ir(-1)} aria-label="Pieza anterior">
+                      <IconoFlecha className="rotate-180" />
+                    </ControlDeVentana>
+                    <ControlDeVentana onClick={() => ir(1)} aria-label="Pieza siguiente">
+                      <IconoFlecha />
+                    </ControlDeVentana>
+                  </>
+                )}
+                {/* La única acción de la ventana que no es de una pieza sino
+                    del trabajo entero: al lado del nombre es donde se busca. */}
+                <Link
+                  href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
+                  className={`${ENLACE_DE_VENTANA} ml-1`}
+                >
+                  Abrir la carpeta
+                </Link>
+              </>
+            }
+          />
 
           {/* El medio: la pieza y lo que se sabe de ella. Se desplaza, y no
               tiene un solo botón de acción. */}
@@ -299,7 +279,9 @@ export function ResumenDeTrabajo({
 
           {/*
             Abajo: todos los botones, siempre los mismos y en el mismo orden.
-            Primero los de mirar la pieza, después los de decidir sobre ella. El
+            Primero los de mirar la pieza, después los de decidir sobre ella,
+            y en la punta derecha configurar, que no es de la imagen ni decide
+            nada: es de la pieza. El
             que no se puede hacer no se dibuja, pero ninguno cambia de lugar por
             eso: la fila se lee de izquierda a derecha sin buscar.
           */}
@@ -338,11 +320,6 @@ export function ResumenDeTrabajo({
                 </Boton>
               )}
 
-              <Boton variante="contorno" onClick={() => setConfigurando(pieza.id)}>
-                <IconoConfig />
-                Configurar
-              </Boton>
-
               {/* Lo que empuja a la derecha lo que hay que decidir: mirar es
                   gratis, entregar y otorgar una vuelta extra no. */}
               <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -374,6 +351,11 @@ export function ResumenDeTrabajo({
                   dias={pieza.diasQueCorren}
                   alEntregar={recargar}
                 />
+
+                <Boton variante="contorno" onClick={() => setConfigurando(pieza.id)}>
+                  <IconoConfig />
+                  Configurar
+                </Boton>
               </div>
             </footer>
           )}
@@ -446,15 +428,6 @@ function Ficha({
       </div>
 
       <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Estado estado={p.estado} />
-          {!p.visible && (
-            <span className="bg-tinta px-2 py-1 text-micro font-extrabold uppercase tracking-wider text-lienzo">
-              Oculta
-            </span>
-          )}
-        </div>
-
         {/*
           **La descripción del trabajo, en un tamaño que se lea.** Estaba en
           letra micro y gris: «Nari» y «vence 17 sept» no se veían, y son justo
@@ -493,8 +466,28 @@ function Ficha({
           </p>
         )}
 
-        <dl className="flex flex-wrap gap-x-6 gap-y-1 text-menudo">
-          <Dato rotulo="A cargo de">{p.responsableA ?? "sin asignar"}</Dato>
+        {/*
+          **La franja: quién, cuándo y en qué anda, de un vistazo.** Es lo que
+          se pregunta después del nombre, así que va con el tamaño de lo que
+          se lee primero y no en letra micro y gris. El estado va acá adentro
+          y no arriba suelto: es un dato más de la misma pregunta.
+        */}
+        <dl className="flex flex-wrap items-center gap-x-7 gap-y-4 rounded-tarjeta bg-hueco/60 px-5 py-4">
+          <Dato rotulo="A cargo de">
+            {p.responsableA ? (
+              <span className="inline-flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="grid h-7 w-7 place-items-center rounded-full bg-lima font-mono text-menudo font-bold uppercase text-tinta"
+                >
+                  {p.responsableA.trim().charAt(0)}
+                </span>
+                {p.responsableA}
+              </span>
+            ) : (
+              <span className="text-espera">sin asignar</span>
+            )}
+          </Dato>
           {/*
             **Un reloj a la vez, el que de verdad corre.**
             Hay dos y son distintos: el del cliente —los días que tiene para
@@ -520,6 +513,14 @@ function Ficha({
             p.vence && <Dato rotulo="Vence">{enPalabrasElDia(p.vence)}</Dato>
           )}
           {p.publicaEl && <Dato rotulo="Sale">{enPalabrasElDia(p.publicaEl)}</Dato>}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Estado estado={p.estado} />
+            {!p.visible && (
+              <span className="rounded-full bg-tinta px-2.5 py-1 font-mono text-micro font-bold uppercase tracking-wider text-lienzo">
+                Oculta
+              </span>
+            )}
+          </div>
         </dl>
 
         {detalle && <DetalleDePieza pieza={detalle} vueltas={p.vueltas} />}
@@ -572,7 +573,7 @@ function Unir({
         <button
           type="button"
           onClick={() => setSeguro(true)}
-          className="mt-2 min-h-toque border-2 border-alerta px-3 text-menudo font-bold
+          className="rounded-full mt-2 min-h-toque border-2 border-alerta px-3 text-menudo font-bold
                      tracking-tight text-alerta transition-colors hover:bg-alerta/10"
         >
           Es el mismo trabajo: unirlos
@@ -592,7 +593,7 @@ function Unir({
               type="button"
               onClick={unir}
               disabled={yendo}
-              className="min-h-toque bg-alerta px-3 text-menudo font-bold tracking-tight
+              className="rounded-full min-h-toque bg-alerta px-3 text-menudo font-bold tracking-tight
                          text-white transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {yendo ? "Uniendo…" : "Sí, unirlos"}
@@ -628,9 +629,13 @@ function Dato({
   children: ReactNode;
 }) {
   return (
-    <div className="flex gap-2">
-      <dt className="text-apagado">{rotulo}</dt>
-      <dd className={`cifras font-bold tracking-tight ${tono}`}>{children}</dd>
+    <div>
+      <dt className="font-mono text-micro font-bold uppercase tracking-widest text-apagado">
+        {rotulo}
+      </dt>
+      <dd className={`cifras mt-1 text-guia font-extrabold leading-none tracking-tight ${tono}`}>
+        {children}
+      </dd>
     </div>
   );
 }

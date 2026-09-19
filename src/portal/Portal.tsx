@@ -24,7 +24,6 @@ import { Ampliada, type Lamina } from "@/ui/Ampliada";
 import { Boton, BotonEnlace } from "@/ui/Boton";
 import { Calendario, type PiezaEnCalendario } from "@/ui/Calendario";
 import {
-  IconoCerrar,
   IconoDescargar,
   IconoDrive,
   IconoEditar,
@@ -40,11 +39,11 @@ import {
   moverPieza,
 } from "@/portal/acciones";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
-import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
-import { Fondo } from "@/ui/Fondo";
-import { fechaCorta } from "@/lib/fechas";
+import { Ventana } from "@/ui/Ventana";
+import { fechaCorta, plazoEnPalabras, situacionDelPlazo } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import { Miniatura } from "@/ui/Miniatura";
+import { Marca, NOMBRE_DE_LA_AGENCIA } from "@/ui/Marca";
 import type { CarpetaDeTrabajo, PortalDeCliente } from "@/portal/datos/cliente";
 import { RevisarPieza, type PiezaAbierta } from "@/portal/RevisarPieza";
 
@@ -52,6 +51,9 @@ type EnPantalla = PiezaAbierta;
 
 /** Dónde recuerda este navegador hasta cuándo leyó el chat. */
 const claveDeLeido = (clienteId: string) => `mesa-de-trabajo:leido:${clienteId}`;
+
+/** Dónde recuerda este navegador con qué nombre se aprueba. */
+const claveDeFirma = (clienteId: string) => `mesa-de-trabajo:firma:${clienteId}`;
 
 /** Un identificador para un cambio recién escrito. */
 function nuevoId(): string {
@@ -158,6 +160,8 @@ function Revision({
   const [abierta, setAbierta] = useState<string | null>(null);
   const [ampliada, setAmpliada] = useState<Lamina[] | null>(null);
   const [confirmando, setConfirmando] = useState<null | { soloEsta?: string }>(null);
+  /** Qué pieza está por aprobarse: se pregunta quién aprueba antes de hacerlo. */
+  const [aprobando, setAprobando] = useState<string | null>(null);
   const [descargas, setDescargas] = useState(false);
   const [vista, setVista] = useState<"mes" | "semana" | "lista">("mes");
   const [conversando, setConversando] = useState(false);
@@ -270,8 +274,14 @@ function Revision({
     } catch {}
   }, [datos.cliente.id]);
 
+  /** Cuántos faltaban leer al abrir el chat: ahí arranca la conversación. */
+  const [sinLeerAlAbrir, setSinLeerAlAbrir] = useState(0);
+
   /** Abrir el chat es leerlo. */
   function abrirElChat() {
+    // Se anota antes de marcarlo leído, porque marcarlo deja el número en cero
+    // y la pantalla ya no sabría dónde empezaba lo nuevo.
+    setSinLeerAlAbrir(sinLeer);
     setConversando(true);
     const ahora = new Date().toISOString();
     setLeidoHasta(ahora);
@@ -396,6 +406,54 @@ function Revision({
   const aprobadas = piezas.filter((p) => p.estado === "final");
   const conFecha = piezas.filter((p) => p.publicaEl);
 
+  // **En qué cancha está cada pieza, dicho con todas las letras.** La
+  // pregunta que el cliente se hace al entrar es «¿tengo que hacer algo?», y
+  // una lista pareja no la contesta: hay que leer el estado de cada renglón.
+  // Así que la lista se parte en tres: lo que espera su decisión, lo que ya
+  // tiene el equipo, y lo aprobado. Una pieza que se manda al equipo se va del
+  // primer grupo sola; cuando vuelve, vuelve a aparecer ahí.
+  const enTuCancha = piezas.filter(
+    (p) =>
+      !p.enviada &&
+      (p.estado === "entregada" ||
+        p.estado === "en_revision" ||
+        p.estado === "cambios_marcados")
+  );
+  const canceladas = piezas.filter((p) => p.estado === "cancelada");
+  const conElEquipo = piezas.filter(
+    (p) => p.estado !== "final" && p.estado !== "cancelada" && !enTuCancha.includes(p)
+  );
+  const grupos = [
+    {
+      clave: "vos",
+      titulo: "En tu cancha",
+      explica: "Esperan tu decisión.",
+      tono: "bg-lima text-tinta",
+      piezas: enTuCancha,
+    },
+    {
+      clave: "equipo",
+      titulo: "Con el equipo",
+      explica: "Ya las tiene la agencia. No hay nada que hacer de tu lado.",
+      tono: "bg-hueco text-tinta-suave",
+      piezas: conElEquipo,
+    },
+    {
+      clave: "aprobadas",
+      titulo: "Aprobadas",
+      explica: "Van a salir tal cual están.",
+      tono: "bg-hueco text-tinta-suave",
+      piezas: aprobadas,
+    },
+    {
+      clave: "canceladas",
+      titulo: "Canceladas",
+      explica: "",
+      tono: "bg-hueco text-apagado",
+      piezas: canceladas,
+    },
+  ];
+
   const resueltas = piezas.length - sinDecidir.length;
   const avance = piezas.length === 0 ? 0 : Math.round((resueltas / piezas.length) * 100);
 
@@ -433,6 +491,8 @@ function Revision({
         className="flex w-full flex-col gap-6 bg-tinta p-6 text-lienzo
                    lg:sticky lg:top-0 lg:h-screen lg:w-80 lg:shrink-0 lg:overflow-y-auto"
       >
+        <Marca tono="sobre_oscuro" />
+
         <div>
           <h1 className="text-grande font-extrabold leading-none tracking-tighter">
             {datos.cliente.nombre}
@@ -445,11 +505,11 @@ function Revision({
               href={datos.cliente.enlaceDrive}
               target="_blank"
               rel="noreferrer noopener"
-              className="mt-3 inline-flex min-h-toque items-center gap-2 border-2 border-lienzo/35 px-4
+              className="mt-3 inline-flex min-h-toque items-center gap-2 rounded-full border-2 border-lienzo/35 px-5
                          text-menudo font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
             >
               <IconoDrive />
-              Ver en Drive
+              Ver carpeta en Drive
             </a>
           )}
         </div>
@@ -466,7 +526,7 @@ function Revision({
         */}
         {datos.carpetas.length > 0 && (
           <nav aria-label="Carpetas">
-            <p className="text-micro font-extrabold uppercase tracking-widest text-lienzo/45">
+            <p className="font-mono text-micro font-bold uppercase tracking-widest text-lienzo/45">
               Carpetas
             </p>
             {/*
@@ -483,7 +543,7 @@ function Revision({
                       type="button"
                       onClick={() => onElegirCarpeta(c.id)}
                       aria-current={actual ? "page" : undefined}
-                      className={`flex min-h-toque w-full items-center justify-between gap-3 px-3 text-left
+                      className={`flex min-h-toque w-full items-center justify-between gap-3 rounded-campo px-4 text-left
                                   text-normal font-bold tracking-tight transition-colors ${
                                     actual
                                       ? "bg-lienzo text-tinta"
@@ -509,6 +569,28 @@ function Revision({
         {/* Los botones van al fondo: son el final del recorrido, no el
             principio. `mt-auto` los empuja hasta abajo de la columna. */}
         <div className="mt-auto flex flex-col gap-2">
+          {/* Cuántas esperan al cliente, en el color de la marca. Es la
+              respuesta a lo primero que se pregunta al entrar. */}
+          <p
+            className={`mb-2 rounded-campo px-4 py-3 ${
+              enTuCancha.length > 0 ? "bg-lima text-tinta" : "bg-lienzo/10 text-lienzo/70"
+            }`}
+          >
+            {enTuCancha.length > 0 ? (
+              <>
+                <span className="cifras text-titulo font-extrabold leading-none">
+                  {enTuCancha.length}
+                </span>{" "}
+                <span className="text-menudo font-bold">
+                  {enTuCancha.length === 1
+                    ? "pieza espera tu decisión"
+                    : "piezas esperan tu decisión"}
+                </span>
+              </>
+            ) : (
+              <span className="text-menudo font-semibold">Nada pendiente de tu lado.</span>
+            )}
+          </p>
           <Boton
             variante="principal"
             ancho
@@ -522,7 +604,7 @@ function Revision({
           <button
             type="button"
             onClick={abrirElChat}
-            className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-4
+            className="inline-flex min-h-toque items-center justify-center gap-2 rounded-full border-2 border-lienzo/35 px-5
                        text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
           >
             <IconoEditar />
@@ -530,7 +612,7 @@ function Revision({
             {/* Lo que falta leer, no cuántos hay. Un número que dice «14» para
                 siempre no dice nada; el que importa baja a cero al abrir. */}
             {sinLeer > 0 && (
-              <span className="bg-acento px-1.5 text-micro font-extrabold text-white">
+              <span className="rounded-full bg-lima px-2 font-mono text-micro font-bold text-tinta">
                 {sinLeer}
               </span>
             )}
@@ -549,7 +631,7 @@ function Revision({
                 ? "Se habilita cuando apruebes algo: se descarga lo aprobado."
                 : undefined
             }
-            className="inline-flex min-h-toque items-center justify-center gap-2 border-2 border-lienzo/35 px-4
+            className="inline-flex min-h-toque items-center justify-center gap-2 rounded-full border-2 border-lienzo/35 px-5
                        text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10
                        disabled:opacity-35"
           >
@@ -575,11 +657,31 @@ function Revision({
 
         {/* El título es el nombre de la carpeta, y el avance va pegado a él:
             «cuánto me falta» es una propiedad de esto que estoy mirando, no un
-            dato suelto en otra columna. */}
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-          <h2 className="min-w-0 text-grande font-extrabold leading-none tracking-tighter">
-            {carpeta.nombre}
-          </h2>
+            dato suelto en otra columna.
+
+            **El encabezado es un renglón, y se cierra con una raya.** El link a
+            la carpeta en Drive vivía suelto abajo, como si fuera otra cosa; es
+            parte de lo que se dice de la carpeta, así que va al lado del
+            nombre. La raya separa lo que describe la carpeta de lo que hay
+            adentro, igual que en las pantallas de gestión. */}
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-b-2 border-tinta pb-6">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
+            <h2 className="min-w-0 text-grande font-extrabold leading-none tracking-tighter">
+              {carpeta.nombre}
+            </h2>
+            {carpeta.enlaceDrive && (
+              <a
+                href={carpeta.enlaceDrive}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex min-h-toque items-center gap-2 rounded-full border-2 border-tinta px-5
+                           text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
+              >
+                <IconoDrive />
+                Ver carpeta en Drive
+              </a>
+            )}
+          </div>
 
           <div className="min-w-44">
             <p className="flex items-baseline gap-2">
@@ -590,7 +692,7 @@ function Revision({
                 de {piezas.length} resueltas
               </span>
             </p>
-            <div className="mt-2 h-1.5 bg-hueco">
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-hueco">
               <div
                 className="h-full bg-acento transition-[width] duration-300"
                 style={{ width: `${avance}%` }}
@@ -604,44 +706,29 @@ function Revision({
           </div>
         </div>
 
-        {(hayCalendario || carpeta.enlaceDrive) && (
+        {hayCalendario && (
           <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-            {hayCalendario ? (
-              <div
-                role="tablist"
-                aria-label="Cómo mirar la carpeta"
-                className="flex border-2 border-tinta"
-              >
-                {(["mes", "semana", "lista"] as const).map((modo) => (
-                  <button
-                    key={modo}
-                    role="tab"
-                    aria-selected={vista === modo}
-                    onClick={() => setVista(modo)}
-                    className={`min-h-toque px-5 text-normal font-bold capitalize tracking-tight transition-colors ${
-                      vista === modo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
-                    }`}
-                  >
-                    {modo}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              carpeta.enlaceDrive && (
-                <a
-                  href={carpeta.enlaceDrive}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex min-h-toque items-center gap-2 border-2 border-tinta px-4
-                             text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
+            <div
+              role="tablist"
+              aria-label="Cómo mirar la carpeta"
+              className="flex overflow-hidden rounded-full border-2 border-tinta"
+            >
+              {(["mes", "semana", "lista"] as const).map((modo) => (
+                <button
+                  key={modo}
+                  role="tab"
+                  aria-selected={vista === modo}
+                  onClick={() => setVista(modo)}
+                  className={`min-h-toque px-5 text-normal font-bold capitalize tracking-tight transition-colors ${
+                    vista === modo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
+                  }`}
                 >
-                  <IconoDrive />
-                  Ver en Drive
-                </a>
-              )
-            )}
+                  {modo}
+                </button>
+              ))}
+            </div>
 
-            {hayCalendario && vista !== "lista" && (
+            {vista !== "lista" && (
               <p className="text-titulo font-extrabold capitalize tracking-tight">
                 {nombreDelMes}
               </p>
@@ -658,8 +745,23 @@ function Revision({
               onAbrir={setAbierta}
             />
           ) : (
-            <ul className="divide-y divide-linea border-y border-linea">
-              {piezas.map((pieza) => (
+            <div className="flex flex-col gap-8">
+              {grupos.map(
+                (grupo) =>
+                  grupo.piezas.length > 0 && (
+                    <section key={grupo.clave} aria-label={grupo.titulo}>
+                      <h3 className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span
+                          className={`rounded-full px-3 py-1 font-mono text-micro font-bold uppercase tracking-widest ${grupo.tono}`}
+                        >
+                          {grupo.titulo} · {grupo.piezas.length}
+                        </span>
+                        {grupo.explica && (
+                          <span className="text-menudo text-apagado">{grupo.explica}</span>
+                        )}
+                      </h3>
+            <ul className="mt-3 divide-y divide-linea border-y border-linea">
+              {grupo.piezas.map((pieza) => (
                 <li key={pieza.id} className="flex items-center gap-2">
                   {/* El link va afuera del botón y no adentro: un enlace
                       adentro de un botón es HTML inválido, y el navegador
@@ -669,7 +771,7 @@ function Revision({
                     onClick={() => setAbierta(pieza.id)}
                     className="flex min-w-0 flex-1 items-center gap-4 py-4 text-left transition-colors hover:bg-hueco/60"
                   >
-                    <span className="relative h-16 w-16 shrink-0 overflow-hidden bg-tinta">
+                    <span className="relative h-16 w-16 shrink-0 overflow-hidden rounded-campo bg-tinta">
                       <Miniatura
                         src={urlDeMiniatura(pieza.driveFileId, 220, pieza.modificado)}
                         alt=""
@@ -708,6 +810,24 @@ function Revision({
                             · enviada
                           </span>
                         )}
+                        {/* Hasta cuándo se lo espera. Es el mismo plazo que ve
+                            la agencia: sin esto, «vence mañana» era un dato que
+                            tenía todo el mundo menos quien tenía que decidir. */}
+                        {pieza.vence &&
+                          !pieza.enviada &&
+                          (pieza.estado === "entregada" ||
+                            pieza.estado === "en_revision" ||
+                            pieza.estado === "cambios_marcados") && (
+                            <span
+                              className={`text-micro font-extrabold uppercase tracking-wider ${
+                                situacionDelPlazo(pieza.vence).situacion === "vencido"
+                                  ? "text-alerta"
+                                  : "text-espera"
+                              }`}
+                            >
+                              {plazoEnPalabras(pieza.vence)}
+                            </span>
+                          )}
                       </span>
                       {pieza.cambios.length > 0 && (
                         <span className="mt-1 block truncate text-menudo text-apagado">
@@ -737,6 +857,10 @@ function Revision({
                 </li>
               ))}
             </ul>
+                    </section>
+                  )
+              )}
+            </div>
           )}
         </div>
 
@@ -752,7 +876,11 @@ function Revision({
             setAbierta(piezas[siguiente].id);
           }}
           onCerrar={() => setAbierta(null)}
-          onEvento={(evento) => mover(piezaAbierta.id, evento)}
+          onEvento={(evento) =>
+            evento.tipo === "aprobar"
+              ? setAprobando(piezaAbierta.id)
+              : mover(piezaAbierta.id, evento)
+          }
           rechazo={rechazo}
           onAgregarCambio={(texto) =>
             cambiosDe(piezaAbierta.id, [...piezaAbierta.cambios, { id: nuevoId(), texto }])
@@ -776,11 +904,25 @@ function Revision({
 
       {ampliada && <Ampliada laminas={ampliada} onCerrar={() => setAmpliada(null)} />}
 
+      {aprobando && (
+        <Firma
+          clienteId={datos.cliente.id}
+          pieza={piezas.find((p) => p.id === aprobando)?.nombre ?? ""}
+          onVolver={() => setAprobando(null)}
+          onAprobar={(nombre) => {
+            const id = aprobando;
+            setAprobando(null);
+            mover(id, { tipo: "aprobar", por: nombre });
+          }}
+        />
+      )}
+
       {descargas && <Descargas piezas={aprobadas} onCerrar={() => setDescargas(false)} />}
 
       {conversando && (
         <Conversacion
-          carpeta={datos.cliente.nombre}
+          // Con quién habla: desde el portal, con la agencia.
+          carpeta={NOMBRE_DE_LA_AGENCIA}
           mensajes={mensajes}
           yo="cliente"
           enviando={enviandoMensaje}
@@ -791,6 +933,7 @@ function Revision({
             trayendo: trayendoAnteriores,
             onTraer: verLoAnterior,
           }}
+          sinLeer={sinLeerAlAbrir}
         />
       )}
 
@@ -814,59 +957,85 @@ function Revision({
 
 // ---------------------------------------------------------------------------
 
-/** El armazón de las ventanas: fondo, panel, encabezado con cierre. */
-function Ventana({
-  titulo,
-  bajada,
-  onCerrar,
-  children,
-  pie,
+/**
+ * Quién aprueba.
+ *
+ * Una aprobación es una decisión con nombre. El portal no tiene sesión de
+ * persona, así que se pregunta acá, una vez: el navegador se lo acuerda para
+ * la próxima. Se puede dejar vacío y queda «Cliente», como antes.
+ */
+function Firma({
+  clienteId,
+  pieza,
+  onVolver,
+  onAprobar,
 }: {
-  titulo: string;
-  bajada?: string;
-  onCerrar: () => void;
-  children: React.ReactNode;
-  pie?: React.ReactNode;
+  clienteId: string;
+  pieza: string;
+  onVolver: () => void;
+  onAprobar: (nombre: string) => void;
 }) {
-  const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
+  const [nombre, setNombre] = useState(() => {
+    try {
+      return localStorage.getItem(claveDeFirma(clienteId)) ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  function aprobar() {
+    const limpio = nombre.trim();
+    try {
+      localStorage.setItem(claveDeFirma(clienteId), limpio);
+    } catch {}
+    onAprobar(limpio);
+  }
 
   return (
-    <Fondo
-      onCerrar={onCerrar}
-      className="z-50 flex items-end justify-center sm:items-center sm:p-6"
+    <Ventana
+      capa="z-50"
+      titulo="Aprobar"
+      bajada={pieza}
+      onCerrar={onVolver}
+      pie={
+        <div className="flex flex-col gap-3 sm:flex-row-reverse">
+          <Boton ancho onClick={aprobar}>
+            Sí, aprobar
+          </Boton>
+          <Boton variante="contorno" ancho onClick={onVolver}>
+            Volver
+          </Boton>
+        </div>
+      }
     >
-      <div
-        ref={marco}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-label={titulo}
-        className="flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden bg-lienzo"
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          aprobar();
+        }}
+        className="flex flex-col gap-3"
       >
-        <header className="flex items-start gap-3 bg-acento px-6 py-4 text-white">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-titulo font-extrabold tracking-tight">{titulo}</h2>
-            {bajada && <p className="mt-0.5 text-menudo text-white/70">{bajada}</p>}
-          </div>
-          <button
-            type="button"
-            onClick={onCerrar}
-            aria-label="Cerrar"
-            className="grid h-9 w-9 shrink-0 place-items-center bg-white text-acento transition-colors hover:bg-white/90"
-          >
-            <IconoCerrar />
-          </button>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
-
-        {pie && (
-          <footer className="border-t-2 border-tinta px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4">
-            {pie}
-          </footer>
-        )}
-      </div>
-    </Fondo>
+        <p className="text-normal text-tinta-suave">
+          Queda anotado que la aprobó el cliente. Si querés, con tu nombre.
+        </p>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-micro font-extrabold uppercase tracking-widest text-apagado">
+            Quién aprueba
+          </span>
+          <input
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            maxLength={60}
+            autoFocus
+            autoComplete="name"
+            placeholder="Tu nombre (opcional)"
+            className="min-h-toque w-full border-2 border-tinta bg-lienzo px-4 text-normal
+                       placeholder:text-apagado focus:border-acento focus:outline-none
+                       focus:ring-4 focus:ring-acento-tenue"
+          />
+        </label>
+      </form>
+    </Ventana>
   );
 }
 
@@ -880,6 +1049,7 @@ function Descargas({
 }) {
   return (
     <Ventana
+      capa="z-50"
       titulo="Descargar archivos"
       onCerrar={onCerrar}
     >
@@ -935,6 +1105,7 @@ function Confirmacion({
 
   return (
     <Ventana
+      capa="z-50"
       titulo={soloUna ? "Enviar esta pieza" : "Antes de enviar"}
       bajada={proyecto}
       onCerrar={onVolver}

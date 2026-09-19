@@ -4,9 +4,10 @@
 // el día: **¿dónde me están esperando?**. Arriba lo que falta leer.
 
 import { todasLasConversaciones } from "@/admin/datos/chats";
+import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
 import { ChatDeCliente } from "@/admin/ChatDeCliente";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
-import { firmaDeAgencia } from "@/lib/sesion";
+import { comoMePresentoEnElChat } from "@/lib/sesion";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +25,12 @@ function enPalabras(iso: string | undefined): string {
   return Number.isNaN(fecha.getTime()) ? "" : cuando.format(fecha);
 }
 
-export default async function Chats() {
+export default async function Chats({ searchParams }: PageProps<"/gestion/chats">) {
   let chats;
-  const firma = await firmaDeAgencia();
+  const firma = await comoMePresentoEnElChat();
+  // Con qué cliente llegar ya abierto: es lo que manda el globo de mensajes.
+  const { abrir } = await searchParams;
+  const abrirDeEntrada = typeof abrir === "string" ? abrir : null;
   try {
     chats = await todasLasConversaciones();
   } catch (error) {
@@ -34,10 +38,8 @@ export default async function Chats() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <header className="border-b-2 border-tinta pb-6">
-        <h1 className="text-grande font-extrabold tracking-tight">Conversaciones</h1>
-      </header>
+    <main className={PANTALLA}>
+      <EncabezadoDePagina titulo="Conversaciones" />
 
       {chats.length === 0 ? (
         <p className="mt-8 text-normal text-apagado">
@@ -84,6 +86,7 @@ export default async function Chats() {
                 nombre={chat.cliente}
                 sinLeer={chat.sinLeer}
                 firma={firma}
+                abrirDeEntrada={chat.clienteId === abrirDeEntrada}
               />
             </li>
           ))}

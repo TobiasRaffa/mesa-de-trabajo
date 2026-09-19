@@ -16,6 +16,9 @@
 // y se archiva, y el estado de los trabajos, que se mira para decidir.
 
 import Link from "next/link";
+import { Campana } from "@/admin/Campana";
+import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
+import { misAvisos } from "@/admin/datos/clientes";
 import { elTablero } from "@/admin/datos/tablero";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { TableroPorCliente } from "@/admin/TableroPorCliente";
@@ -37,28 +40,24 @@ export default async function TableroPagina() {
   const paraHacer = tablero.carpetas.reduce((t, c) => t + c.enAgencia, 0);
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-tinta pb-6">
-        <h1 className="text-grande font-extrabold tracking-tight">Tablero</h1>
-        <p className="text-menudo text-apagado">
-          {tablero.carpetas.length}{" "}
-          {tablero.carpetas.length === 1 ? "trabajo" : "trabajos"}
-          {paraHacer > 0 && (
-            <span className="font-bold text-acento"> · {paraHacer} para hacer</span>
-          )}
-          {tablero.sinVer > 0 && (
-            <>
-              {" · "}
-              <Link
-                href="/gestion/notificaciones"
-                className="font-bold text-acento underline underline-offset-4"
-              >
-                {tablero.sinVer} sin leer
-              </Link>
-            </>
-          )}
-        </p>
-      </header>
+    <main className={PANTALLA}>
+      <EncabezadoDePagina
+        titulo="Tablero"
+        alLado={
+          <>
+            <p className="text-menudo text-apagado">
+              {tablero.carpetas.length}{" "}
+              {tablero.carpetas.length === 1 ? "trabajo" : "trabajos"}
+              {paraHacer > 0 && (
+                <span className="font-bold text-acento"> · {paraHacer} para hacer</span>
+              )}
+            </p>
+            {/* La campana despliega las notificaciones acá mismo y dice
+                cuántas hay sin leer. */}
+            <Campana avisos={await misAvisos()} />
+          </>
+        }
+      />
 
       {/* Lo vencido, arriba y afuera: es lo único que hay que ver aunque no se
           abra ningún cliente. */}

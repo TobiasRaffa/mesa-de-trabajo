@@ -15,6 +15,7 @@
 import { useActionState, useState } from "react";
 import { entrar, mirarCorreo, olvide } from "@/app/(admin)/gestion/entrar/acciones";
 import { LARGO_MINIMO_DE_CLAVE } from "@/dominio/claves";
+import { Marca } from "@/ui/Marca";
 
 const CAMPO =
   "w-full border-2 border-tinta bg-lienzo px-3 py-2.5 text-normal transition-colors " +
@@ -195,7 +196,9 @@ function Estreno({
     <>
       <p className="mt-3 text-normal text-tinta-suave">
         Elegí tu contraseña. No la sabe nadie más, ni quien te dio de alta: si
-        alguna vez la perdés, se reinicia y elegís otra.
+        alguna vez la perdés, se reinicia y elegís otra. Hace falta el{" "}
+        <span className="font-bold">código de alta</span> que te pasó quien te
+        dio de alta.
       </p>
 
       <Quien correo={correo} alCambiar={alCambiarDeCorreo} />
@@ -216,6 +219,21 @@ function Estreno({
             maxLength={60}
             placeholder="Con este nombre queda firmado lo que hagas"
             className={CAMPO}
+          />
+        </label>
+
+        {/* **El código de alta.** Sin él, saber el correo de alguien alcanzaba
+            para quedarse con su cuenta antes de que entrara por primera vez. */}
+        <label className="flex flex-col gap-1.5">
+          <span className={ETIQUETA}>Código de alta</span>
+          <input
+            name="codigo"
+            autoComplete="one-time-code"
+            autoCapitalize="characters"
+            spellCheck={false}
+            required
+            placeholder="ABCD-EFGH"
+            className={`${CAMPO} cifras uppercase tracking-widest`}
           />
         </label>
 
@@ -303,8 +321,8 @@ function Arranque({ volver, alCorreo }: { volver: string; alCorreo: () => void }
 function Marco({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-12">
-      <p className={ETIQUETA}>Mesa de trabajo</p>
-      <h1 className="mt-2 text-grande font-extrabold leading-none tracking-tighter">
+      <Marca />
+      <h1 className="mt-8 text-grande font-extrabold leading-none tracking-tighter">
         {titulo}
       </h1>
       {children}

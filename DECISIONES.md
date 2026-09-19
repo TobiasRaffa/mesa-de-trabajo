@@ -1628,3 +1628,180 @@ Una que costó encontrar: `git check-ignore` **saltea los archivos ya
 rastreados**, así que la primera versión de esa prueba pasaba con la regla
 mala puesta. Con `--no-index` mira la regla misma. Un guardián que no atrapa es
 peor que ninguno, porque da tranquilidad falsa.
+
+## 107. Auditoría antes de subir: lo que se rompió a propósito y lo que cambió.
+
+Se recorrió la aplicación entera como agencia, como cliente y como alguien
+que quiere entrar donde no le toca. Lo que se encontró, por orden de gravedad,
+y qué se hizo:
+
+**El arranque no se cerraba nunca.** La primera persona del equipo no podía
+elegir su contraseña: la puerta, mientras nadie tuviera contraseña, exigía la
+llave del equipo en el mismo campo donde esa persona escribía la suya. Nadie
+podía ser la primera. Ahora «primera vez» va antes que el arranque.
+
+**Saber un correo alcanzaba para quedarse con una cuenta.** Se comprobó: con
+el correo de una persona recién dada de alta, sin nada más, la pantalla ofrecía
+elegir su contraseña. Ahora hace falta el **código de alta**, que ve solo quien
+administra y se pasa por otro canal. Se guarda en la ficha pero **no viaja en
+`Persona`**, porque `Persona` llega entera al navegador; hay una prueba que lo
+vigila. Al reiniciar una contraseña se genera uno nuevo.
+
+**Las sesiones eran eternas.** La galleta de gestión no vencía del lado del
+servidor, sobrevivía a un reinicio de contraseña, y la de arranque —la de la
+llave del equipo— seguía valiendo después de cerrado el arranque. Ahora la
+fecha de emisión va firmada adentro, duran siete días, y una contraseña nueva
+—o ninguna— echa a las sesiones anteriores de esa persona.
+
+**Ver la clave de un cliente pedía la llave del servidor.** `CLAVE_DE_ADMIN`
+era a la vez la firma de las sesiones y algo que cada administradora tenía que
+saber. Ahora se pide la contraseña propia; la llave la sabe quien configura.
+
+**Dos lugares donde el alcance por cliente no se respetaba.** La pantalla de
+una carpeta creía a la dirección: cliente propio en la primera parte, carpeta
+de otro en la segunda, y se leía la carpeta ajena. Y esconder o mostrar
+preguntaba «¿es de algún cliente?» en vez de «¿es de alguno de los míos?».
+
+**El link de una carpeta abría el cliente entero.** La pantalla mostraba una
+carpeta; las acciones aceptaban cualquiera del cliente si se sabía el
+identificador. La entrada ahora dice por qué carpeta fue, y las acciones y los
+archivos se quedan adentro de ella.
+
+**El servidor no está en Buenos Aires.** «Hoy», «vencida» y el día de cada
+publicación se calculaban con la hora del servidor: en internet, tiempo
+universal, tres horas corridas. Una entrega que vencía hoy aparecía vencida a
+las nueve de la noche de ayer, y una fecha de calendario se mostraba un día
+antes. Todo lo que compara con hoy sale ahora de `fechas.ts`, en la zona de
+Buenos Aires.
+
+**Drive devuelve de a cien y no avisa.** Una carpeta con más de cien archivos
+mostraba cien. Ahora se piden todas las páginas.
+
+**Buscar un link de carpeta recorría Drive entero.** Cada visita al portal
+por un link de carpeta listaba las subcarpetas de cada cliente. Los tokens
+están en el almacén: se busca ahí y Drive confirma solo esa carpeta.
+
+Y lo chico: mirar un correo en la puerta cuenta como intento —era la forma
+cómoda de listar el equipo—; una pieza aprobada ya no ofrece «Agregar cambio»;
+Admin y el tablero abren de entrada en vez de pedir un clic por sección;
+`README.md` deja de ser el de la plantilla; se fueron cinco SVG de la plantilla
+que nadie usaba.
+
+**Lo que se decidió no tocar**, y queda anotado para decidirlo con calma: el
+tag de cada cliente se guarda en texto plano (lo tiene que poder leer quien
+administra para dictarlo); el chat es del cliente y no de la carpeta, también
+para quien entra por el link de una carpeta; y el portal sigue sin sesión de
+persona —el navegador es la única identidad del cliente—.
+
+## 108. Seis cosas que faltaban, sin cuentas nuevas.
+
+De la lista de ideas de la auditoría se hicieron las que no dependen de
+contratar nada:
+
+- **Recordatorios de plazo** (`lib/recordatorios.ts`). A mitad del plazo y al
+  vencer, un aviso en la bandeja; cada uno una sola vez por entrega, anotado
+  en una colección propia. Los dispara el tablero al abrirse: en internet no
+  hay proceso vivo que mire la hora, y el tablero se abre todos los días. Y el
+  cliente ve el plazo en su portal, que era el único que no lo veía.
+- **Historial exportable** (`api/historial/[clienteId]`, CSV con punto y coma
+  y marca de orden, que es lo que Excel en castellano abre bien). Solo para la
+  agencia y solo de sus clientes.
+- **Buscador en el árbol.** Filtra clientes por nombre, y adentro de los
+  abiertos, carpetas y archivos. No carga nada solo: buscar en veinte clientes
+  cerrados es lo que el árbol perezoso evita.
+- **«Entró al portal hace 2 h»** (`lib/visitas.ts`). Se anota al abrir con la
+  clave puesta, cada diez minutos como mucho.
+- **Quién aprueba.** El portal pregunta el nombre al aprobar; queda «Cliente ·
+  Nombre», nunca el nombre solo: que lo hizo el cliente es lo primero que se
+  lee. Lo que llega se limpia en el servidor.
+- **Números de la cuenta** (`admin/datos/estadisticas.ts`): piezas, vueltas
+  por pieza, extras, días para decidir. Puro y probado con piezas inventadas.
+
+Quedaron afuera, y por qué: correo (hace falta la cuenta de Resend), Slack y
+WhatsApp (cuentas y proveedores), multiagencia (es otra arquitectura: una
+cuenta de servicio por agencia y datos separados) y la marca por empresa en el
+portal (hace falta decidir qué se personaliza antes de escribirlo).
+
+## 109. El sistema visual es el de Matter.
+
+La agencia tiene marca —está en su Instagram— y la herramienta la usa: papel
+crema `#f2f0e4`, lima `#d1fe6f` (la del logo), lila `#b9a2f0`, negro. La
+[decisión 45](#45-la-dirección-visual-elegida-entre-opciones-y-no-propuesta-a-ciegas)
+queda revisada en tres cosas:
+
+| | Antes | Ahora |
+|---|---|---|
+| Acción principal, aprobar, lo aprobado | Verde profundo con blanco | **Lima con tinta**. Nunca blanco sobre lima: no se lee. |
+| Acento (enlaces, encabezados de ventana, avance) | Verde profundo | **Violeta** `#4b2fa8`, sacado del lila. Va con blanco. |
+| Esquinas | Ninguna | **Pastillas** en lo que se toca, esquinas amplias en lo que contiene. Las bandas de aviso siguen rectas. |
+
+Los titulares van pesados, anchos y en mayúsculas —`h1` y `h2`, con el eje de
+ancho de Archivo—, como en las piezas de la agencia. Los nombres de clientes y
+carpetas son titulares también: un nombre en un cartel se ve así. Las etiquetas
+chicas —«Mesa de trabajo», el estado de una pieza, el rótulo de cada sección—
+van en monoespaciada (Space Mono), que es lo que Matter usa para el texto de
+apoyo.
+
+El logo está dibujado como SVG en `ui/Marca.tsx` y es también el favicon
+(`app/icon.svg`). Se usa donde antes decía «Mesa de trabajo» a secas: la
+barra de gestión, la del portal y las dos puertas.
+
+Sigue mandando la regla de siempre: lo más fuerte de la pantalla es el trabajo
+del cliente. Por eso la lima es escasa —un botón, una etiqueta— y el fondo es
+papel.
+
+## 110. Un solo encabezado para todas las ventanas.
+
+Había seis, uno por ventana, y cada uno con su idea: título arriba y cruz
+abajo o al revés, banda negra o violeta, con rótulo o sin él. Ahora es un
+componente (`ui/EncabezadoDeVentana`) y lo que cambia entre ventanas es lo que
+se le pasa: rótulo chico en mono, título, bajada, y los controles que van a la
+izquierda de la cruz —flechas, «Abrir la carpeta»—. Todo centrado a lo alto.
+La ventana del portal que era una copia de la de gestión desapareció: usan la
+misma, con pie opcional.
+
+## 111. La campana del tablero despliega, no redirige.
+
+Para ver si había pasado algo había que irse del tablero a Notificaciones y
+volver. Ahora la campana abre la lista ahí mismo, con las últimas doce, y
+abrirla las marca leídas —si abriste la lista, las viste—. Lo que estaba sin
+leer al abrir queda marcado mientras la lista esté abierta, para que se vea
+cuáles eran. La pantalla de Notificaciones sigue existiendo para leer con
+calma; el renglón de cada aviso es el mismo en las dos (`admin/RenglonDeAviso`).
+
+## 112. El cliente ve qué está en su cancha.
+
+La lista del portal era pareja: para saber si había que hacer algo había que
+leer el estado de cada renglón. Ahora se parte en tres grupos —**En tu
+cancha**, **Con el equipo**, **Aprobadas**—, y en la barra hay una cifra en
+lima con cuántas esperan su decisión, o «Nada pendiente de tu lado». Una pieza
+que se manda al equipo se va sola del primer grupo; cuando vuelve, reaparece
+ahí. No se esconde nada: lo que tiene el equipo se sigue viendo, pero abajo y
+con su rótulo, para que no compita.
+
+El portal pasó a tener el mismo fondo papel que gestión: eran las dos mitades
+de una misma herramienta y una se veía de otro color.
+
+## 113. Un solo encabezado para todas las pantallas, y la ficha ordenada.
+
+Los títulos de las pantallas de gestión eran ocho, parecidos y no iguales.
+Ahora son uno (`admin/EncabezadoDePagina`): enlace para volver, título, bajada,
+lo que va a la derecha —una cuenta, la campana— y los botones de la pantalla
+abajo. Notificaciones dejó de tener un título que plegaba: el título es el de
+todas, con cuántas hay sin leer al lado, y la bandeja es la lista.
+
+En la ventana del trabajo, la barra de abajo se queda con lo que es de la
+imagen —abrir en Drive, comparar— y con lo que decide —entregar, otorgar—.
+**Configurar se fue arriba a la derecha, al lado del estado**: es de la pieza
+y no de la imagen. La prueba de cimientos que vigila el medio de la ventana lo
+sabe y lo permite, y nada más.
+
+En Configurar, arriba y en un renglón: si el cliente la ve a la izquierda, el
+estado con su color a la derecha, y debajo del estado el botón de reabrir
+cuando está aprobada. Los tres renglones que explicaban qué hace reabrir
+viven ahora en el botón, al pasarle por encima. Las vueltas y lo que pasó
+quedaron plegados, los dos iguales. Y el rótulo «heredado» al lado de quién
+lleva algo y de los días se sacó: no ayudaba a nadie a decidir nada.
+
+La campana del tablero se ve como una ventana chica de la aplicación —la misma
+banda, la misma cruz, los mismos renglones— y no como un menú de otro sistema.

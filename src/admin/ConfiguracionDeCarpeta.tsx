@@ -44,7 +44,7 @@ function SiONo({
         value={valorSi}
         disabled={esperando}
         aria-pressed={activo}
-        className={`h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
+        className={`rounded-l-full h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
                     transition-colors disabled:opacity-40 ${
                       activo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
                     }`}
@@ -57,7 +57,7 @@ function SiONo({
         value={valorNo}
         disabled={esperando}
         aria-pressed={!activo}
-        className={`h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
+        className={`rounded-r-full h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
                     tracking-tight transition-colors disabled:opacity-40 ${
                       activo ? "text-tinta hover:bg-hueco" : "bg-tinta text-lienzo"
                     }`}
@@ -136,7 +136,7 @@ export function ConfiguracionDeCarpeta({
           {carpeta.vista === "calendario" && !oculta && (
             <Link
               href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}`}
-              className="inline-flex h-8 items-center bg-acento px-3 text-menudo font-bold
+              className="rounded-full inline-flex h-8 items-center bg-acento px-3 text-menudo font-bold
                          tracking-tight text-white transition-colors hover:bg-acento-hover"
             >
               Armar calendario

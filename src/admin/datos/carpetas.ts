@@ -6,7 +6,12 @@
 // eso se trata la pantalla: decidir qué se muestra.
 
 import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustes";
-import { miCliente, todosMisClientes, type Cliente } from "@/admin/datos/clientes";
+import {
+  esCarpetaDeMiCliente,
+  miCliente,
+  todosMisClientes,
+  type Cliente,
+} from "@/admin/datos/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 import { conLosComentariosDelCliente } from "@/lib/comentariosDelCliente";
@@ -17,6 +22,7 @@ import { DIAS_POR_OMISION } from "@/lib/dias";
 import { publicacionesDe, type DiaSuelto } from "@/lib/publicaciones";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { ultimasVisitas } from "@/lib/visitas";
 
 // ---------------------------------------------------------------------------
 
@@ -54,6 +60,11 @@ export async function carpetaParaFechar(
 ): Promise<CarpetaParaFechar> {
   const cliente = await miCliente(clienteId);
   if (!cliente) throw new Error("No encontré ese cliente.");
+  // La carpeta tiene que ser **de este** cliente. Los dos identificadores
+  // vienen por la dirección, y la dirección se escribe a mano.
+  if (!(await esCarpetaDeMiCliente(clienteId, carpetaId))) {
+    throw new Error("Esa carpeta no es de este cliente.");
+  }
 
   const [datos, ajustes, archivos] = await Promise.all([
     datosDeCarpeta(carpetaId),
@@ -142,6 +153,8 @@ export type ClienteEnGestion = Omit<Cliente, "tag"> & {
   responsable: string | null;
   /** Está puesto acá y no es la falta de una decisión. */
   responsablePropio: boolean;
+  /** Cuándo entró al portal por última vez, ISO. `null` si nunca. */
+  ultimaVisita: string | null;
 };
 
 /** Todos los clientes que el robot ve, para la pantalla que los administra. */
@@ -151,7 +164,11 @@ export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
     sinLeerPorCliente("agencia"),
   ]);
   const ids = clientes.map((c) => c.id);
-  const [propios, quienes] = await Promise.all([plazosDe(ids), responsablesDe(ids)]);
+  const [propios, quienes, visitas] = await Promise.all([
+    plazosDe(ids),
+    responsablesDe(ids),
+    ultimasVisitas(ids),
+  ]);
 
   return Promise.all(
     clientes.map(async (cliente): Promise<ClienteEnGestion> => {
@@ -165,6 +182,7 @@ export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
         diasPropios: propios[cliente.id] !== undefined,
         responsable: quienes[cliente.id] ?? null,
         responsablePropio: cliente.id in quienes,
+        ultimaVisita: visitas[cliente.id] ?? null,
       };
 
       if (!cliente.habilitado) {

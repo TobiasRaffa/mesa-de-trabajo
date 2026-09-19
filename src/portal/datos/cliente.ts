@@ -29,6 +29,8 @@ import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
 import { RONDAS_INCLUIDAS_POR_DEFECTO } from "@/dominio/pieza";
 import { clientePorId } from "@/lib/clientes";
+import { calcularVencimiento } from "@/lib/fechas";
+import { plazoDe, plazoQueCorre, plazosDe } from "@/lib/plazos";
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 
 /** Una vuelta anterior de la misma pieza. */
@@ -59,6 +61,11 @@ export type PiezaDeCarpeta = EstadoDePieza & {
   versiones: VersionDePieza[];
   /** Cuándo sale publicada. Solo en carpetas que se miran como calendario. */
   publicaEl?: Date;
+  /**
+   * Cuándo vence la revisión, si se entregó. Es el mismo plazo que ve la
+   * agencia: el cliente tiene que poder ver hasta cuándo se lo espera.
+   */
+  vence?: Date;
 };
 
 export type CarpetaDeTrabajo = {
@@ -175,6 +182,7 @@ export async function portalDelCliente(
   const siDrive = (url?: string) => (conDrive ? url : undefined);
 
   const todas = await carpetasVisiblesBajo(raiz, [], 0);
+  const diasDelCliente = await plazoDe(raiz);
 
   // El link de una carpeta muestra esa y lo que tenga adentro, no el resto.
   const elegidas = soloEsta
@@ -218,9 +226,11 @@ export async function portalDelCliente(
       const identidades = conArchivos.map((p) => p.id);
       const entregas = esCarpetaDeEntregas(carpeta.name);
 
-      const [dias, deLaBase] = await Promise.all([
+      const [dias, deLaBase, propios, diasDeLaCarpeta] = await Promise.all([
         publicacionesDe(identidades),
         estadosDe(carpeta.id, conArchivos),
+        plazosDe(identidades),
+        plazoDe(carpeta.id),
       ]);
 
       // **Lo que el cliente escribió encima del archivo, en Drive, es un
@@ -300,6 +310,12 @@ export async function portalDelCliente(
 
           return {
             ...guardado,
+            // **Una pieza aprobada no tiene cambios a medio escribir.** Aprobar
+            // los borra, pero hay piezas guardadas de antes de que lo hiciera,
+            // y el portal mostraba «Aprobada, sale tal cual» con una lista de
+            // pedidos abajo. Lo mandado sí queda: ya es historia.
+            cambios:
+              guardado.estado === "final" && !guardado.enviada ? [] : guardado.cambios,
             id: suya,
             esPdf:
               pieza.versiones[pieza.versiones.length - 1].archivo.mimeType ===
@@ -311,6 +327,12 @@ export async function portalDelCliente(
             // La fecha va con la vuelta que se está mirando: si se subió una
             // V2, es esa la que sale publicada.
             publicaEl: dias[suya] ? fechaDeDia(dias[suya]) : undefined,
+            vence: guardado.entregadaEl
+              ? calcularVencimiento(
+                  new Date(guardado.entregadaEl),
+                  plazoQueCorre(propios[suya], diasDeLaCarpeta, diasDelCliente)
+                )
+              : undefined,
             // **La ronda es la que dice el dominio, y nada más.**
             //
             // Era la mayor entre esa y la cantidad de archivos que hay en

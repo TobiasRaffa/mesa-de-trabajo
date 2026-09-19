@@ -26,8 +26,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Boton } from "@/ui/Boton";
-import { IconoCerrar, IconoEnviar } from "@/ui/Icono";
+import { IconoEnviar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import { EncabezadoDeVentana } from "@/ui/EncabezadoDeVentana";
 import { Fondo } from "@/ui/Fondo";
 import { LARGO_MAXIMO } from "@/dominio/texto";
 import type { Mensaje } from "@/lib/conversaciones";
@@ -47,6 +48,27 @@ const hora = new Intl.DateTimeFormat("es-AR", {
 function cuandoEnPalabras(iso: string): string {
   const fecha = new Date(iso);
   return Number.isNaN(fecha.getTime()) ? "" : hora.format(fecha);
+}
+
+// El día solo, para la raya que separa un día del siguiente.
+const dia = new Intl.DateTimeFormat("es-AR", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+});
+
+function diaEnPalabras(iso: string): string {
+  const fecha = new Date(iso);
+  return Number.isNaN(fecha.getTime()) ? "" : dia.format(fecha);
+}
+
+/** ¿Este mensaje es de otro día que el de arriba? El primero siempre lo es. */
+export function cambiaElDia(anterior: Mensaje | undefined, mensaje: Mensaje): boolean {
+  if (!anterior) return true;
+  const a = new Date(anterior.cuando);
+  const b = new Date(mensaje.cuando);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
+  return a.toDateString() !== b.toDateString();
 }
 
 /** El mínimo para que un dedo acierte, en píxeles. Es `--spacing-toque`. */
@@ -77,6 +99,16 @@ type Props = {
    * con esas palabras justamente para que nadie crea que se perdió algo.
    */
   anteriores?: { hay: boolean; trayendo: boolean; onTraer: () => void };
+  /**
+   * Cuántos mensajes del otro lado faltaban leer **al abrir**.
+   *
+   * Decide dónde arranca la pantalla: en el primero de esos, con una raya
+   * arriba que dice «nuevos». Abrir un hilo en el último mensaje obliga a
+   * subir a buscar dónde se había quedado uno; abrirlo arriba de todo, a bajar
+   * por semanas de conversación. Con cero, arranca al final, que es donde
+   * está lo último dicho.
+   */
+  sinLeer?: number;
 };
 
 export function Conversacion({
@@ -88,11 +120,31 @@ export function Conversacion({
   enviando = false,
   firma,
   anteriores,
+  sinLeer = 0,
 }: Props) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
   const [texto, setTexto] = useState("");
-  const final = useRef<HTMLDivElement>(null);
+  const lista = useRef<HTMLDivElement>(null);
+  const primeroNuevo = useRef<HTMLLIElement>(null);
   const campo = useRef<HTMLTextAreaElement>(null);
+
+  // **Dónde empieza lo nuevo.** Lo que falta leer es del otro lado; lo mío y
+  // los avisos de la aplicación no cuentan. Se cuentan desde el final los
+  // mensajes del otro hasta llegar a `sinLeer`, y ahí está el primero. Es la
+  // misma cuenta que hace el servidor para el número del botón.
+  //
+  // Queda fijo al abrir: si se recalculara con cada mensaje que llega, la
+  // raya de «nuevos» se movería mientras uno lee.
+  //
+  // `undefined` es «todavía no llegó nada»; `null`, «no hay nada sin leer». Se
+  // decide en el dibujado en que aparecen los mensajes, y de ahí no se mueve.
+  const [idDelPrimeroNuevo, setIdDelPrimeroNuevo] = useState<string | null | undefined>(
+    undefined
+  );
+  if (idDelPrimeroNuevo === undefined && mensajes.length > 0) {
+    const desde = indiceDelPrimerSinLeer(mensajes, yo, sinLeer);
+    setIdDelPrimeroNuevo(desde === null ? null : mensajes[desde].id);
+  }
 
   // El campo crece con lo que se escribe. Se mide poniéndolo en cero primero:
   // sin eso, `scrollHeight` devuelve el alto de antes y el campo nunca achica.
@@ -112,18 +164,34 @@ export function Conversacion({
     el.style.height = `${Math.max(el.scrollHeight + borde, PISO)}px`;
   }, [texto]);
 
-  // Al abrir, y con cada mensaje nuevo, se mira el final: lo último dicho es
-  // lo que importa. Sin esto habría que arrastrar hasta abajo cada vez.
+  // **Al abrir, se mira el primero sin leer; después, cada mensaje nuevo.**
   //
-  // **Salvo cuando lo que llegó es lo de antes.** Traer el historial y que la
-  // pantalla salte al final es lo contrario de lo que pidió quien apretó el
-  // botón: se queda donde estaba, que es donde está lo que vino a leer.
-  const cuantos = useRef(0);
+  // Se abría arriba de todo, y no por decisión: los mensajes llegan después de
+  // que la pantalla existe, y ese primer salto de cero a veinte se confundía
+  // con «trajeron lo de antes», que es el caso en que no hay que moverse. Así
+  // que no se movía nunca, y había que bajar a mano por todo el hilo.
+  //
+  // Ahora se distinguen los tres casos por lo que hay al final, no por cuánto
+  // hay: la primera vez que llega algo se va al primero sin leer —o al final,
+  // si no hay nada sin leer—; si cambió el último mensaje, llegó uno nuevo y
+  // se lo mira; si el último es el mismo, lo que llegó es lo de antes y la
+  // pantalla se queda donde estaba, que es donde está lo que se vino a leer.
+  const ultimoVisto = useRef<string | null>(null);
   useEffect(() => {
-    const crecioPorAtras = mensajes.length > cuantos.current + 1;
-    cuantos.current = mensajes.length;
-    if (!crecioPorAtras) final.current?.scrollIntoView({ block: "end" });
-  }, [mensajes.length]);
+    const ultimo = mensajes[mensajes.length - 1]?.id ?? null;
+    if (ultimo === ultimoVisto.current) return;
+    const primeraVez = ultimoVisto.current === null;
+    ultimoVisto.current = ultimo;
+    if (ultimo === null) return;
+
+    if (primeraVez && idDelPrimeroNuevo) {
+      primeroNuevo.current?.scrollIntoView({ block: "start" });
+    } else if (lista.current) {
+      // Hasta el fondo del contenedor, y no hasta el último mensaje: así el
+      // aire de abajo también se ve, y el último no queda pegado al borde.
+      lista.current.scrollTop = lista.current.scrollHeight;
+    }
+  }, [mensajes, idDelPrimeroNuevo]);
 
   function enviar() {
     const limpio = texto.trim();
@@ -142,25 +210,15 @@ export function Conversacion({
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-label={`Conversación sobre ${carpeta}`}
-        className="flex h-[88vh] w-full max-w-xl flex-col overflow-hidden bg-lienzo sm:h-[80vh]"
+        aria-label={`Conversación con ${carpeta}`}
+        className="flex h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-t-tarjeta bg-lienzo sm:h-[80vh] sm:rounded-tarjeta"
       >
-        <header className="flex items-center gap-3 bg-acento px-4 py-3 text-white">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-guia font-extrabold tracking-tight">Conversación</h2>
-            <p className="truncate text-micro text-white/70">{carpeta}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onCerrar}
-            aria-label="Cerrar"
-            className="grid h-9 w-9 shrink-0 place-items-center bg-white text-acento transition-colors hover:bg-white/90"
-          >
-            <IconoCerrar />
-          </button>
-        </header>
+        {/* Arriba va con quién se habla, y nada más. Decía «Conversación» en
+            grande y el nombre chiquito abajo: la palabra no informa nada —ya
+            se ve que es una conversación— y el nombre es lo que hay que leer. */}
+        <EncabezadoDeVentana titulo={carpeta} onCerrar={onCerrar} />
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-papel px-4 py-4">
+        <div ref={lista} className="min-h-0 flex-1 overflow-y-auto bg-papel px-4 pb-6 pt-4">
           {/* Arriba de todo, que es donde termina el que sube leyendo. */}
           {anteriores?.hay && (
             <div className="mb-3 flex justify-center">
@@ -168,7 +226,7 @@ export function Conversacion({
                 type="button"
                 onClick={anteriores.onTraer}
                 disabled={anteriores.trayendo}
-                className="min-h-toque border border-linea bg-lienzo px-4 text-menudo
+                className="min-h-toque rounded-full border border-linea bg-lienzo px-4 text-menudo
                            font-semibold text-tinta-suave transition-colors
                            hover:bg-hueco disabled:opacity-40"
               >
@@ -182,13 +240,27 @@ export function Conversacion({
               Todavía no hablaron por acá.
             </p>
           ) : (
-            <ul className="flex flex-col gap-3">
-              {mensajes.map((mensaje) => (
-                <Burbuja key={mensaje.id} mensaje={mensaje} yo={yo} />
-              ))}
+            <ul className="flex flex-col">
+              {mensajes.map((mensaje, i) => {
+                const esElPrimeroNuevo = mensaje.id === idDelPrimeroNuevo;
+                return (
+                  <Burbuja
+                    key={mensaje.id}
+                    mensaje={mensaje}
+                    yo={yo}
+                    primeroNuevo={esElPrimeroNuevo}
+                    // La raya de «nuevos» corta la racha: lo que viene después
+                    // de ella vuelve a decir de quién es.
+                    sigue={!esElPrimeroNuevo && sigueALaAnterior(mensajes[i - 1], mensaje)}
+                    diaNuevo={
+                      cambiaElDia(mensajes[i - 1], mensaje) ? diaEnPalabras(mensaje.cuando) : null
+                    }
+                    ref={esElPrimeroNuevo ? primeroNuevo : undefined}
+                  />
+                );
+              })}
             </ul>
           )}
-          <div ref={final} />
         </div>
 
         {/*
@@ -207,13 +279,21 @@ export function Conversacion({
               ref={campo}
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
+              // **Enter manda.** Es lo que hace cualquier chat, y lo que la
+              // mano ya sabe. Shift+Enter deja bajar un renglón para quien
+              // escribe un párrafo.
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                if (!enviando) enviar();
+              }}
               maxLength={LARGO_MAXIMO}
               rows={1}
               autoFocus
               placeholder={
                 yo === "cliente" ? "Escribile al equipo…" : "Escribile al cliente…"
               }
-              className="max-h-40 min-h-toque w-full resize-none border border-linea bg-lienzo
+              className="max-h-40 min-h-toque w-full resize-none rounded-campo border border-linea bg-lienzo
                          px-3 py-2.5 text-normal transition-colors placeholder:text-apagado
                          focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"
             />
@@ -226,24 +306,107 @@ export function Conversacion({
               <span className="sr-only sm:not-sr-only">Enviar</span>
             </Boton>
           </div>
-          <p className="mt-1.5 text-micro text-apagado">
-            {yo === "cliente"
-              ? "Contesta una persona del equipo."
-              : "Le escribís al cliente."}
-          </p>
         </footer>
       </div>
     </Fondo>
   );
 }
 
-function Burbuja({ mensaje, yo }: { mensaje: Mensaje; yo: "cliente" | "agencia" }) {
+/**
+ * Dónde empieza lo que falta leer, o `null` si no falta nada.
+ *
+ * Lo sin leer es del otro lado: lo mío y los avisos de la aplicación no
+ * cuentan, igual que en el número del botón. Se cuenta desde el final hacia
+ * atrás hasta juntar `sinLeer` mensajes del otro; el último que se contó es el
+ * primero sin leer. Si hay menos que eso —se movieron a lo de antes—, es el
+ * primero que hay.
+ */
+export function indiceDelPrimerSinLeer(
+  mensajes: Mensaje[],
+  yo: "cliente" | "agencia",
+  sinLeer: number
+): number | null {
+  if (sinLeer <= 0 || mensajes.length === 0) return null;
+  const otro = yo === "cliente" ? "agencia" : "cliente";
+
+  let faltan = sinLeer;
+  for (let i = mensajes.length - 1; i >= 0; i--) {
+    if (mensajes[i].de !== otro) continue;
+    faltan -= 1;
+    if (faltan === 0) return i;
+  }
+  return 0;
+}
+
+/**
+ * ¿Este mensaje sigue al de arriba, de la misma persona?
+ *
+ * **Varios mensajes seguidos llevan un solo rótulo.** Con nombre y hora sobre
+ * cada burbuja, alguien que escribe una idea en cuatro renglones deja cuatro
+ * veces «CLIENTE · 18 SEPT, 12:33» y el hilo se lee como una planilla. El
+ * rótulo se pone en el primero, y de nuevo recién cuando contesta el otro:
+ * una respuesta en el medio corta la racha.
+ *
+ * Dos cosas más la cortan: un aviso de la aplicación —no es nadie hablando— y
+ * que cambie el día, porque ahí la fecha del rótulo vuelve a decir algo que
+ * no se ve de otra forma.
+ */
+export function sigueALaAnterior(anterior: Mensaje | undefined, mensaje: Mensaje): boolean {
+  if (!anterior) return false;
+  if (anterior.de === "sistema" || mensaje.de === "sistema") return false;
+  if (anterior.de !== mensaje.de || anterior.quien !== mensaje.quien) return false;
+  const a = new Date(anterior.cuando);
+  const b = new Date(mensaje.cuando);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
+  return a.toDateString() === b.toDateString();
+}
+
+function Burbuja({
+  mensaje,
+  yo,
+  primeroNuevo = false,
+  sigue = false,
+  diaNuevo = null,
+  ref,
+}: {
+  mensaje: Mensaje;
+  yo: "cliente" | "agencia";
+  /** Es el primero que no se había leído: lleva la raya de «nuevos» arriba. */
+  primeroNuevo?: boolean;
+  /** Sigue al de arriba, de la misma persona y de corrido: va sin rótulo y pegado. */
+  sigue?: boolean;
+  /** Empieza otro día: el día, en palabras, para la raya de arriba. */
+  diaNuevo?: string | null;
+  ref?: React.Ref<HTMLLIElement>;
+}) {
+  // **La fecha va en su propia raya, no en cada rótulo.** El rótulo de una
+  // burbuja dice solo quién habla; la hora está al apoyar el mouse en cada
+  // mensaje, y el día se ve una vez, cuando cambia.
+  const fecha = diaNuevo && (
+    <p className="mb-3 mt-2 text-center text-menudo font-semibold text-apagado first-letter:uppercase">
+      {diaNuevo}
+    </p>
+  );
+  // La raya que separa lo leído de lo nuevo. Es a donde se llega al abrir.
+  const raya = primeroNuevo && (
+    <div
+      aria-label="Desde acá, sin leer"
+      className="mb-3 flex w-full items-center gap-3 text-menudo font-bold text-acento"
+    >
+      <span className="h-px flex-1 bg-acento/40" />
+      Nuevos
+      <span className="h-px flex-1 bg-acento/40" />
+    </div>
+  );
+
   // Un aviso de la aplicación no es alguien hablando: va centrado, en gris y
   // sin burbuja, para que se lea como lo que es.
   if (mensaje.de === "sistema") {
     return (
-      <li className="flex justify-center">
-        <p className="bg-hueco px-3 py-1.5 text-center text-menudo text-tinta-suave">
+      <li ref={ref} className="flex flex-col pt-3">
+        {fecha}
+        {raya}
+        <p className="self-center rounded-full bg-hueco px-4 py-1.5 text-center text-menudo text-tinta-suave">
           {mensaje.texto}
           <span className="ml-2 text-micro text-apagado">
             {cuandoEnPalabras(mensaje.cuando)}
@@ -256,18 +419,29 @@ function Burbuja({ mensaje, yo }: { mensaje: Mensaje; yo: "cliente" | "agencia" 
   const mio = mensaje.de === yo;
 
   return (
-    <li className={`flex ${mio ? "justify-end" : "justify-start"}`}>
+    // Pegado al de arriba cuando sigue la racha; con aire cuando empieza otra.
+    <li
+      ref={ref}
+      className={`flex flex-col ${mio ? "items-end" : "items-start"} ${sigue ? "pt-1" : "pt-3"}`}
+    >
+      {fecha && <div className="w-full">{fecha}</div>}
+      {raya}
       <div className="max-w-[85%]">
+        {!sigue && (
+          <p
+            className={`px-1 text-menudo font-bold text-tinta-suave ${mio ? "text-right" : ""}`}
+          >
+            {mensaje.quien}
+          </p>
+        )}
         <p
-          className={`text-micro font-extrabold uppercase tracking-widest text-apagado ${
-            mio ? "text-right" : ""
-          }`}
-        >
-          {mensaje.quien} · {cuandoEnPalabras(mensaje.cuando)}
-        </p>
-        <p
-          className={`mt-0.5 whitespace-pre-wrap px-3 py-2 text-normal ${
-            mio ? "bg-acento text-white" : "border border-linea bg-lienzo text-tinta"
+          // La hora está en cada mensaje, al apoyar el mouse. El rótulo dice
+          // solo quién; el día, la raya de arriba cuando cambia.
+          title={cuandoEnPalabras(mensaje.cuando)}
+          className={`mt-0.5 whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-normal ${
+            mio
+              ? `bg-acento text-white ${sigue ? "" : "rounded-tr-md"}`
+              : `border border-linea bg-lienzo text-tinta ${sigue ? "" : "rounded-tl-md"}`
           }`}
         >
           {mensaje.texto}

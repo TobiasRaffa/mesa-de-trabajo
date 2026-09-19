@@ -7,6 +7,7 @@ import {
   piezaNueva,
   quedanRondas,
   sigueEnJuego,
+  yaSeEntrego,
   type Estado,
   type Evento,
   type Pieza,
@@ -514,5 +515,26 @@ describe("cerrar la revisión no toca lo que no cambió", () => {
       expect(r.pieza.estado).toBe("en_curso");
       expect(r.pieza.ronda).toBe(1);
     }
+  });
+});
+
+describe("ya se entregó", () => {
+  it("aprobada y sin la vuelta entregada en la carpeta: se la llevaron a finales", () => {
+    // Se entregó la V6; en la carpeta quedó hasta la V4.
+    expect(yaSeEntrego("final", 6, 4)).toBe(true);
+  });
+
+  it("aprobada con la vuelta entregada todavía ahí: sigue en Aprobado", () => {
+    expect(yaSeEntrego("final", 6, 6)).toBe(false);
+    expect(yaSeEntrego("final", 6, 7)).toBe(false);
+  });
+
+  it("sin saber qué vuelta se entregó, no se adivina", () => {
+    expect(yaSeEntrego("final", undefined, 1)).toBe(false);
+  });
+
+  it("solo una aprobada puede estar entregada", () => {
+    const otros: Estado[] = ["en_curso", "entregada", "en_revision", "cambios_marcados", "extra_pedida", "cancelada"];
+    for (const estado of otros) expect(yaSeEntrego(estado, 6, 4)).toBe(false);
   });
 });

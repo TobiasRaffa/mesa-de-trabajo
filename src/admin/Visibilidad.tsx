@@ -50,7 +50,7 @@ export function Visibilidad({
     <section>
       <h4 className={TITULO}>Lo ve el cliente</h4>
 
-      <div className="mt-2 flex">
+      <div className="mt-2 flex w-fit overflow-hidden rounded-full border-2 border-tinta">
         <Boton
           texto="Sí"
           activo={visible}
@@ -96,8 +96,8 @@ function Boton({
       onClick={onTocar}
       disabled={esperando}
       aria-pressed={activo}
-      className={`h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
-                  transition-colors disabled:opacity-40 ${primero ? "" : "border-l-0"} ${
+      className={`h-8 px-4 text-menudo font-bold tracking-tight transition-colors
+                  disabled:opacity-40 ${primero ? "" : "border-l-2 border-tinta"} ${
                     activo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
                   }`}
     >

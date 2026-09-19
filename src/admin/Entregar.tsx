@@ -131,7 +131,7 @@ export function Entregar({
         // Entregado, ya no hay nada que entregar: queda apagado mientras se
         // muestra el aviso, en vez de desaparecer y mover todo de lugar.
         disabled={cuantas === 0}
-        className="min-h-toque shrink-0 bg-acento px-4 text-normal font-bold tracking-tight
+        className="rounded-full min-h-toque shrink-0 bg-acento px-4 text-normal font-bold tracking-tight
                    text-white transition-colors hover:bg-acento-hover disabled:opacity-35"
       >
         {piezaId ? "Entregar esta" : `Entregar ${cuantas}`}
@@ -223,7 +223,7 @@ function Confirmacion({
           value={dias}
           disabled={yendo}
           onChange={(e) => onDias(Number(e.target.value))}
-          className="min-h-toque border-2 border-tinta bg-lienzo px-2 text-normal font-bold
+          className="rounded-full min-h-toque border-2 border-tinta bg-lienzo px-2 text-normal font-bold
                      tracking-tight text-tinta disabled:opacity-40"
         >
           {DIAS_POSIBLES.map((d) => (
@@ -239,7 +239,7 @@ function Confirmacion({
           type="button"
           onClick={onSi}
           disabled={yendo}
-          className="min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
+          className="rounded-full min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
                      text-white transition-colors hover:bg-acento-hover disabled:opacity-40"
         >
           {yendo ? "Entregando…" : "Sí, entregar"}
@@ -248,7 +248,7 @@ function Confirmacion({
           type="button"
           onClick={onNo}
           disabled={yendo}
-          className="min-h-toque border-2 border-tinta px-4 text-normal font-bold
+          className="rounded-full min-h-toque border-2 border-tinta px-4 text-normal font-bold
                      tracking-tight text-tinta transition-colors hover:bg-hueco"
         >
           Todavía no

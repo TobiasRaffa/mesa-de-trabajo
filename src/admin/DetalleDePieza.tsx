@@ -23,12 +23,14 @@ export function DetalleDePieza({
   /** En qué vuelta va la pieza, según los archivos que hay en Drive. */
   vueltas: number;
 }) {
-  const porVuelta = cambiosPorVuelta(
-    pieza.historia,
-    pieza.cambios.map((c) => c.texto),
-    vueltas,
-    pieza.enviada
-  );
+  // **Una pieza aprobada no tiene cambios a medio escribir.** Aprobar los
+  // borra, pero hay piezas guardadas de antes de que lo hiciera, y esta
+  // pantalla las mostraba «aprobada» y «los está escribiendo» a la vez. Lo
+  // mandado sí queda: eso ya es historia, y la historia no se toca.
+  const borrador =
+    pieza.estado === "final" && !pieza.enviada ? [] : pieza.cambios.map((c) => c.texto);
+
+  const porVuelta = cambiosPorVuelta(pieza.historia, borrador, vueltas, pieza.enviada);
 
   if (porVuelta.length === 0 && pieza.comentarios.length === 0) return null;
 

@@ -5,7 +5,9 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  DURACION_DE_SESION,
   galletaDeGestionValida,
+  leerGalleta,
   personaDeLaGalleta,
   SIN_PERSONA,
   valorDeSesion,
@@ -76,5 +78,40 @@ describe("un identificador con puntos adentro", () => {
   it("se lee entero", () => {
     const raro = "una.persona.rara";
     expect(personaDeLaGalleta(valorDeSesion(raro)!)).toBe(raro);
+  });
+});
+
+describe("una galleta vence", () => {
+
+  it("dice cuándo se emitió", () => {
+    const emitida = 1_800_000_000;
+    expect(leerGalleta(valorDeSesion(NARI, emitida)!, emitida + 10)).toEqual({
+      personaId: NARI,
+      emitida,
+    });
+  });
+
+  it("después de una semana ya no abre, aunque la firma sea buena", () => {
+    const emitida = 1_800_000_000;
+    const galleta = valorDeSesion(NARI, emitida)!;
+
+    expect(leerGalleta(galleta, emitida + DURACION_DE_SESION - 1)).not.toBeNull();
+    expect(leerGalleta(galleta, emitida + DURACION_DE_SESION + 1)).toBeNull();
+  });
+
+  it("una emitida en el futuro tampoco: nadie la firmó todavía", () => {
+    const emitida = 1_800_000_000;
+    expect(leerGalleta(valorDeSesion(NARI, emitida)!, emitida - 3600)).toBeNull();
+  });
+
+  it("cambiar la fecha a mano rompe la firma", () => {
+    const galleta = valorDeSesion(NARI, 1_800_000_000)!;
+    const estirada = galleta.replace(".1800000000.", ".1900000000.");
+
+    expect(leerGalleta(estirada, 1_800_000_010)).toBeNull();
+  });
+
+  it("una galleta del formato viejo, sin fecha, no vale", () => {
+    expect(leerGalleta(`${NARI}.firma`, 1_800_000_000)).toBeNull();
   });
 });

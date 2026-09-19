@@ -17,8 +17,10 @@
 // se mide contra el alto de la pantalla y no contra su propia proporción.
 
 import { useState } from "react";
-import type { Evento, Pieza } from "@/dominio/pieza";
+import { puedeEscribirCambios, type Evento, type Pieza } from "@/dominio/pieza";
 import { Boton, BotonEnlace } from "@/ui/Boton";
+import { ControlDeVentana, EncabezadoDeVentana } from "@/ui/EncabezadoDeVentana";
+import { Fondo } from "@/ui/Fondo";
 import { Comparador } from "@/ui/Comparador";
 import type { Lamina } from "@/ui/Ampliada";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
@@ -27,7 +29,6 @@ import {
   IconoAmpliar,
   IconoAprobar,
   IconoBorrar,
-  IconoCerrar,
   IconoComparar,
   IconoDescargar,
   IconoDeshacer,
@@ -53,6 +54,8 @@ export type PiezaAbierta = Pieza & {
   nombre: string;
   driveFileId: string;
   modificado?: string;
+  /** Hasta cuándo se lo espera, si se entregó. */
+  vence?: Date;
   /** El archivo en Drive, para abrirlo allá. */
   enlaceDrive?: string;
   /** Si es un PDF: la miniatura solo muestra la primera página. */
@@ -110,7 +113,11 @@ export function RevisarPieza({
   const pendiente =
     !pieza.enviada && (pieza.estado === "entregada" || pieza.estado === "en_revision");
   const pidiendoCambios = !pieza.enviada && pieza.estado === "cambios_marcados";
-  const sePuedeTocar = !pieza.enviada;
+  // Lo dice el dominio y no esta pantalla: una pieza aprobada no admite
+  // cambios aunque todavía no se haya enviado la revisión. Antes acá se miraba
+  // solo `enviada`, y la ventana ofrecía «Agregar cambio» sobre una aprobada;
+  // el servidor lo rechazaba, pero el botón estaba.
+  const sePuedeTocar = puedeEscribirCambios(pieza.estado, pieza.enviada);
 
   const srcGrande = urlDeMiniatura(pieza.driveFileId, 1200, pieza.modificado);
 
@@ -153,67 +160,58 @@ export function RevisarPieza({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-stretch justify-center bg-tinta/50 sm:items-center sm:p-6">
+    // Tocar el fondo cierra, como en toda ventana de la aplicación. `<Fondo>`
+    // se ocupa de que solo cierre el fondo mismo y no un toque adentro.
+    <Fondo
+      onCerrar={onCerrar}
+      className="z-40 flex items-stretch justify-center sm:items-center sm:p-6"
+    >
       <div
         ref={marco}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={pieza.nombre}
-        className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[94vh] sm:max-w-6xl"
+        className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[94vh] sm:max-w-6xl sm:rounded-tarjeta"
       >
         {/* La banda de color dice de quién es la pieza, cómo se llama y en qué
             anda, sin que haya que buscarlo. */}
-        <header className="flex items-center gap-4 bg-acento px-4 py-4 text-white sm:px-6">
-          <div className="min-w-0 flex-1">
-            <p className="text-micro font-extrabold uppercase tracking-widest text-white/60">
+        <EncabezadoDeVentana
+          rotulo={
+            <>
               Pieza {posicion.actual} de {posicion.total}
               {pieza.publicaEl && ` · sale el ${fechaCorta(pieza.publicaEl)}`}
-            </p>
-            <h2 className="mt-0.5 truncate text-titulo font-extrabold tracking-tight">
-              {pieza.nombre}
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="hidden bg-white/15 px-3 py-1.5 text-micro font-extrabold uppercase tracking-wider sm:block">
-              {pasoActual(
-                pieza.versiones.map((v) => v.numero),
-                pieza.ronda,
-                pieza.rondasIncluidas,
-                pieza.estado === "final"
-              )}
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
+            </>
+          }
+          titulo={pieza.nombre}
+          onCerrar={onCerrar}
+          controles={
+            <>
+              <span className="mr-1.5 hidden rounded-full bg-white/15 px-3 py-1.5 font-mono text-micro font-bold uppercase tracking-wider sm:block">
+                {pasoActual(
+                  pieza.versiones.map((v) => v.numero),
+                  pieza.ronda,
+                  pieza.rondasIncluidas,
+                  pieza.estado === "final"
+                )}
+              </span>
+              <ControlDeVentana
                 onClick={() => onIr(-1)}
                 disabled={posicion.total < 2}
                 aria-label="Pieza anterior"
-                className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25 disabled:opacity-35"
               >
                 <IconoFlecha className="rotate-180" />
-              </button>
-              <button
-                type="button"
+              </ControlDeVentana>
+              <ControlDeVentana
                 onClick={() => onIr(1)}
                 disabled={posicion.total < 2}
                 aria-label="Pieza siguiente"
-                className="grid h-9 w-9 place-items-center bg-white/15 transition-colors hover:bg-white/25 disabled:opacity-35"
               >
                 <IconoFlecha />
-              </button>
-              <button
-                type="button"
-                onClick={onCerrar}
-                aria-label="Cerrar"
-                className="grid h-9 w-9 place-items-center bg-white text-acento transition-colors hover:bg-white/90"
-              >
-                <IconoCerrar />
-              </button>
-            </div>
-          </div>
-        </header>
+              </ControlDeVentana>
+            </>
+          }
+        />
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-10">
@@ -370,7 +368,7 @@ export function RevisarPieza({
                                     setBorrador(cambio.texto);
                                   }}
                                   aria-label={`Editar el cambio ${i + 1}`}
-                                  className="grid h-8 w-8 place-items-center text-apagado transition-colors hover:bg-hueco hover:text-tinta"
+                                  className="rounded-full grid h-8 w-8 place-items-center text-apagado transition-colors hover:bg-hueco hover:text-tinta"
                                 >
                                   <IconoEditar />
                                 </button>
@@ -378,7 +376,7 @@ export function RevisarPieza({
                                   type="button"
                                   onClick={() => onBorrarCambio(cambio.id)}
                                   aria-label={`Borrar el cambio ${i + 1}`}
-                                  className="grid h-8 w-8 place-items-center text-apagado transition-colors hover:bg-alerta-tenue hover:text-alerta"
+                                  className="rounded-full grid h-8 w-8 place-items-center text-apagado transition-colors hover:bg-alerta-tenue hover:text-alerta"
                                 >
                                   <IconoBorrar />
                                 </button>
@@ -569,7 +567,7 @@ export function RevisarPieza({
           </div>
         </footer>
       </div>
-    </div>
+    </Fondo>
   );
 }
 

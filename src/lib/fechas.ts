@@ -40,6 +40,40 @@ export function diasDeDiferencia(desde: Date, hasta: Date): number {
   return Math.round((b.getTime() - a.getTime()) / DIA_EN_MS);
 }
 
+/**
+ * El comienzo de hoy en Buenos Aires, como instante.
+ *
+ * **El servidor no está en Buenos Aires.** En la máquina de desarrollo sí, y
+ * ahí `new Date(año, mes, día)` daba la medianoche correcta. En internet el
+ * servidor vive en tiempo universal: la misma cuenta daba las nueve de la
+ * noche del día anterior, y una entrega que vencía «hoy» aparecía vencida
+ * tres horas antes de tiempo. Todo lo que compare con «hoy» sale de acá.
+ */
+export function medianocheDeHoy(ahora = new Date()): Date {
+  const partes = new Intl.DateTimeFormat("es-AR", {
+    timeZone: ZONA,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(ahora);
+  const buscar = (tipo: string) => Number(partes.find((p) => p.type === tipo)!.value);
+  // Argentina no cambia de hora: la medianoche de Buenos Aires son las tres
+  // de la madrugada universales, siempre.
+  return new Date(Date.UTC(buscar("year"), buscar("month") - 1, buscar("day"), 3));
+}
+
+/** El día —`AAAA-MM-DD`— que es en Buenos Aires en ese momento. */
+export function diaEnBuenosAires(momento: Date): string {
+  const partes = new Intl.DateTimeFormat("es-AR", {
+    timeZone: ZONA,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(momento);
+  const de = (tipo: string) => partes.find((p) => p.type === tipo)!.value;
+  return `${de("year")}-${de("month")}-${de("day")}`;
+}
+
 /** El comienzo del día, en Buenos Aires, del momento que se le pase. */
 function mediaNocheLocal(momento: Date): Date {
   const partes = new Intl.DateTimeFormat("es-AR", {
@@ -107,3 +141,22 @@ export function fechaCorta(momento: Date): string {
   }).format(momento);
 }
 
+/**
+ * Hace cuánto pasó algo, como lo diría una persona: «hace 5 min», «hace 3 h»,
+ * «ayer», «hace 4 días». Más de un mes, la fecha.
+ */
+export function haceCuanto(iso: string, ahora = new Date()): string {
+  const momento = new Date(iso);
+  if (Number.isNaN(momento.getTime())) return "";
+
+  const minutos = Math.max(0, Math.round((ahora.getTime() - momento.getTime()) / 60_000));
+  if (minutos < 1) return "recién";
+  if (minutos < 60) return `hace ${minutos} min`;
+  const horas = Math.round(minutos / 60);
+  if (horas < 24) return `hace ${horas} h`;
+
+  const dias = diasDeDiferencia(momento, ahora);
+  if (dias <= 1) return "ayer";
+  if (dias < 31) return `hace ${dias} días`;
+  return `el ${fechaCorta(momento)}`;
+}

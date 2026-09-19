@@ -33,7 +33,7 @@ describe("esDiaValido", () => {
 
 describe("ida y vuelta entre día y fecha", () => {
   it("una fecha vuelve al mismo día", () => {
-    expect(diaDe(new Date(2026, 8, 12))).toBe("2026-09-12");
+    expect(diaDe(new Date("2026-09-12T12:00:00-03:00"))).toBe("2026-09-12");
   });
 
   it("un día vuelve a la misma fecha, en el calendario de acá", () => {
@@ -52,6 +52,6 @@ describe("ida y vuelta entre día y fecha", () => {
   });
 
   it("rellena con ceros los meses y días de una cifra", () => {
-    expect(diaDe(new Date(2026, 0, 5))).toBe("2026-01-05");
+    expect(diaDe(new Date("2026-01-05T12:00:00-03:00"))).toBe("2026-01-05");
   });
 });

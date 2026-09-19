@@ -18,14 +18,17 @@ import { correoConfigurado } from "@/lib/correo";
 import { personaPorId } from "@/lib/equipo";
 import { responsableDe, responsableQueCorre } from "@/lib/responsables";
 import { subcarpetasDe } from "@/lib/google";
-import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
-import { calcularVencimiento } from "@/lib/fechas";
+import { aprobadasQueSeFueron, piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
+import { calcularVencimiento, medianocheDeHoy } from "@/lib/fechas";
+import { recordarSiHaceFalta } from "@/lib/recordatorios";
+import { enPalabrasLoRevisado } from "@/dominio/historia";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
 import {
   diasConNosotros,
   hayAlgoParaEntregar,
   sigueEnJuego,
+  yaSeEntrego,
   type Estado,
 } from "@/dominio/pieza";
 
@@ -93,8 +96,16 @@ export type CarpetaEnElTablero = {
    */
   enJuego: number;
   sinRevisar: number;
-  /** Ya no están en juego: aprobadas —en «Entregas finales»— o canceladas. */
+  /** Ya no están en juego: aprobadas o canceladas. */
   terminadas: number;
+  /**
+   * Piezas aprobadas cuyo archivo ya se llevaron a «Entregas finales».
+   *
+   * Es el final del camino: no cuentan en ninguna columna ni en `piezas`. Se
+   * anotan aparte para distinguir una carpeta que se vació porque se entregó
+   * todo de una que está vacía porque falta subir algo.
+   */
+  entregadas: number;
   /**
    * Cuántas piezas se quedaron sin vueltas y piden una más.
    *
@@ -227,9 +238,13 @@ export async function elTablero(): Promise<Tablero> {
     // por como Drive devuelve las carpetas no dice nada; ordenado por cuánto
     // hace que algo está quieto, lo primero que se ve es lo que se está
     // atrasando. Lo que no está de nuestro lado va después, en su orden.
+    //
+    // **Y una que se vació entregando tampoco.** Llevar el archivo aprobado a
+    // «Entregas finales» es el final del trabajo: la carpeta de trabajo queda
+    // con las vueltas viejas o sin nada, y en ningún caso es algo que mirar.
     carpetas: porCliente
       .flat()
-      .filter((c) => c.piezas > 0 || c.hijas.length > 0)
+      .filter((c) => c.piezas > 0 || (c.hijas.length > 0 && c.entregadas === 0))
       .sort((a, b) => (b.diasConNosotros ?? -1) - (a.diasConNosotros ?? -1)),
     correoConfigurado: correoConfigurado(),
   };
@@ -294,10 +309,24 @@ async function ramaDelTablero(
   const agrupadas = agruparVersiones(archivos);
   const conArchivos = conSusArchivos(carpeta.id, agrupadas);
   const identidades = conArchivos.map((p) => p.id);
-  const [estados, propios] = await Promise.all([
+  const [estados, propios, seFueron] = await Promise.all([
     estadosDe(carpeta.id, conArchivos),
     plazosDe(identidades),
+    // Aprobadas que ya no dejaron ni un archivo en la carpeta.
+    aprobadasQueSeFueron(carpeta.id, [...identidades, ...archivos.map((a) => a.id)]),
   ]);
+
+  // **Lo que ya se entregó no está en el tablero.** Aprobada, la pieza espera
+  // en «Aprobado» a que el equipo lleve el archivo a «Entregas finales». Cuando
+  // lo lleva, la vuelta aprobada se va de la carpeta —quedan las viejas— y ahí
+  // el trabajo terminó: no es de nadie, ni siquiera de la columna de aprobados.
+  const yaEntregadas = new Set(
+    conArchivos
+      .filter(({ id, version }) =>
+        yaSeEntrego(estados[id].estado, estados[id].versionEntregada, version)
+      )
+      .map(({ id }) => id)
+  );
 
   const ahora = new Date();
 
@@ -333,7 +362,40 @@ async function ramaDelTablero(
     ];
   });
 
-  const piezas = Object.values(estados);
+  // **Los recordatorios de plazo salen de acá.** El tablero es la única
+  // pantalla que mira todas las piezas con su plazo, y se abre todos los días;
+  // no hay un reloj corriendo en el servidor. Cada uno sale una sola vez.
+  await Promise.all(
+    agrupadas.map((pieza, i) => {
+      const suya = identidades[i];
+      const estado = estados[suya];
+      const ultima = pieza.versiones[pieza.versiones.length - 1];
+      return recordarSiHaceFalta(
+        {
+          piezaId: suya,
+          detalle: enPalabrasLoRevisado([{ nombre: pieza.titulo, version: ultima.numero }]),
+          entregadaEl: estado.entregadaEl,
+          dias: plazoQueCorre(propios[suya], dias, undefined),
+          vence: venceLaPieza(estado.entregadaEl, propios[suya], dias),
+          esperandoAlCliente:
+            !estado.enviada &&
+            (estado.estado === "entregada" || estado.estado === "en_revision"),
+        },
+        {
+          clienteId: cliente.id,
+          cliente: cliente.nombre,
+          carpetaId: carpeta.id,
+          carpeta: carpeta.name,
+        }
+      );
+    })
+  );
+
+  // Las entregadas no cuentan en nada de lo que sigue: ya no son trabajo.
+  const piezas = Object.entries(estados)
+    .filter(([id]) => !yaEntregadas.has(id))
+    .map(([, p]) => p);
+  const entregadas = yaEntregadas.size + seFueron + suma(hijas, (h) => h.entregadas);
 
   // Lo que espera al cliente: se la entregamos y todavía no decidió.
   const sinRevisar =
@@ -374,7 +436,10 @@ async function ramaDelTablero(
   // «Aprobado» porque no esperaba nada de nadie, y con ese título puesto se
   // leía como un trabajo terminado. Lo que le falta es que alguien suba algo,
   // así que es nuestra.
-  const vacia = cuantas === 0;
+  //
+  // **Salvo que se haya vaciado entregando.** Una carpeta cuyo único archivo
+  // se llevaron a «Entregas finales» no está esperando nada nuestro: terminó.
+  const vacia = cuantas === 0 && entregadas === 0;
 
   const cancha: Cancha =
     sinEntregar > 0
@@ -422,6 +487,7 @@ async function ramaDelTablero(
     enJuego: cuantas - terminadas,
     sinRevisar,
     terminadas,
+    entregadas,
     extraPedida:
       piezas.filter((p) => p.estado === "extra_pedida").length +
       suma(hijas, (h) => h.extraPedida),
@@ -471,11 +537,11 @@ function venceLaPieza(
 /** La medianoche de dentro de tantos días. */
 function enDias(cuantos: number): Date {
   const d = hoyALaMedianoche();
-  d.setDate(d.getDate() + cuantos);
+  d.setUTCDate(d.getUTCDate() + cuantos);
   return d;
 }
 
+/** El comienzo de hoy en Buenos Aires, que no es donde está el servidor. */
 function hoyALaMedianoche(): Date {
-  const ahora = new Date();
-  return new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+  return medianocheDeHoy();
 }

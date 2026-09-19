@@ -22,8 +22,9 @@ import {
   type Evento,
 } from "@/dominio/pieza";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
-import { enPalabrasLoRevisado } from "@/dominio/historia";
-import { entroAlCliente } from "@/lib/acceso";
+import { comoFirmaElCliente, enPalabrasLoRevisado } from "@/dominio/historia";
+import { entradaDe } from "@/lib/acceso";
+import { cadenaHasta } from "@/lib/permisos";
 import { avisar } from "@/lib/avisar";
 import type { ClaseDeAviso } from "@/lib/avisos";
 import { clienteDeCarpeta, esCarpetaDelCliente } from "@/lib/carpetas";
@@ -75,7 +76,18 @@ async function quienEntro(carpetaId: string) {
 
   // La galleta la firma el servidor y dice «este navegador acertó la clave de
   // este link». No se puede fabricar sin la llave del servidor.
-  if (!(await entroAlCliente(cliente.id, await cookies()))) return null;
+  const entrada = await entradaDe(await cookies());
+  if (!entrada || entrada.cliente.id !== cliente.id) return null;
+
+  // Entró por el link de una carpeta sola: solo esa carpeta, y lo que cuelgue
+  // de ella. Con el identificador de otra carpeta del mismo cliente, no.
+  if (
+    entrada.carpeta &&
+    entrada.carpeta !== carpetaId &&
+    (await cadenaHasta(carpetaId, entrada.carpeta)).length === 0
+  ) {
+    return null;
+  }
 
   try {
     const carpeta = await datosDeCarpeta(carpetaId);
@@ -205,6 +217,11 @@ export async function moverPieza(
   const guardada = await estadoDe(carpetaId, piezaId);
   const rondasIncluidas = RONDAS_INCLUIDAS_POR_DEFECTO;
 
+  // Quién firma. Del otro lado hay «Cliente»; al aprobar puede decir su
+  // nombre, y queda al lado. Lo que llega se limpia acá, no se le cree.
+  const firma =
+    evento.tipo === "aprobar" ? comoFirmaElCliente(CLIENTE, evento.por) : CLIENTE;
+
   const resultado = aplicar(
     {
       estado: guardada.estado,
@@ -213,7 +230,7 @@ export async function moverPieza(
       rondasExtra: guardada.rondasExtra,
     },
     // Aprobar lleva quién: la firma la pone el servidor, no el navegador.
-    evento.tipo === "aprobar" ? { tipo: "aprobar", por: CLIENTE } : evento
+    evento.tipo === "aprobar" ? { tipo: "aprobar", por: firma } : evento
   );
 
   if (!resultado.ok) return { ok: false, motivo: resultado.motivo };
@@ -226,11 +243,20 @@ export async function moverPieza(
     rondasExtra: resultado.pieza.rondasExtra,
     // Descartar los cambios los borra de verdad: dejar la lista escrita debajo
     // de una pieza sin decidir sería mentir sobre lo que va a recibir la agencia.
-    cambios: evento.tipo === "descartar_cambios" ? [] : guardada.cambios,
+    //
+    // **Aprobar también los borra.** Aprobada es «sale tal cual está», y lo que
+    // se había anotado antes de decidirlo no es un pedido: quedaba guardado y
+    // la agencia veía una pieza aprobada con cambios «que el cliente está
+    // escribiendo», las dos cosas a la vez. Nada salió todavía —la ronda no se
+    // mandó—, así que no hay nada que perder.
+    cambios:
+      evento.tipo === "descartar_cambios" || evento.tipo === "aprobar"
+        ? []
+        : guardada.cambios,
   };
 
   const hito = DESDE_EL_PORTAL[evento.tipo];
-  if (hito) pieza = anotar(pieza, hito, CLIENTE);
+  if (hito) pieza = anotar(pieza, hito, firma);
 
   // **Aprobar ya no muda el archivo a «Entregas finales».**
   //
@@ -270,9 +296,9 @@ export async function moverPieza(
       carpeta: donde.nombreDeLaCarpeta,
       // Cual pieza y de que vuelta. Decia "una pieza" a secas, y con eso el
       // aviso obligaba a entrar a mirar de que estaba hablando.
-      detalle: enPalabrasLoRevisado([
-        { nombre: cual.nombre, version: cual.version },
-      ]),
+      detalle:
+        enPalabrasLoRevisado([{ nombre: cual.nombre, version: cual.version }]) +
+        (firma === CLIENTE ? "" : ` (${firma.slice(CLIENTE.length + 3)})`),
     });
   }
 

@@ -95,6 +95,23 @@ export const IconoBorrar = (p: Props) => (
   </Trazo>
 );
 
+// Un globo de diálogo: «hay mensajes». Va al lado de un número y nada más,
+// donde poner la palabra «mensajes» ocuparía lo que la lista no tiene.
+export const IconoMensaje = (p: Props) => (
+  <Trazo {...p}>
+    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4v-4A1.5 1.5 0 0 1 4 14.5v-9z" />
+  </Trazo>
+);
+
+// Una campana: «hay notificaciones». Al lado de un número, en el encabezado
+// del tablero, donde la palabra ocupaba lo que el número necesita.
+export const IconoCampana = (p: Props) => (
+  <Trazo {...p}>
+    <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16z" />
+    <path d="M10 20.5a2 2 0 0 0 4 0" />
+  </Trazo>
+);
+
 // El triángulo de Drive, simplificado a sus tres planos.
 export const IconoDrive = (p: Props) => (
   <Trazo {...p}>

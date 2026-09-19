@@ -55,11 +55,19 @@ describe("lo que ve alguien", () => {
     expect(desordenada).toEqual(["tablero", "clientes", "conversaciones", "notificaciones", "facturas"]);
   });
 
-  it("todos los roles dan al menos una sección", () => {
+  it("todos los moldes dan al menos una sección", () => {
     // Un rol que no da nada es una persona que entra y no tiene a dónde ir.
-    for (const rol of ROLES) {
+    // El personalizado es la excepción a propósito: lo suyo son las sueltas.
+    for (const rol of ROLES.filter((r) => r !== "personalizado")) {
       expect(seccionesDe(rol).length, `El rol «${rol}» no da ninguna sección.`).toBeGreaterThan(0);
     }
+  });
+
+  it("el personalizado no da nada por sí mismo: ve exactamente sus sueltas", () => {
+    expect(seccionesDe("personalizado")).toEqual([]);
+    expect(seccionesDe("personalizado", ["facturas", "tablero"])).toEqual(["tablero", "facturas"]);
+    // Ninguna sección «la da el rol», así que todas se pueden tildar y destildar.
+    expect(SECCIONES.some((s) => laDaElRol("personalizado", s))).toBe(false);
   });
 
   it("solo administración entra a Admin", () => {

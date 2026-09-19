@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Archivo } from "next/font/google";
+import { Archivo, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { revisarLoQueInternetExige } from "@/lib/entorno";
 
@@ -22,12 +22,27 @@ revisarLoQueInternetExige();
 const archivo = Archivo({
   variable: "--fuente-archivo",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  // Variable y con el eje de ancho: los titulares de Matter son anchos, y
+  // Archivo lo trae. Con la fuente variable vienen todos los pesos en un solo
+  // archivo, así que no hay que enumerarlos.
+  weight: "variable",
+  axes: ["wdth"],
+  display: "swap",
+});
+
+// La monoespaciada de las etiquetas chicas —«Mesa de trabajo», «Para
+// revisar», el rótulo de cada sección—. Es la que Matter usa en sus piezas para
+// el texto de apoyo, y acá cumple el mismo papel: dice de qué se trata lo que
+// tiene al lado, sin pesar más que eso.
+const mono = Space_Mono({
+  variable: "--fuente-mono",
+  subsets: ["latin"],
+  weight: ["400", "700"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Mesa de trabajo",
+  title: "Mesa de trabajo · Matter",
   description: "Revisión y aprobación de piezas entre la agencia y sus clientes.",
   // Nada de esto va a un buscador. El link de un cliente es medio acceso: si
   // Google lo indexara, dejaría de serlo. Y las pantallas internas, menos.
@@ -36,7 +51,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="es-AR" className={`${archivo.variable} h-full antialiased`}>
+    <html lang="es-AR" className={`${archivo.variable} ${mono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );

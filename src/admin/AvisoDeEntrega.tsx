@@ -78,7 +78,7 @@ export function AvisoDeEntrega({
             href={whatsapp}
             target="_blank"
             rel="noreferrer noopener"
-            className="min-h-toque inline-flex items-center bg-acento px-4 text-normal
+            className="rounded-full min-h-toque inline-flex items-center bg-acento px-4 text-normal
                        font-bold tracking-tight text-white transition-colors hover:bg-acento-hover"
           >
             Mandarlo por WhatsApp
@@ -95,7 +95,7 @@ export function AvisoDeEntrega({
         <button
           type="button"
           onClick={copiar}
-          className="min-h-toque border-2 border-tinta px-4 text-normal font-bold
+          className="rounded-full min-h-toque border-2 border-tinta px-4 text-normal font-bold
                      tracking-tight text-tinta transition-colors hover:bg-hueco"
         >
           {copiado ? "Copiado" : "Copiar el mensaje"}

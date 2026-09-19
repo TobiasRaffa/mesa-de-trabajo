@@ -180,6 +180,31 @@ export function hayAlgoParaEntregar(
 }
 
 /**
+ * ¿Ya se entregó de verdad: el archivo aprobado se fue a «Entregas finales»?
+ *
+ * **Aprobada no es el final del camino; entregada sí.** Cuando el cliente
+ * aprueba, la pieza queda en «Aprobado» del tablero esperando que el equipo
+ * suba lo terminado a «Entregas finales». El equipo lo hace moviendo el
+ * archivo aprobado a mano, en Drive, y ahí el trabajo llegó a su fin: no
+ * tiene por qué seguir ocupando una columna.
+ *
+ * Se nota porque **la vuelta que se le entregó ya no está en la carpeta**: las
+ * versiones viejas pueden quedar —la V1, la V4—, pero la V6 que el cliente
+ * aprobó se fue. Si la vuelta entregada sigue ahí, sigue en «Aprobado»: quizás
+ * la copiaron en vez de moverla, y eso no es entregar.
+ */
+export function yaSeEntrego(
+  estado: Estado,
+  /** La vuelta que se le entregó al cliente, si se anotó. */
+  versionEntregada: number | undefined,
+  /** La vuelta más alta que queda hoy en la carpeta. */
+  versionMasAlta: number
+): boolean {
+  if (estado !== "final" || versionEntregada === undefined) return false;
+  return versionMasAlta < versionEntregada;
+}
+
+/**
  * ¿La tenemos nosotros?
  *
  * **Decide cuál de los dos relojes se muestra.** Hay dos y son distintos: el

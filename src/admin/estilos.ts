@@ -11,7 +11,7 @@
 
 /** El rótulo de cada sección del panel. */
 export const TITULO =
-  "text-micro font-extrabold uppercase tracking-widest text-apagado";
+  "font-mono text-micro font-bold uppercase tracking-widest text-apagado";
 
 /** Un desplegable o un campo de texto. */
 export const CAMPO =
@@ -20,14 +20,14 @@ export const CAMPO =
 
 /** El botón que confirma un cambio. */
 export const GUARDAR =
-  "h-8 shrink-0 bg-tinta px-3 text-micro font-extrabold uppercase tracking-wider " +
+  "h-8 shrink-0 rounded-full bg-tinta px-3.5 font-mono text-micro font-bold uppercase tracking-wider " +
   "text-lienzo transition-colors hover:bg-tinta/90 disabled:opacity-40";
 
 /** Un botón secundario del panel. */
 export const BOTON =
-  "h-8 shrink-0 border-2 border-tinta px-3 text-menudo font-bold tracking-tight " +
+  "h-8 shrink-0 rounded-full border-2 border-tinta px-3.5 text-menudo font-bold tracking-tight " +
   "text-tinta transition-colors hover:bg-hueco disabled:opacity-40";
 
 /** «heredado», «falta», y demás rótulos al costado de un control. */
 export const ETIQUETA =
-  "text-micro font-extrabold uppercase tracking-wider text-apagado";
+  "font-mono text-micro font-bold uppercase tracking-wider text-apagado";

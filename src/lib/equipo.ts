@@ -15,7 +15,7 @@
 // las diseñadoras hoy, sin tener que repasarlas una por una. Las reglas están
 // en `dominio/roles.ts`, donde puede leerlas también el navegador.
 
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { coleccion } from "@/lib/almacen";
 import {
   esAlcance,
@@ -77,6 +77,66 @@ export type Persona = {
 };
 
 /**
+ * Lo que se guarda de una persona y **no** es parte de `Persona`.
+ *
+ * `Persona` viaja entera al navegador —el árbol de clientes la usa para el
+ * desplegable de «quién lo lleva»—, así que lo que va ahí lo ve cualquiera
+ * del equipo. El código de alta no puede: es con lo que se reclama una cuenta.
+ * Se guarda en la misma ficha, pero se lee solo por `codigoDeAltaDe`, que
+ * únicamente llaman la puerta y la pantalla de Admin.
+ */
+type Guardada = Persona & {
+  /**
+   * Con qué entra la primera vez, además del correo.
+   *
+   * **Sin esto, dar de alta un correo era regalar la cuenta a quien llegara
+   * primero.** Entre el alta y la primera entrada, cualquiera que conociera el
+   * correo —que es público: está en la firma de cada mail— podía entrar antes
+   * que su dueña y quedarse con la cuenta. El código lo ve solo quien
+   * administra, en Admin, y se lo pasa por donde le habla siempre. Se borra
+   * en cuanto la contraseña queda puesta, y vuelve a aparecer si se la
+   * reinician.
+   */
+  codigoDeAlta?: string;
+};
+
+/**
+ * Un código de alta nuevo: ocho letras y números que no se confunden entre sí
+ * —sin O ni 0, sin I ni 1— porque se van a dictar por teléfono.
+ */
+export function nuevoCodigoDeAlta(): string {
+  const ALFABETO = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = randomBytes(8);
+  return Array.from(bytes, (b) => ALFABETO[b % ALFABETO.length]).join("");
+}
+
+/** Cómo se muestra: en dos mitades, que se leen mejor que ocho seguidas. */
+export const codigoLegible = (codigo: string) => `${codigo.slice(0, 4)}-${codigo.slice(4)}`;
+
+/** Deja un código escrito a mano comparable: sin guiones, espacios ni minúsculas. */
+export const normalizarCodigo = (escrito: string) =>
+  escrito.replace(/[\s-]+/g, "").trim().toUpperCase();
+
+/**
+ * El código de alta de alguien, o `null` si no tiene —porque ya eligió su
+ * contraseña, o porque se dio de alta antes de que existieran los códigos—.
+ */
+export async function codigoDeAltaDe(id: string): Promise<string | null> {
+  const guardada = await almacen.uno(id);
+  const codigo = guardada?.codigoDeAlta;
+  return typeof codigo === "string" && codigo ? codigo : null;
+}
+
+/** Si lo que escribió es el código de alta de esta persona. */
+export async function codigoDeAltaCorrecto(id: string, escrito: string): Promise<boolean> {
+  const codigo = await codigoDeAltaDe(id);
+  if (!codigo) return false;
+  const a = Buffer.from(codigo);
+  const b = Buffer.from(normalizarCodigo(escrito));
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
  * Una dirección de correo con forma de dirección de correo.
  *
  * No valida que exista —eso solo lo dice mandarle algo— pero descarta lo que
@@ -116,8 +176,11 @@ function esPersona(v: unknown): v is Persona {
  * decidir qué puede ver. Se le da el rol de antes, que está explicado allá.
  */
 function completar(p: Persona): Persona {
+  // Campo por campo, y no `...p`: lo que no es parte de `Persona` —el código
+  // de alta— tiene que quedar afuera de lo que viaja al navegador.
   return {
-    ...p,
+    id: p.id,
+    nombre: p.nombre,
     correo: typeof p.correo === "string" ? p.correo : "",
     avisaDeTodo: p.avisaDeTodo === true,
     enDrive: typeof p.enDrive === "string" && p.enDrive ? p.enDrive : undefined,
@@ -130,7 +193,17 @@ function completar(p: Persona): Persona {
   };
 }
 
-const almacen = coleccion<Persona>("equipo", esPersona);
+/** Lo mismo, conservando lo que no viaja. */
+function completarGuardada(p: Guardada): Guardada {
+  return {
+    ...completar(p),
+    ...(typeof p.codigoDeAlta === "string" && p.codigoDeAlta
+      ? { codigoDeAlta: p.codigoDeAlta }
+      : {}),
+  };
+}
+
+const almacen = coleccion<Guardada>("equipo", esPersona);
 
 export async function elEquipo(): Promise<Persona[]> {
   // El orden es el de alta, que es el que espera quien la cargó.
@@ -160,7 +233,7 @@ export async function sumarAlEquipo(datos: {
   clientes?: Alcance;
 }): Promise<Persona> {
   const correo = datos.correo.trim().slice(0, 120);
-  const persona: Persona = {
+  const persona: Guardada = {
     id: randomUUID(),
     nombre: (datos.nombre?.trim() || nombreDesdeCorreo(correo)).slice(0, 60),
     correo,
@@ -169,9 +242,32 @@ export async function sumarAlEquipo(datos: {
     rol: datos.rol,
     sueltas: (datos.sueltas ?? []).filter(esSeccion),
     clientes: esAlcance(datos.clientes) ? datos.clientes : "todos",
+    codigoDeAlta: nuevoCodigoDeAlta(),
   };
   await almacen.guardar(persona.id, persona);
-  return persona;
+  return completar(persona);
+}
+
+/**
+ * Le da un código de alta nuevo a alguien. El de antes deja de servir.
+ *
+ * Se llama al reiniciarle la contraseña —vuelve a estar «sin contraseña», y
+ * sin código cualquiera podría reclamar la cuenta— y para quien se dio de alta
+ * antes de que existieran los códigos.
+ */
+export async function renovarCodigoDeAlta(id: string): Promise<string | null> {
+  const actual = await almacen.uno(id);
+  if (!actual) return null;
+  const codigo = nuevoCodigoDeAlta();
+  await almacen.guardar(id, completarGuardada({ ...actual, codigoDeAlta: codigo }));
+  return codigo;
+}
+
+/** Ya eligió su contraseña: el código cumplió y se va. */
+export async function borrarCodigoDeAlta(id: string): Promise<void> {
+  const actual = await almacen.uno(id);
+  if (!actual) return;
+  await almacen.guardar(id, completar(actual));
 }
 
 /**
@@ -198,7 +294,7 @@ export async function cambiarPersona(
   if (recortado.sueltas) recortado.sueltas = recortado.sueltas.filter(esSeccion);
   if ("clientes" in recortado && !esAlcance(recortado.clientes)) delete recortado.clientes;
 
-  await almacen.guardar(id, completar({ ...actual, ...recortado }));
+  await almacen.guardar(id, completarGuardada({ ...actual, ...recortado }));
 }
 
 /**

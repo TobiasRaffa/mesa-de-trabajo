@@ -109,6 +109,35 @@ export type ArchivoDrive = {
   webViewLink?: string;
 };
 
+/**
+ * Todas las páginas de un listado de Drive.
+ *
+ * **Drive devuelve de a cien y no avisa.** Sin esto, una carpeta con ciento
+ * veinte archivos mostraba cien y los otros veinte no existían para la
+ * aplicación: ni en el portal, ni en el tablero, ni para entregar. Se pide de
+ * a mil —el máximo— y se sigue mientras Drive diga que hay más.
+ */
+async function todasLasPaginas<T>(
+  urlSinPagina: string,
+  token: string,
+  queNoHay: string
+): Promise<T[]> {
+  const salida: T[] = [];
+  let pagina: string | undefined;
+
+  do {
+    const url = pagina ? `${urlSinPagina}&pageToken=${encodeURIComponent(pagina)}` : urlSinPagina;
+    const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+    const data = await r.json();
+    if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? queNoHay));
+    salida.push(...((data.files ?? []) as T[]));
+    pagina = typeof data.nextPageToken === "string" && data.nextPageToken ? data.nextPageToken : undefined;
+  } while (pagina);
+
+  return salida;
+}
+
+
 // Lista los archivos de una carpeta, ordenados por nombre.
 // Las miniaturas vienen con la respuesta y caducan en horas: no se guardan.
 export async function listarCarpeta(folderId: string): Promise<ArchivoDrive[]> {
@@ -119,14 +148,10 @@ async function pedirListado(folderId: string): Promise<ArchivoDrive[]> {
   const token = await tokenDeGoogle();
   const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
   const fields = encodeURIComponent(
-    "files(id,name,mimeType,size,modifiedTime,thumbnailLink,webViewLink)"
+    "nextPageToken,files(id,name,mimeType,size,modifiedTime,thumbnailLink,webViewLink)"
   );
-  const url = `${DRIVE}/files?q=${q}&fields=${fields}&orderBy=name&supportsAllDrives=true&includeItemsFromAllDrives=true`;
-
-  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
-  const data = await r.json();
-  if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "error desconocido"));
-  return data.files ?? [];
+  const url = `${DRIVE}/files?q=${q}&fields=${fields}&orderBy=name&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+  return todasLasPaginas<ArchivoDrive>(url, token, "error desconocido");
 }
 
 const CARPETA = "application/vnd.google-apps.folder";
@@ -155,13 +180,9 @@ async function pedirSubcarpetas(folderId: string): Promise<CarpetaDrive[]> {
   const q = encodeURIComponent(
     `'${folderId}' in parents and mimeType = '${CARPETA}' and trashed=false`
   );
-  const fields = encodeURIComponent("files(id,name,webViewLink,modifiedTime)");
-  const url = `${DRIVE}/files?q=${q}&fields=${fields}&orderBy=name&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true`;
-
-  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
-  const data = await r.json();
-  if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "error desconocido"));
-  return data.files ?? [];
+  const fields = encodeURIComponent("nextPageToken,files(id,name,webViewLink,modifiedTime)");
+  const url = `${DRIVE}/files?q=${q}&fields=${fields}&orderBy=name&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+  return todasLasPaginas<CarpetaDrive>(url, token, "error desconocido");
 }
 
 /**
@@ -180,13 +201,9 @@ async function pedirCompartidas(): Promise<CarpetaDrive[]> {
   const q = encodeURIComponent(
     `sharedWithMe and mimeType = '${CARPETA}' and trashed=false`
   );
-  const fields = encodeURIComponent("files(id,name,webViewLink,modifiedTime)");
-  const url = `${DRIVE}/files?q=${q}&fields=${fields}&orderBy=name&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true`;
-
-  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
-  const data = await r.json();
-  if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "error desconocido"));
-  return data.files ?? [];
+  const fields = encodeURIComponent("nextPageToken,files(id,name,webViewLink,modifiedTime)");
+  const url = `${DRIVE}/files?q=${q}&fields=${fields}&orderBy=name&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+  return todasLasPaginas<CarpetaDrive>(url, token, "error desconocido");
 }
 
 /** Los archivos de una carpeta, sin las subcarpetas. */

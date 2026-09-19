@@ -26,6 +26,7 @@ import {
   type Cliente,
 } from "@/lib/clientes";
 import { clienteDeCarpeta, idsDeCarpetasReales } from "@/lib/carpetas";
+import { cadenaHasta, cuelgaDeAlguna } from "@/lib/permisos";
 import { miAlcance } from "@/lib/sesion";
 import { losAvisos, type Aviso } from "@/lib/avisos";
 import { alcanzaA, recortaA } from "@/dominio/roles";
@@ -112,4 +113,35 @@ export async function misCarpetas(): Promise<Set<string>> {
     if (await esCarpetaMia(id)) mias.add(id);
   }
   return mias;
+}
+
+/**
+ * Si algo —una carpeta a cualquier hondura, o un archivo— es de alguno de
+ * **sus** clientes.
+ *
+ * Es lo que se pregunta antes de esconder o mostrar: `esCarpetaMia` alcanza
+ * para las carpetas de primer nivel, pero lo que se esconde puede ser un
+ * archivo o una subcarpeta, y para eso hay que subir por Drive hasta una raíz.
+ * Las raíces son las de quien pregunta, no las de todos los clientes.
+ */
+export async function esDeMisClientes(id: string): Promise<boolean> {
+  if (!id) return false;
+  return cuelgaDeAlguna(
+    id,
+    (await misClientes()).map((c) => c.id)
+  );
+}
+
+/**
+ * Si esa carpeta cuelga de ese cliente —directo o más abajo—, y el cliente es
+ * de los suyos.
+ *
+ * Existe porque las pantallas reciben los dos identificadores por la
+ * dirección, y creerle a la dirección era el error: con un cliente propio en
+ * la primera parte y una carpeta ajena en la segunda, se leía la carpeta
+ * ajena.
+ */
+export async function esCarpetaDeMiCliente(clienteId: string, carpetaId: string): Promise<boolean> {
+  if (!carpetaId || !(await miCliente(clienteId))) return false;
+  return (await cadenaHasta(carpetaId, clienteId)).length > 0;
 }

@@ -5,6 +5,7 @@
 // ahí el cliente aparece solo, con su link ya generado.
 
 import { panelDeClientes } from "@/admin/datos/carpetas";
+import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
 import { ArbolDeClientes } from "@/admin/ArbolDeClientes";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { elEquipo } from "@/lib/equipo";
@@ -23,10 +24,8 @@ export default async function Clientes() {
   const sinClave = clientes.filter((c) => c.habilitado && !c.tieneClave).length;
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <header className="border-b-2 border-tinta pb-6">
-        <h1 className="text-grande font-extrabold tracking-tight">Clientes</h1>
-      </header>
+    <main className={PANTALLA}>
+      <EncabezadoDePagina titulo="Clientes" />
 
       {sinClave > 0 && (
         <p className="mt-6 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal font-semibold text-espera">

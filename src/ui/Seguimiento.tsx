@@ -91,8 +91,8 @@ export function Seguimiento({
   if (compacto) {
     return (
       <span
-        className={`inline-flex items-center px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider ${
-          aprobada ? "bg-acento text-white" : "bg-hueco text-tinta-suave"
+        className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-micro font-bold uppercase tracking-wider ${
+          aprobada ? "bg-lima text-tinta" : "bg-hueco text-tinta-suave"
         }`}
       >
         {actual}
@@ -118,8 +118,8 @@ export function Seguimiento({
       ))}
 
       <span
-        className={`px-2.5 py-1 text-menudo font-extrabold uppercase tracking-wider ${
-          aprobada ? "bg-acento text-white" : "bg-tinta text-lienzo"
+        className={`rounded-full px-3 py-1 font-mono text-menudo font-bold uppercase tracking-wider ${
+          aprobada ? "bg-lima text-tinta" : "bg-tinta text-lienzo"
         }`}
         aria-current="step"
       >

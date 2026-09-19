@@ -57,7 +57,7 @@ decirle que sí, o el teléfono no va a poder entrar.
 | Qué | Dirección |
 |---|---|
 | Portal del cliente | `/t/<lo que sea>` |
-| Administración | `/gestion` |
+| Administración | `/gestion` (pide correo y contraseña) |
 | Diagnóstico de Drive | `/diagnostico` |
 
 Por ahora el portal muestra siempre el mismo cliente, escribas lo que escribas
@@ -112,16 +112,51 @@ Y abajo de todo, los **mensajes listos**: los textos que se mandan siempre, ya
 escritos. Los abrís, los cambiás si querés, los copiás y los mandás por donde
 le escribís siempre. **Los escribe el equipo, no la aplicación.**
 
+### La ficha de un cliente (`/gestion/cliente/<id>`)
+
+Arriba, **los números de la cuenta**: cuántas piezas, cuántas aprobadas,
+vueltas por pieza, cuántas necesitaron más de dos, revisiones extra y cuántos
+días tarda el cliente en decidir. Al lado, **Descargar historial (CSV)**: todo
+lo que le pasó a cada pieza —quién, cuándo, qué—, para abrir en Excel.
+
+En la lista de clientes, cada uno dice **cuándo entró al portal por última
+vez**. Después de entregar, «no lo abrió» y «lo abrió y no decidió» piden
+mensajes distintos. Con más de un cliente aparece un buscador, que filtra por
+nombre de cliente y, adentro de los abiertos, por carpeta y archivo.
+
+### Los recordatorios de plazo
+
+Cuando una pieza entregada pasa la mitad de su plazo sin que el cliente decida,
+entra un aviso en Notificaciones («va por la mitad del plazo»); cuando se
+cumple, otro («se cumplió el plazo»). Cada uno sale **una sola vez** por
+entrega. Los dispara el tablero al abrirse —no hay un reloj corriendo en el
+servidor—, así que pueden llegar con horas de demora, nunca repetidos. El
+cliente ve el mismo plazo en su portal: «vence en 3 días», «vence hoy».
+
+### Quién aprueba
+
+Al aprobar, el portal pregunta el nombre de quien aprueba. Es opcional: vacío
+queda «Cliente», como siempre; con nombre queda «Cliente · Juana Pérez» en la
+historia de la pieza y en la notificación. El navegador se acuerda del nombre
+para la próxima.
+
 ### Conversaciones (`/gestion/chats`)
 
 Una por cliente, no por carpeta: con el cliente se habla de todo en el mismo
 hilo. Arriba las que tienen mensajes **sin leer**. El número baja a cero cuando
 abrís.
 
-### Equipo (`/gestion/equipo`)
+### Admin (`/gestion/admin`)
 
-Quiénes son y a dónde les llegan los avisos. Hace falta para dos cosas:
-asignarle un trabajo a alguien, y avisarle cuando el cliente hace algo.
+Dos cosas que se configuran una vez: las claves con las que entra cada cliente
+y el equipo. **El equipo es la lista de usuarios**: quien está con un correo y
+un rol entra, quien no está no entra. A cada persona se le da de alta con su
+correo y su rol, y la aplicación le asigna un **código de alta** que aparece en
+su fila. Se lo pasás por donde le hablás siempre; con el correo y ese código
+elige su contraseña la primera vez que entra, y desde ahí no la sabe nadie más.
+
+Hace falta además para asignarle un trabajo a alguien y avisarle cuando el
+cliente hace algo.
 
 Todo lo que elegís queda guardado al lado de la aplicación, en la carpeta
 `datos`:
@@ -137,17 +172,20 @@ Todo lo que elegís queda guardado al lado de la aplicación, en la carpeta
 | `leidos.json` | Hasta dónde leyó cada lado el chat |
 | `equipo.json` | Quiénes son y sus correos |
 | `avisos.json` | La bandeja de novedades |
-| `secreto.txt` | La llave con la que se firman las sesiones del portal |
+| `secreto.json` | La llave con la que se firman las sesiones del portal |
+| `claves.json` | Las huellas de las contraseñas del equipo (nunca el texto) |
+| `olvidos.json` | Quién pidió que le reinicien la contraseña |
+| `frenos.json` | Cuántas veces se erró cada clave, para frenar a quien prueba |
 
-Y en `.env.local` está `CLAVE_DE_ADMIN`, la contraseña para ver o cambiar la
-clave de un cliente. Hoy es `totorafa`.
+Y en `.env.local` está `CLAVE_DE_ADMIN`, la **llave maestra**: firma las
+sesiones de gestión y abre la puerta solo mientras nadie del equipo tenga
+contraseña. No es la contraseña de nadie y no hace falta que la sepa el equipo.
 
-Se pueden abrir con el Bloc de notas y se pueden copiar. Cuando tengamos base
-de datos, se mudan solos y las pantallas no cambian.
+Si está configurado Supabase, todo esto vive en la base y no en `datos/`. Las
+pantallas no cambian.
 
-> Esa pantalla **todavía no pide usuario ni contraseña**. Alcanza mientras la
-> aplicación corre en tu computadora y no está en internet. Antes de subirla
-> hay que ponerle login.
+> Gestión **pide correo y contraseña**, y cada persona ve solo la parte que le
+> toca según su rol. Está explicado en `DESPLIEGUE.md`, «La puerta de gestión».
 
 ---
 
@@ -230,10 +268,10 @@ Son **dos cosas**, y ninguna sirve sola:
 > **Mandalas por separado.** El link por un lado y la clave por otro. Mandar las
 > dos en el mismo mensaje es mandar la llave pegada a la puerta.
 
-Para **ver o cambiar** la clave de un cliente hay que escribir la contraseña de
-administración. No es un login —administración sigue sin pedir usuario— pero
-evita que la clave de cada cliente esté escrita en pantalla a la vista de
-cualquiera que pase.
+Para **ver o cambiar** la clave de un cliente hay que volver a escribir **tu**
+contraseña, ahí mismo. Evita que la clave de cada cliente esté escrita en
+pantalla a la vista de cualquiera que pase por una máquina con la sesión
+abierta.
 
 Si el link se le va a quien no correspondía, **Cambiar link** lo mata en el
 acto y le pasás uno nuevo.

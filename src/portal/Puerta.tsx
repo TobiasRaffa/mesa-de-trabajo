@@ -13,6 +13,7 @@ import { useActionState } from "react";
 import { entrarConTag } from "@/portal/acceso";
 import { Boton } from "@/ui/Boton";
 import { IconoEnviar } from "@/ui/Icono";
+import { Marca } from "@/ui/Marca";
 
 export function Puerta({ token }: { token: string }) {
   const [estado, entrar, esperando] = useActionState(entrarConTag, null);
@@ -20,10 +21,8 @@ export function Puerta({ token }: { token: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-papel p-6">
       <div className="w-full max-w-md">
-        <p className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-          Mesa de trabajo
-        </p>
-        <h1 className="mt-2 text-grande font-extrabold leading-none tracking-tighter">
+        <Marca />
+        <h1 className="mt-8 text-grande font-extrabold leading-none tracking-tighter">
           ¿Cuál es tu clave?
         </h1>
 

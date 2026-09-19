@@ -32,7 +32,7 @@
 // exista un camino limpio hasta el cliente: negar por un camino sucio cuando
 // hay otro bueno sería esconder algo que la agencia dejó a la vista.
 
-import { clienteQueEntro } from "@/lib/acceso";
+import { entradaDe } from "@/lib/acceso";
 import { esCarpetaDeFacturas, escondidosEntre } from "@/lib/ajustes";
 import { GALLETA_DE_GESTION } from "@/lib/contrasena";
 import { quienLleva } from "@/lib/sesion";
@@ -245,8 +245,10 @@ export async function quienPide(galletas: {
     };
   }
 
-  const cliente = await clienteQueEntro(galletas);
-  return cliente ? { tipo: "cliente", raiz: cliente.id } : null;
+  // Quien entró por el link de una carpeta ve esa carpeta: su raíz es la
+  // carpeta, no el cliente entero.
+  const entrada = await entradaDe(galletas);
+  return entrada ? { tipo: "cliente", raiz: entrada.carpeta ?? entrada.cliente.id } : null;
 }
 
 /**
@@ -257,7 +259,18 @@ export async function quienPide(galletas: {
  * gestión toque un identificador suelto de Drive que no sea de ningún cliente.
  */
 export async function esDeAlgunCliente(id: string): Promise<boolean> {
-  const raices = await carpetasAdministradas();
+  return cuelgaDeAlguna(id, await carpetasAdministradas());
+}
+
+/**
+ * Si algo —carpeta o archivo— es una de estas raíces o cuelga de alguna.
+ *
+ * Es `esDeAlgunCliente` con las raíces elegidas por quien pregunta: la
+ * gestión pasa **sus** clientes, no todos, para que alguien acotado a dos
+ * clientes no pueda esconder o mostrar cosas de un tercero sabiendo el
+ * identificador.
+ */
+export async function cuelgaDeAlguna(id: string, raices: string[]): Promise<boolean> {
   if (raices.includes(id)) return true;
 
   try {

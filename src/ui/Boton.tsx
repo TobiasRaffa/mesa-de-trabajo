@@ -1,12 +1,14 @@
 // Botones.
 //
-// Bloques, no pastillas: bordes rectos, peso alto, sin sombras difusas. Es la
-// dirección elegida — se tiene que ver que alguien los puso ahí.
+// Pastillas con peso, como los rótulos de las piezas de Matter: esquinas
+// bien redondeadas, texto pesado y apretado, sin sombras difusas. Se tiene que
+// ver que alguien los puso ahí.
 //
 // Cinco variantes, y cada una dice algo distinto sobre lo que va a pasar:
 //
-//   principal   el camino que se propone. Verde macizo.
-//   aprobar     el acto que cierra una pieza. El mismo verde, porque aprobar
+//   principal   el camino que se propone. Lima macizo con tinta encima: el
+//               color de la marca, reservado para lo que más importa.
+//   aprobar     el acto que cierra una pieza. La misma lima, porque aprobar
 //               ES la acción principal del portal.
 //   contorno    una acción real pero no la propuesta. Borde negro, sin relleno.
 //   fantasma    acciones de apoyo -- ampliar, comparar, cerrar.
@@ -21,17 +23,21 @@ type Variante = "principal" | "aprobar" | "contorno" | "fantasma" | "sutil";
 type Tamano = "normal" | "chico";
 
 const VARIANTES: Record<Variante, string> = {
-  principal: "bg-acento text-white hover:bg-acento-hover",
-  aprobar: "bg-acento text-white hover:bg-acento-hover",
+  principal: "bg-lima text-tinta hover:bg-lima-hover",
+  aprobar: "bg-lima text-tinta hover:bg-lima-hover",
   contorno: "border-2 border-tinta bg-transparent text-tinta hover:bg-tinta hover:text-lienzo",
   fantasma: "bg-hueco text-tinta hover:bg-linea",
   sutil: "bg-transparent text-apagado hover:text-tinta",
 };
 
 const TAMANOS: Record<Tamano, string> = {
-  normal: "min-h-toque px-5 text-normal gap-2",
-  chico: "h-9 px-3 text-menudo gap-1.5",
+  normal: "min-h-toque px-6 text-normal gap-2",
+  chico: "h-9 px-4 text-menudo gap-1.5",
 };
+
+const BASE =
+  "inline-flex items-center justify-center rounded-full font-bold tracking-tight " +
+  "transition-colors duration-150";
 
 type Props = ComponentProps<"button"> & {
   variante?: Variante;
@@ -50,8 +56,7 @@ export function Boton({
     <button
       {...resto}
       className={[
-        "inline-flex items-center justify-center font-bold tracking-tight",
-        "transition-colors duration-150",
+        BASE,
         "disabled:opacity-35 disabled:pointer-events-none",
         TAMANOS[tamano],
         VARIANTES[variante],
@@ -73,14 +78,9 @@ export function BotonEnlace({
   return (
     <a
       {...resto}
-      className={[
-        "inline-flex items-center justify-center font-bold tracking-tight",
-        "transition-colors duration-150",
-        TAMANOS[tamano],
-        VARIANTES[variante],
-        ancho ? "w-full" : "",
-        className,
-      ].join(" ")}
+      className={[BASE, TAMANOS[tamano], VARIANTES[variante], ancho ? "w-full" : "", className].join(
+        " ",
+      )}
     />
   );
 }

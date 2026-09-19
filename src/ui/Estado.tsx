@@ -1,7 +1,7 @@
 // La etiqueta que dice en qué anda una pieza.
 //
-// Un bloque de color con el texto en versalitas: se lee de lejos y se
-// distingue de un vistazo en una lista larga. Los colores de estado son
+// Una pastilla de color con el texto en monoespaciada y versalitas: se lee
+// de lejos y se distingue de un vistazo en una lista larga. Los colores de estado son
 // señales y no decoración -- si se usan para otra cosa, dejan de leerse.
 
 import type { Estado as EstadoPieza } from "@/dominio/pieza";
@@ -10,7 +10,7 @@ type Tono = "espera" | "listo" | "trabajando" | "quieto";
 
 const ESTILOS: Record<Tono, string> = {
   espera: "bg-espera-tenue text-espera",
-  listo: "bg-acento text-white",
+  listo: "bg-lima text-tinta",
   trabajando: "bg-tinta text-lienzo",
   quieto: "bg-hueco text-apagado",
 };
@@ -34,7 +34,7 @@ export function Estado({ estado }: { estado: EstadoPieza }) {
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center px-2.5 py-1 text-micro font-extrabold uppercase tracking-wider ${ESTILOS[info.tono]}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 font-mono text-micro font-bold uppercase tracking-wider ${ESTILOS[info.tono]}`}
     >
       {info.texto}
     </span>

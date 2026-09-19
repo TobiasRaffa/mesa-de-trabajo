@@ -29,14 +29,22 @@ export function ChatDeCliente({
   nombre,
   sinLeer,
   firma,
+  abrirDeEntrada = false,
 }: {
   clienteId: string;
   nombre: string;
   sinLeer: number;
-  /** Con qué nombre sale lo que se escriba. Sale de la sesión. */
+  /** Cómo se presenta quien escribe: «Nari · Matter». Sale de la sesión. */
   firma: string;
+  /**
+   * Abrir la conversación apenas se dibuja.
+   *
+   * Es lo que hace el globo de mensajes del tablero: trae a esta pantalla con
+   * el cliente ya elegido, y sin esto habría que volver a buscarlo en la lista.
+   */
+  abrirDeEntrada?: boolean;
 }) {
-  const [abierto, setAbierto] = useState(false);
+  const [abierto, setAbierto] = useState(abrirDeEntrada);
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [leidos, setLeidos] = useState(false);
@@ -105,13 +113,19 @@ export function ChatDeCliente({
   }
 
   const pendientes = leidos ? 0 : sinLeer;
+  /** Cuántos faltaban leer cuando se abrió: donde arranca la conversación. */
+  // Si se abrió sola, lo que faltaba leer es lo que decía el número al llegar.
+  const [alAbrir, setAlAbrir] = useState(abrirDeEntrada ? sinLeer : 0);
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setAbierto(true)}
-        className="min-h-toque border-2 border-tinta px-4 text-normal font-bold tracking-tight
+        onClick={() => {
+          setAlAbrir(pendientes);
+          setAbierto(true);
+        }}
+        className="rounded-full min-h-toque border-2 border-tinta px-4 text-normal font-bold tracking-tight
                    text-tinta transition-colors hover:bg-hueco"
       >
         Conversación
@@ -131,9 +145,16 @@ export function ChatDeCliente({
           onEnviar={enviar}
           onCerrar={() => setAbierto(false)}
           anteriores={{ hay: hayAnteriores, trayendo, onTraer: verLoAnterior }}
+          // Lo que faltaba leer al abrir: ahí arranca la pantalla. Se anota al
+          // tocar el botón y no se lee del número vivo, porque marcar leído
+          // corre a la par de traer los mensajes y a veces gana: el número
+          // ya era cero cuando la pantalla tenía algo que mostrar.
+          sinLeer={alAbrir}
+          // Con qué nombre lo va a leer el cliente: «Nari · Matter». Decía
+          // «Sale firmado por…», y la explicación sobraba.
           firma={
-            <p className="mb-2 text-micro font-extrabold uppercase tracking-wider text-apagado">
-              Sale firmado por <span className="text-tinta">{firma}</span>
+            <p className="mb-2 text-micro font-extrabold uppercase tracking-wider text-tinta">
+              {firma}
             </p>
           }
         />

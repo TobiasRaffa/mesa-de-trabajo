@@ -23,7 +23,12 @@
 // una condición: si el correo falla, la aprobación vale igual. Todo lo que
 // pueda salir mal termina en «se anotó, no se pudo mandar».
 
-import { anotarAviso, type ClaseDeAviso } from "@/lib/avisos";
+import {
+  actualizarAviso,
+  anotarAviso,
+  avisoQueContinua,
+  type ClaseDeAviso,
+} from "@/lib/avisos";
 import { correoConfigurado, mandarCorreo } from "@/lib/correo";
 import { personaPorId, quienesRecibenTodo, type Persona } from "@/lib/equipo";
 import { cadenaHasta } from "@/lib/permisos";
@@ -54,8 +59,10 @@ function comoSeCuenta(clase: ClaseDeAviso, carpeta: string, detalle?: string): s
       // La conversación es del cliente, no de una carpeta: nombrar una acá
       // mandaría a buscar el mensaje donde no está.
       return "Escribió en la conversación.";
+    case "por_vencer":
+      return `Va por la mitad del plazo de ${detalle ?? "una pieza"} en ${carpeta} y todavía no decidió.`;
     case "vencio":
-      return `Se cumplió el plazo de ${carpeta} y todavía falta revisar.`;
+      return `Se cumplió el plazo de ${detalle ?? "una pieza"} en ${carpeta} y todavía no decidió.`;
   }
 }
 
@@ -71,6 +78,24 @@ export async function avisar(opciones: {
   const { clase, clienteId, cliente, carpetaId, carpeta, detalle } = opciones;
 
   try {
+    // **Un mensaje seguido de otro es el mismo aviso.** Cuatro mensajes en
+    // dos minutos son una persona escribiendo, no cuatro novedades: se
+    // reescribe el aviso que ya está —cuántos van y la hora del último— y no
+    // sale otro correo. Si alguien lo vio entre medio, no se suma: lo nuevo
+    // vuelve a avisar, que es para lo que existe la bandeja.
+    if (clase === "escribio") {
+      const anterior = await avisoQueContinua({ clase, clienteId });
+      if (anterior) {
+        const veces = (anterior.veces ?? 1) + 1;
+        await actualizarAviso(anterior, {
+          veces,
+          cuando: new Date().toISOString(),
+          texto: `${cliente}: Escribió ${veces} mensajes en la conversación.`,
+        });
+        return;
+      }
+    }
+
     const texto = `${cliente}: ${comoSeCuenta(clase, carpeta, detalle)}`;
 
     const quienes = await aQuienesLesToca(clienteId, carpetaId);

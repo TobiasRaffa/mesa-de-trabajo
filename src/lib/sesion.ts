@@ -24,7 +24,13 @@
 // «le saqué el acceso» tiene que querer decir ahora.
 
 import { cookies } from "next/headers";
-import { GALLETA_DE_GESTION, personaDeLaGalleta, SIN_PERSONA } from "@/lib/contrasena";
+import {
+  contrasenaCorrecta,
+  GALLETA_DE_GESTION,
+  leerGalleta,
+  SIN_PERSONA,
+} from "@/lib/contrasena";
+import { claveCorrecta, claveDesde, hayAlguienConClave } from "@/lib/claves";
 import {
   alcanceDePersona,
   personaPorId,
@@ -32,6 +38,7 @@ import {
   type Persona,
 } from "@/lib/equipo";
 import { alcanzaA, seccionesDe, type Alcance, type Seccion } from "@/dominio/roles";
+import { NOMBRE_DE_LA_AGENCIA } from "@/dominio/agencia";
 
 /** Cómo se firma lo que no lo manda una persona identificada. */
 export const LA_AGENCIA = "El equipo";
@@ -55,19 +62,27 @@ export type Sesion = {
  * terminen opinando distinto sobre quién sos.
  */
 export async function quienLleva(galleta: string | undefined): Promise<Sesion | null> {
-  const id = personaDeLaGalleta(galleta);
-  if (!id) return null;
+  const leida = leerGalleta(galleta);
+  if (!leida) return null;
+  const { personaId: id, emitida } = leida;
 
-  // La llave del equipo, el arranque: no es nadie, pero tiene que poder cargar
-  // a la primera persona, y eso vive en Admin.
+  // La llave del equipo abre solo mientras dure el arranque. **Una galleta de
+  // arranque no sobrevive al arranque**: en cuanto alguien tiene contraseña,
+  // deja de valer aunque el navegador la siga mandando.
   if (id === SIN_PERSONA) {
+    if (await hayAlguienConClave()) return null;
     return { persona: null, secciones: seccionesDe("admin"), clientes: "todos" };
   }
 
   const persona = await personaPorId(id);
-  // La galleta sigue firmada pero la persona ya no está: se la dio de baja
-  // mientras tenía la sesión abierta. No es nadie, y no ve nada.
+  // Se fue del equipo: la galleta que le quedó en el navegador no abre nada.
   if (!persona) return null;
+
+  // Sin contraseña no hay sesión: se la reiniciaron, y hasta que elija otra no
+  // entra nadie con su nombre. Y una galleta de antes de la contraseña actual
+  // es de la contraseña anterior, que ya no existe.
+  const desde = await claveDesde(persona.id);
+  if (desde === null || emitida * 1000 < desde) return null;
 
   return {
     persona,
@@ -131,4 +146,33 @@ export async function puedoVerAlCliente(clienteId: string): Promise<boolean> {
  */
 export async function firmaDeAgencia(): Promise<string> {
   return (await quienSoy())?.nombre ?? LA_AGENCIA;
+}
+
+/**
+ * Cómo se presenta quien escribe en el chat: «Nari · Matter», o «Matter» a
+ * secas durante el arranque, cuando todavía no hay persona detrás.
+ *
+ * Es lo que va arriba del campo de escribir. Decía «Sale firmado por EL
+ * EQUIPO», y lo que hay que ver ahí es el nombre con el que el cliente va a
+ * leer el mensaje, no una explicación.
+ */
+export async function comoMePresentoEnElChat(): Promise<string> {
+  const firma = await firmaDeAgencia();
+  return firma === LA_AGENCIA ? NOMBRE_DE_LA_AGENCIA : `${firma} · ${NOMBRE_DE_LA_AGENCIA}`;
+}
+
+/**
+ * Si esa es la contraseña de quien está usando esto.
+ *
+ * **Es la segunda pregunta antes de lo delicado**: ver o cambiar la clave con
+ * la que entra un cliente. Se le pide a cada persona la suya, y no la llave del
+ * equipo, que es la que firma las sesiones y no tiene por qué saberla nadie
+ * más que quien configura el servidor. Durante el arranque —sesión sin
+ * persona— la única contraseña que hay es esa, y se acepta.
+ */
+export async function contrasenaDeQuienEsta(clave: string): Promise<boolean> {
+  const sesion = await miSesion();
+  if (!sesion) return false;
+  if (!sesion.persona) return contrasenaCorrecta(clave);
+  return claveCorrecta(sesion.persona.id, clave);
 }

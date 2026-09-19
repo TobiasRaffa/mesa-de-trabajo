@@ -31,6 +31,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   contrasenaCorrecta,
+  DURACION_DE_SESION,
   GALLETA_DE_GESTION,
   hayContrasena,
   SIN_PERSONA,
@@ -43,21 +44,21 @@ import {
   ponerClave,
   tieneClave,
 } from "@/lib/claves";
-import { cambiarPersona, personaPorCorreo, seccionesDePersona } from "@/lib/equipo";
+import {
+  borrarCodigoDeAlta,
+  cambiarPersona,
+  codigoDeAltaCorrecto,
+  codigoDeAltaDe,
+  personaPorCorreo,
+  seccionesDePersona,
+} from "@/lib/equipo";
 import { dondeEmpieza, seccionDeLaRuta, type Seccion } from "@/dominio/roles";
 import { pedirOtraClave } from "@/lib/olvidos";
 import { anotarError, frenado, olvidarErrores, type Limite } from "@/lib/frenos";
 
 export type Rechazo = { ok: false; motivo: string };
 
-/**
- * Cuánto dura la sesión.
- *
- * Una semana: en la computadora de la oficina, pedirla todos los días es el
- * fastidio que hizo que la puerta se sacara la primera vez. Cambiar
- * `CLAVE_DE_ADMIN` las corta todas en el acto, sin lista que mantener.
- */
-const DURACION = 60 * 60 * 24 * 7;
+const DURACION = DURACION_DE_SESION;
 
 /**
  * **El freno de los intentos.** Sin esto, probar contraseñas contra esta
@@ -128,6 +129,11 @@ export async function mirarCorreo(_previo: unknown, formulario: FormData) {
     return { ok: false as const, motivo: DEMASIADOS };
   }
 
+  // Mirar un correo cuenta como un intento: sin esto, esta pantalla era la
+  // forma cómoda de listar quiénes trabajan en la agencia, sin freno alguno.
+  // Entrar bien pone la cuenta en cero.
+  await anotarError(paraQuien(correo), LIMITE);
+
   const persona = await personaPorCorreo(correo);
   const primeraVez = Boolean(persona) && !(await tieneClave(persona!.id));
 
@@ -138,6 +144,7 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   const correo = leerCorreo(formulario);
   const clave = String(formulario.get("clave") ?? "");
   const repetida = String(formulario.get("repetida") ?? "");
+  const codigo = String(formulario.get("codigo") ?? "");
   const nombre = String(formulario.get("nombre") ?? "").trim();
   const volver = String(formulario.get("volver") ?? "");
 
@@ -151,9 +158,55 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   const quien = paraQuien(correo);
   if (await frenado(quien, LIMITE)) return { ok: false as const, motivo: DEMASIADOS };
 
+  const persona = correo ? await personaPorCorreo(correo) : null;
+
+  // **La primera vez, la contraseña la elige quien entra.** Va antes que el
+  // arranque a propósito: la primera persona del equipo también entra por
+  // acá, y durante un tiempo no pudo —el arranque le pedía la llave del
+  // equipo en el campo donde escribía su contraseña nueva, y el arranque no
+  // se cerraba nunca—.
+  //
+  // Se pide dos veces porque acá no hay con qué compararla: lo que se escriba
+  // queda guardado, y un dedo de más dejaría afuera a la única persona que
+  // tendría que poder entrar. Y se pide **el código de alta**: sin él, saber
+  // el correo de alguien alcanzaba para quedarse con su cuenta.
+  if (persona && !(await tieneClave(persona.id))) {
+    if (!(await codigoDeAltaCorrecto(persona.id, codigo))) {
+      await anotarError(quien, LIMITE);
+      return {
+        ok: false as const,
+        motivo: (await codigoDeAltaDe(persona.id))
+          ? "Ese código de alta no es. Te lo pasa quien te dio de alta: lo ve en Admin."
+          : "Tu cuenta todavía no tiene código de alta. Pedile a quien administra " +
+            "que te lo genere en Admin y te lo pase.",
+      };
+    }
+    if (clave.length < LARGO_MINIMO_DE_CLAVE) {
+      return {
+        ok: false as const,
+        motivo: `La contraseña tiene que tener al menos ${LARGO_MINIMO_DE_CLAVE} caracteres.`,
+      };
+    }
+    if (clave !== repetida) {
+      return { ok: false as const, motivo: "Las dos contraseñas no son iguales." };
+    }
+
+    await ponerClave(persona.id, clave);
+    await borrarCodigoDeAlta(persona.id);
+    // El alta trae un nombre sacado del correo: si acá escribió el suyo, gana
+    // el suyo. Es con el que va a quedar firmado todo lo que haga.
+    if (nombre.length >= 2 && nombre !== persona.nombre) {
+      await cambiarPersona(persona.id, { nombre });
+    }
+
+    await olvidarErrores(quien);
+    await abrir(persona.id);
+    redirect(aDondeVa(volver, seccionesDePersona(persona)));
+  }
+
   // **El arranque.** Sin nadie con contraseña, la llave del equipo abre para
   // poder dar de alta a la primera persona. Se cierra solo en cuanto alguien
-  // tiene la suya.
+  // tiene la suya: desde ahí, esta llave no abre nada.
   if (!(await hayAlguienConClave())) {
     if (!contrasenaCorrecta(clave)) {
       await anotarError(quien, LIMITE);
@@ -166,35 +219,6 @@ export async function entrar(_previo: unknown, formulario: FormData) {
     }
     await abrir(SIN_PERSONA);
     redirect(volver.startsWith("/gestion") ? volver : "/gestion");
-  }
-
-  const persona = await personaPorCorreo(correo);
-
-  // **La primera vez, la contraseña la elige quien entra.** Se pide dos veces
-  // porque acá no hay con qué compararla: lo que se escriba queda guardado, y
-  // un dedo de más dejaría afuera a la única persona que tendría que poder
-  // entrar.
-  if (persona && !(await tieneClave(persona.id))) {
-    if (clave.length < LARGO_MINIMO_DE_CLAVE) {
-      return {
-        ok: false as const,
-        motivo: `La contraseña tiene que tener al menos ${LARGO_MINIMO_DE_CLAVE} caracteres.`,
-      };
-    }
-    if (clave !== repetida) {
-      return { ok: false as const, motivo: "Las dos contraseñas no son iguales." };
-    }
-
-    await ponerClave(persona.id, clave);
-    // El alta trae un nombre sacado del correo: si acá escribió el suyo, gana
-    // el suyo. Es con el que va a quedar firmado todo lo que haga.
-    if (nombre.length >= 2 && nombre !== persona.nombre) {
-      await cambiarPersona(persona.id, { nombre });
-    }
-
-    await olvidarErrores(quien);
-    await abrir(persona.id);
-    redirect(aDondeVa(volver, seccionesDePersona(persona)));
   }
 
   // **Mismo mensaje para «ese correo no existe» y «esa contraseña no es».**

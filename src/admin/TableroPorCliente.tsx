@@ -26,6 +26,7 @@
 
 import { useState } from "react";
 import { Plegable } from "@/admin/Plegable";
+import { MensajesSinLeer } from "@/admin/MensajesSinLeer";
 import { ResumenDeTrabajo } from "@/admin/ResumenDeTrabajo";
 import {
   FiltrosDelTablero,
@@ -49,42 +50,39 @@ import { urlDeMiniatura } from "@/lib/miniaturas";
 
 const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
 
-const CANCHAS: Record<
-  Cancha,
-  { titulo: string; explica: string; filo: string; punto: string; comoEsta: string }
-> = {
-  sin_entregar: {
-    titulo: "Sin entregar",
-    explica: "Ya está hecho y el cliente todavía no lo vio.",
-    filo: "border-alerta",
-    punto: "bg-alerta",
-    comoEsta: "Sin entregar",
-  },
-  agencia: {
-    titulo: "Lo tenemos nosotros",
-    explica: "El cliente ya habló. Falta hacerlo.",
-    filo: "border-acento",
-    punto: "bg-acento",
-    comoEsta: "Falta hacerlo",
-  },
-  cliente: {
-    titulo: "Lo tiene el cliente",
-    explica: "Se lo entregamos y todavía no decidió.",
-    filo: "border-espera-borde",
-    punto: "bg-espera-borde",
-    comoEsta: "Esperando al cliente",
-  },
-  listo: {
-    // **Aprobado, no «terminado».** Es la palabra que usan, y además es más
-    // exacta: lo que pasó es que el cliente dijo que sí. «Terminado» suena a
-    // que la agencia lo dio por cerrado, que es otra cosa y la decide otro.
-    titulo: "Aprobado",
-    explica: "El cliente ya dijo que sí. No espera nada de nadie.",
-    filo: "border-linea",
-    punto: "bg-tinta-suave",
-    comoEsta: "Aprobado",
-  },
-};
+// **Solo el título.** Cada columna llevaba debajo una frase que la explicaba
+// —«El cliente ya habló. Falta hacerlo.»— y se pidió sacarla: se lee una vez,
+// y después es un renglón gris que empuja los trabajos para abajo.
+const CANCHAS: Record<Cancha, { titulo: string; filo: string; punto: string; comoEsta: string }> =
+  {
+    sin_entregar: {
+      titulo: "Sin entregar",
+      filo: "border-alerta",
+      punto: "bg-alerta",
+      comoEsta: "Sin entregar",
+    },
+    agencia: {
+      titulo: "A cargo nuestro",
+      filo: "border-acento",
+      punto: "bg-acento",
+      comoEsta: "Falta hacerlo",
+    },
+    cliente: {
+      titulo: "A cargo del cliente",
+      filo: "border-espera-borde",
+      punto: "bg-espera-borde",
+      comoEsta: "Esperando al cliente",
+    },
+    listo: {
+      // **Aprobado, no «terminado».** Es la palabra que usan, y además es más
+      // exacta: lo que pasó es que el cliente dijo que sí. «Terminado» suena a
+      // que la agencia lo dio por cerrado, que es otra cosa y la decide otro.
+      titulo: "Aprobado",
+      filo: "border-lima",
+      punto: "bg-lima",
+      comoEsta: "Aprobado",
+    },
+  };
 
 /**
  * De más urgente a menos.
@@ -213,7 +211,7 @@ function Columna({
   hayVentana: boolean;
   onMirar: (c: CarpetaEnElTablero, pieza?: string) => void;
 }) {
-  const { titulo, explica, filo } = CANCHAS[cual];
+  const { titulo, filo } = CANCHAS[cual];
   const trabajos = clientes.reduce((n, c) => n + c.carpetas.length, 0);
 
   return (
@@ -227,13 +225,11 @@ function Columna({
         una columna es cuánto hay ahí, y cuánto hay son trabajos.
       */}
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-guia font-extrabold tracking-tight">{titulo}</h2>
+        <h2 className="text-guia font-extrabold tracking-tight [font-stretch:100%]">{titulo}</h2>
         <span className="cifras text-titulo font-extrabold leading-none tracking-tighter text-apagado">
           {trabajos}
         </span>
       </div>
-      <p className="mt-0.5 text-micro text-apagado">{explica}</p>
-
       {clientes.length === 0 ? (
         <p className="mt-4 text-menudo text-apagado">Nada por acá.</p>
       ) : (
@@ -241,7 +237,7 @@ function Columna({
           {clientes.map((c) => (
             <li
               key={c.clienteId}
-              className={`border border-linea border-l-4 bg-lienzo px-3 py-2 ${filo}`}
+              className={`rounded-campo border border-linea border-l-4 bg-lienzo px-3 py-2 ${filo}`}
             >
               <Plegable
                 // **Sin recuerdo, a propósito.** En Admin conviene que una
@@ -255,11 +251,26 @@ function Columna({
                 // llega hasta ahí, hay que leer renglón por renglón para
                 // encontrarlo.
                 titulo={
-                  <span className={`text-normal ${tonoDelNombre(esperaDelCliente(c))}`}>
-                    {c.cliente}
+                  <span className="inline-flex items-center gap-2">
+                    <span className={`text-normal ${tonoDelNombre(esperaDelCliente(c))}`}>
+                      {c.cliente}
+                    </span>
+                    {/* Los mensajes sin leer van pegados al nombre, a la
+                        derecha: son del cliente, no de sus trabajos. Los
+                        mensajes son del cliente entero, así que el mismo
+                        número viene repetido en todas sus carpetas. */}
+                    <MensajesSinLeer
+                      cuantos={c.carpetas[0]?.sinLeer ?? 0}
+                      clienteId={c.clienteId}
+                    />
                   </span>
                 }
                 resumen={<Senales cliente={c} />}
+                // **Cerrado de entrada, siempre.** Se abría solo con pocos
+                // clientes en la columna, y se pidió que no: el tablero se
+                // barre con la vista y las señales de al lado del nombre ya
+                // dicen si vale la pena abrirlo. Abierto de entrada, cada
+                // columna era una lista y el resumen no servía de nada.
               >
                 <ul className="mt-2 flex flex-col">
                   {c.carpetas.map((carpeta) => (
@@ -297,9 +308,6 @@ function Senales({ cliente }: { cliente: PorCliente }) {
   const vencidos = cliente.carpetas.filter((c) => c.vencida).length;
   const porVencer = cliente.carpetas.filter((c) => c.porVencer).length;
   const sinEntregar = cliente.carpetas.reduce((n, c) => n + c.sinEntregar, 0);
-  // Los mensajes sin leer son del cliente, no de cada carpeta: el mismo número
-  // viene repetido en todas. Sumarlos sería contarlos una vez por trabajo.
-  const sinLeer = cliente.carpetas[0]?.sinLeer ?? 0;
 
   // **Lo más viejo que tiene este cliente de nuestro lado.** Cada carpeta ya
   // suma lo suyo y lo de sus subcarpetas; acá se junta el peor de todos. Sin
@@ -335,14 +343,6 @@ function Senales({ cliente }: { cliente: PorCliente }) {
         </Senal>
       )}
       {sinEntregar > 0 && <Senal tono="acento">{sinEntregar} sin entregar</Senal>}
-      {/* Dice «mensajes» y no «sin leer» porque arriba, en el encabezado del
-          tablero, «sin leer» son las notificaciones. Dos cosas distintas con
-          el mismo nombre en la misma pantalla se leen como una sola. */}
-      {sinLeer > 0 && (
-        <Senal tono="acento">
-          {sinLeer} {sinLeer === 1 ? "mensaje" : "mensajes"}
-        </Senal>
-      )}
     </span>
   );
 }

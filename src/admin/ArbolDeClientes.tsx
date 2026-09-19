@@ -41,7 +41,10 @@ import { ResumenDeTrabajo, type TrabajoParaMirar } from "@/admin/ResumenDeTrabaj
 import { Visibilidad } from "@/admin/Visibilidad";
 import { Estado } from "@/ui/Estado";
 import { laTenemosNosotros } from "@/dominio/pieza";
+import { coincide } from "@/dominio/texto";
+import { haceCuanto } from "@/lib/fechas";
 import { IconoConfig, IconoDrive, IconoFlecha } from "@/ui/Icono";
+import { MensajesSinLeer } from "@/admin/MensajesSinLeer";
 
 const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
 const comoFecha = (dia: string) => {
@@ -74,7 +77,9 @@ const Abierta = createContext<{
    * usan, y la ventana es una sola para toda la pantalla.
    */
   mirar: (carpeta: NodoCarpeta, clienteId: string, piezaId: string) => void;
-}>({ cual: null, alternarConfig: () => {}, mirar: () => {} });
+  /** Lo que se escribió en el buscador. Vacío es «todo». */
+  busqueda: string;
+}>({ cual: null, alternarConfig: () => {}, mirar: () => {}, busqueda: "" });
 
 /**
  * En qué trabajo estamos parados, mientras se dibuja el árbol hacia adentro.
@@ -156,7 +161,7 @@ function BotonDeConfig({
       aria-expanded={abierta}
       data-ajustes={de}
       title={`Configuración de ${que}`}
-      className={`grid h-9 w-9 shrink-0 place-items-center transition-colors ${
+      className={`rounded-full grid h-9 w-9 shrink-0 place-items-center transition-colors ${
         abierta ? "bg-tinta text-lienzo" : "text-apagado hover:bg-hueco hover:text-tinta"
       }`}
     >
@@ -278,8 +283,18 @@ export function ArbolDeClientes({
     pieza: string;
   } | null>(null);
 
+  /**
+   * El buscador. Filtra clientes por nombre, y adentro de los que estén
+   * abiertos, carpetas y archivos. No abre nada solo: lo que no se cargó de
+   * Drive no se puede buscar sin cargarlo, y cargar veinte clientes para
+   * buscar una palabra es lo que el árbol perezoso evita.
+   */
+  const [busqueda, setBusqueda] = useState("");
+  const aLaVista = clientes.filter((c) => coincide(c.nombre, busqueda));
+
   const contexto = useMemo(
     () => ({
+      busqueda,
       cual,
       // Tocar la que ya está abierta la cierra; tocar otra cambia de una a la
       // otra, sin dejar las dos abiertas.
@@ -300,15 +315,36 @@ export function ArbolDeClientes({
           },
         }),
     }),
-    [cual, clientes]
+    [cual, clientes, busqueda]
   );
 
   return (
     <Abierta.Provider value={contexto}>
+      {clientes.length > 1 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar cliente, carpeta o archivo"
+            aria-label="Buscar en el árbol"
+            className="min-h-toque w-full max-w-sm border-2 border-tinta bg-lienzo px-3 text-normal
+                       placeholder:text-apagado focus:border-acento focus:outline-none"
+          />
+          {busqueda && (
+            <span className="text-menudo text-apagado">
+              {aLaVista.length} de {clientes.length}
+            </span>
+          )}
+        </div>
+      )}
       <ul className="border-t border-linea">
-        {clientes.map((cliente) => (
+        {aLaVista.map((cliente) => (
           <FilaCliente key={cliente.id} cliente={cliente} equipo={equipo} />
         ))}
+        {aLaVista.length === 0 && (
+          <li className="px-4 py-3 text-menudo text-apagado">Ningún cliente se llama así.</li>
+        )}
       </ul>
 
       {mirando && (
@@ -414,11 +450,7 @@ function FilaCliente({
               Falta la clave
             </span>
           )}
-          {cliente.sinLeer > 0 && (
-            <span className="bg-acento px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-white">
-              {cliente.sinLeer} sin leer
-            </span>
-          )}
+          <MensajesSinLeer cuantos={cliente.sinLeer} clienteId={cliente.id} />
         </div>
         <p className="mt-0.5 text-menudo text-apagado">
           {apagado
@@ -426,6 +458,12 @@ function FilaCliente({
             : `${cliente.carpetasVisibles} de ${cliente.carpetas} ${
                 cliente.carpetas === 1 ? "carpeta visible" : "carpetas visibles"
               }`}
+          {/* Si vio el link. Después de entregar, «no lo abrió» y «lo abrió y
+              no decidió» piden mensajes distintos. */}
+          {!apagado &&
+            (cliente.ultimaVisita
+              ? ` · entró al portal ${haceCuanto(cliente.ultimaVisita)}`
+              : " · nunca entró al portal")}
         </p>
       </Fila>
 
@@ -486,10 +524,17 @@ function Adentro({
   alGuardar: () => void;
   vacio: string;
 }) {
-  const { carpetas, archivos } = contenido;
+  const { busqueda } = useContext(Abierta);
+  // Con algo escrito en el buscador, solo lo que se llama así. Una carpeta
+  // que no coincide se esconde entera: lo de adentro no se cargó todavía.
+  const carpetas = contenido.carpetas.filter((c) => coincide(c.nombre, busqueda));
+  const archivos = contenido.archivos.filter((a) => coincide(a.nombreCompleto, busqueda));
 
-  if (carpetas.length === 0 && archivos.length === 0) {
+  if (contenido.carpetas.length === 0 && contenido.archivos.length === 0) {
     return <p className="px-4 py-3 text-menudo text-apagado">{vacio}</p>;
+  }
+  if (carpetas.length === 0 && archivos.length === 0) {
+    return <p className="px-4 py-3 text-menudo text-apagado">Nada acá se llama así.</p>;
   }
 
   return (
@@ -783,7 +828,7 @@ function ConfiguracionDeReservada({
           href={carpeta.enlaceDrive}
           target="_blank"
           rel="noreferrer noopener"
-          className="mt-3 inline-flex min-h-toque items-center gap-2 border-2 border-tinta px-4
+          className="rounded-full mt-3 inline-flex min-h-toque items-center gap-2 border-2 border-tinta px-4
                      text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
         >
           <IconoDrive />

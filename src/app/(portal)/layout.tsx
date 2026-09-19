@@ -6,7 +6,7 @@
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-papel">
       {/*
         El link de acceso no debe viajar a ningún sitio que se abra desde
         adentro del portal --Drive, por ejemplo--. Sin esto, la dirección

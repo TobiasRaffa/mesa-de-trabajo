@@ -115,7 +115,7 @@ export function ConfiguracionDeArchivo({
             href={archivo.enlaceDrive}
             target="_blank"
             rel="noreferrer noopener"
-            className="mt-2 inline-flex h-8 items-center border-2 border-tinta px-3
+            className="rounded-full mt-2 inline-flex h-8 items-center border-2 border-tinta px-3
                        text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
           >
             Abrirlo en Drive
@@ -173,7 +173,7 @@ function AccionesDeAgencia({
             type="button"
             disabled={yendo}
             onClick={() => hacer(() => habilitarExtraDePieza(carpetaId, archivo.id))}
-            className="mt-2 min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
+            className="rounded-full mt-2 min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
                        text-white transition-colors hover:bg-acento-hover disabled:opacity-40"
           >
             {yendo ? "…" : "Habilitar una revisión más"}
@@ -189,7 +189,7 @@ function AccionesDeAgencia({
             type="button"
             disabled={yendo}
             onClick={() => hacer(() => reabrirPieza(carpetaId, archivo.id))}
-            className="mt-2 min-h-toque border-2 border-tinta px-4 text-normal font-bold
+            className="rounded-full mt-2 min-h-toque border-2 border-tinta px-4 text-normal font-bold
                        tracking-tight text-tinta transition-colors hover:bg-hueco disabled:opacity-40"
           >
             {yendo ? "…" : "Reabrir"}

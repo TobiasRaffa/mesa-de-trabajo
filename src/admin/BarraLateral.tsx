@@ -19,6 +19,7 @@
 // ofrecerle a alguien una puerta que le va a dar en la cara.
 
 import Link from "next/link";
+import { Marca } from "@/ui/Marca";
 import { usePathname } from "next/navigation";
 import { salir } from "@/app/(admin)/gestion/entrar/acciones";
 import {
@@ -72,10 +73,9 @@ export function BarraLateral({
     >
       <Link
         href={RUTA_DE[arriba[0] ?? abajo[0] ?? "clientes"]}
-        className="text-micro font-extrabold uppercase tracking-widest text-lienzo/45
-                   transition-colors hover:text-lienzo/70"
+        className="transition-opacity hover:opacity-80"
       >
-        Mesa de trabajo
+        <Marca tono="sobre_oscuro" />
       </Link>
 
       {arriba.length > 0 && <Secciones cuales={arriba} actual={actual} etiqueta="Secciones" />}
@@ -97,7 +97,7 @@ export function BarraLateral({
           </span>
           <button
             type="submit"
-            className="shrink-0 text-micro font-extrabold uppercase tracking-widest
+            className="shrink-0 font-mono text-micro font-bold uppercase tracking-widest
                        text-lienzo/45 transition-colors hover:text-lienzo"
           >
             Salir

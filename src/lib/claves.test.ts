@@ -22,7 +22,7 @@ vi.mock("@/lib/almacen", () => ({
   }),
 }));
 
-const { claveCorrecta, hayAlguienConClave, ponerClave, sacarClave, tieneClave } =
+const { claveCorrecta, claveDesde, hayAlguienConClave, ponerClave, sacarClave, tieneClave } =
   await import("@/lib/claves");
 
 const NARI = "nari";
@@ -103,5 +103,42 @@ describe("el arranque se cierra solo", () => {
     await ponerClave(NARI, "la-de-nari-2026");
     await sacarClave(NARI);
     await expect(hayAlguienConClave()).resolves.toBe(false);
+  });
+});
+
+describe("desde cuándo vale cada contraseña", () => {
+
+  it("sin contraseña no hay desde: no hay sesión que valga", async () => {
+    expect(await claveDesde(NARI)).toBeNull();
+  });
+
+  it("al ponerla queda anotado el momento", async () => {
+    const antes = Date.now();
+    await ponerClave(NARI, "una-contraseña-larga");
+    const desde = await claveDesde(NARI);
+
+    expect(desde).not.toBeNull();
+    expect(desde!).toBeGreaterThanOrEqual(antes);
+    expect(desde!).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("cambiarla mueve el desde: las sesiones de antes quedan afuera", async () => {
+    await ponerClave(NARI, "la-primera");
+    const primera = (await claveDesde(NARI))!;
+    await new Promise((r) => setTimeout(r, 5));
+    await ponerClave(NARI, "la-segunda");
+
+    expect((await claveDesde(NARI))!).toBeGreaterThan(primera);
+  });
+
+  it("una huella de antes de que hubiera fecha vale desde siempre", async () => {
+    guardado[NARI] = "scrypt$c2Fs$aHVlbGxh";
+    expect(await claveDesde(NARI)).toBe(0);
+  });
+
+  it("y una contraseña sigue entrando aunque lleve fecha", async () => {
+    await ponerClave(NARI, "una-contraseña-larga");
+    expect(await claveCorrecta(NARI, "una-contraseña-larga")).toBe(true);
+    expect(await claveCorrecta(NARI, "otra")).toBe(false);
   });
 });

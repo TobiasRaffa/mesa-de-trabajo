@@ -35,14 +35,34 @@ export { LARGO_MINIMO_DE_CLAVE } from "@/dominio/claves";
 const esTexto = (v: unknown): v is string => typeof v === "string";
 const almacen = coleccion<string>("claves", esTexto);
 
-/** Cómo se escribe una huella guardada: el método, la sal y el resultado. */
-const armar = (sal: Buffer, huella: Buffer) =>
-  `scrypt$${sal.toString("base64")}$${huella.toString("base64")}`;
+/**
+ * Cómo se escribe una huella guardada: el método, la sal, el resultado y
+ * **desde cuándo vale**.
+ *
+ * La fecha es lo que echa a las sesiones viejas: una galleta emitida antes de
+ * que esta contraseña existiera es de alguien que entró con la anterior —o con
+ * ninguna, si se la reiniciaron—, y no tiene por qué seguir adentro.
+ */
+const armar = (sal: Buffer, huella: Buffer, desde: number) =>
+  `scrypt$${sal.toString("base64")}$${huella.toString("base64")}$${desde}`;
 
 export async function ponerClave(personaId: string, clave: string): Promise<void> {
   const sal = randomBytes(16);
   const huella = await derivar(clave, sal, LARGO);
-  await almacen.guardar(personaId, armar(sal, huella));
+  await almacen.guardar(personaId, armar(sal, huella, Date.now()));
+}
+
+/**
+ * Desde cuándo vale la contraseña de alguien, en milisegundos desde 1970.
+ *
+ * `null` si no tiene ninguna: sin contraseña no hay sesión que valga. Una
+ * huella de antes de que se anotara la fecha vale desde siempre (cero).
+ */
+export async function claveDesde(personaId: string): Promise<number | null> {
+  const guardado = await almacen.uno(personaId);
+  if (!guardado) return null;
+  const desde = Number(guardado.split("$")[3] ?? 0);
+  return Number.isFinite(desde) ? desde : 0;
 }
 
 /** Saca la contraseña de alguien. Vuelve a no poder entrar. */

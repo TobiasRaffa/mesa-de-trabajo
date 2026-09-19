@@ -828,19 +828,20 @@ describe("la ventana del trabajo no vuelve a mezclar mirar con hacer", () => {
     expect(abre, "La ventana se quedó sin <footer>.").toBeGreaterThan(-1);
 
     const barra = ventana.slice(abre, cierra);
-    for (const cual of ["Abrir en Drive", "Comparar con la v", "Configurar", "<Entregar"]) {
+    for (const cual of ["Abrir en Drive", "Comparar con la v", "<Entregar", "Configurar"]) {
       expect(barra, "«" + cual + "» se fue de la barra de abajo.").toContain(cual);
     }
   });
 
   it("el encabezado tiene el título, abrir la carpeta y cerrar", () => {
-    const encabezado = ventana.slice(
-      ventana.indexOf("<header"),
-      ventana.indexOf("</header>")
-    );
-    expect(encabezado).toContain("<h2");
+    // El encabezado es el compartido de todas las ventanas: lo que se le pasa
+    // es lo que se ve. La cruz la pone él solo a partir de `onCerrar`.
+    const abre = ventana.indexOf("<EncabezadoDeVentana");
+    expect(abre, "La ventana dejó de usar el encabezado compartido.").toBeGreaterThan(-1);
+    const encabezado = ventana.slice(abre, ventana.indexOf("{/* El medio", abre));
+    expect(encabezado).toContain("titulo=");
     expect(encabezado).toContain("Abrir la carpeta");
-    expect(encabezado).toContain("IconoCerrar");
+    expect(encabezado).toContain("onCerrar=");
   });
 });
 

@@ -5,7 +5,7 @@
 // puede deducir del nombre sin inventar. Lo pone la agencia acá, y el cliente
 // ve exactamente eso.
 
-import Link from "next/link";
+import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
 import { carpetaParaFechar } from "@/admin/datos/carpetas";
 import { ArmarCalendario } from "@/admin/ArmarCalendario";
 import { HistoriaDePiezas } from "@/admin/HistoriaDePiezas";
@@ -28,19 +28,11 @@ export default async function Calendario({
   const enCalendario = datos.carpeta.vista === "calendario";
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <header className="border-b-2 border-tinta pb-6">
-        <Link
-          href={`/gestion/cliente/${clienteId}`}
-          className="text-micro font-extrabold uppercase tracking-widest text-apagado
-                     transition-colors hover:text-tinta"
-        >
-          ← {datos.cliente.nombre}
-        </Link>
-        <h1 className="mt-2 text-grande font-extrabold tracking-tight">
-          {datos.carpeta.nombre}
-        </h1>
-      </header>
+    <main className={PANTALLA}>
+      <EncabezadoDePagina
+        volver={{ href: `/gestion/cliente/${clienteId}`, texto: datos.cliente.nombre }}
+        titulo={datos.carpeta.nombre}
+      />
 
       {!enCalendario ? (
         <p className="mt-8 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal text-espera">

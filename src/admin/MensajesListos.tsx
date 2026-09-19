@@ -91,7 +91,7 @@ export function MensajesListos({
                     <button
                       type="button"
                       onClick={() => copiar(plantilla.id)}
-                      className="min-h-toque bg-tinta px-4 text-normal font-bold tracking-tight
+                      className="rounded-full min-h-toque bg-tinta px-4 text-normal font-bold tracking-tight
                                  text-lienzo transition-colors hover:bg-tinta/90"
                     >
                       {copiada === plantilla.id ? "Copiado" : "Copiar"}

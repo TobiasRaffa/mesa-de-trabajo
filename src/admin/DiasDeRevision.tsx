@@ -16,14 +16,13 @@
 import { useState, useTransition } from "react";
 import { guardarDiasDeRevision } from "@/app/(admin)/gestion/acciones";
 import { DIAS_POSIBLES } from "@/lib/dias";
-import { CAMPO, ETIQUETA, GUARDAR } from "@/admin/estilos";
+import { CAMPO, GUARDAR } from "@/admin/estilos";
 
 export function DiasDeRevision({
   nivel,
   id,
   carpetaId,
   dias,
-  propio,
   alGuardar,
 }: {
   nivel: "cliente" | "carpeta" | "archivo";
@@ -73,9 +72,7 @@ export function DiasDeRevision({
         <button type="button" onClick={confirmar} disabled={guardando} className={GUARDAR}>
           {guardando ? "…" : "Guardar"}
         </button>
-      ) : (
-        !propio && <span className={ETIQUETA}>heredado</span>
-      )}
+      ) : null}
 
       {error && <span className="text-menudo font-semibold text-alerta">{error}</span>}
     </div>

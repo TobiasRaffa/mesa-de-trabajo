@@ -10,12 +10,13 @@
 // mientras tanto no ocupan lugar.
 
 import { todosMisClientes } from "@/admin/datos/clientes";
+import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
 import { ClavesDeClientes } from "@/admin/ClavesDeClientes";
 import { Plegable } from "@/admin/Plegable";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { FilaDePersona, SumarPersona } from "@/admin/Equipo";
 import { correoConfigurado } from "@/lib/correo";
-import { elEquipo } from "@/lib/equipo";
+import { codigoDeAltaDe, codigoLegible, elEquipo } from "@/lib/equipo";
 import { tieneClave } from "@/lib/claves";
 import { quienesNoPuedenEntrar } from "@/lib/olvidos";
 
@@ -44,31 +45,44 @@ export default async function Admin() {
   // de abrir nada.
   const esperando = await quienesNoPuedenEntrar();
 
+  // El código con el que entra cada persona que todavía no tiene contraseña.
+  // Se lee acá y no viaja en `Persona`: esta pantalla es de Admin, y es la
+  // única que lo muestra.
+  const codigos = new Map<string, string | null>(
+    await Promise.all(
+      gente
+        .filter((p) => !conClave.has(p.id))
+        .map(async (p): Promise<[string, string | null]> => {
+          const codigo = await codigoDeAltaDe(p.id);
+          return [p.id, codigo ? codigoLegible(codigo) : null];
+        })
+    )
+  );
+
   const hayCorreo = correoConfigurado();
   const sinCorreo = gente.filter((p) => !p.correo).length;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <header className="border-b-2 border-tinta pb-6">
-        <h1 className="text-grande font-extrabold tracking-tight">Admin</h1>
-        <p className="mt-1 text-menudo text-apagado">
-          Lo que se configura una vez: las claves de los clientes, quiénes son
-          del equipo y a qué parte entra cada uno.
-        </p>
-      </header>
+    <main className={PANTALLA}>
+      <EncabezadoDePagina
+        titulo="Admin"
+        bajada="Lo que se configura una vez: las claves de los clientes, quiénes son del equipo y a qué parte entra cada uno."
+      />
 
       {/* ------------------------- Claves de los clientes ----------------- */}
       <div className="mt-10 border-t border-linea pt-5">
+      {/* **Cerradas de entrada, siempre.** Se abrían solas y recordaban si
+          quedaron abiertas; se pidió que no: Admin se abre a hacer una cosa,
+          y los dos títulos con su resumen alcanzan para elegir cuál. */}
       <Plegable
         titulo="Claves de los clientes"
-        recuerdo="admin-claves"
         resumen={`${clientes.length} ${clientes.length === 1 ? "cliente" : "clientes"}`}
       >
         <p className="mt-1 text-menudo text-apagado">
           Es la palabra que el cliente escribe después de abrir su link. Se la
           pasás por donde le escribís siempre, nunca dentro del mismo mensaje que
           el link: si van juntos, alcanza con que ese mensaje se reenvíe.
-          Para verla o cambiarla hace falta la contraseña del equipo.
+          Para verla o cambiarla hace falta volver a escribir tu contraseña.
         </p>
         {/* Solo se manda **si tiene** clave, no cuál. El texto lo pide la
             pantalla aparte, con la contraseña del equipo. */}
@@ -86,13 +100,14 @@ export default async function Admin() {
       <div className="mt-8 border-t border-linea pt-5">
       <Plegable
         titulo="El equipo"
-        recuerdo="admin-equipo"
         resumen={`${gente.length} ${gente.length === 1 ? "persona" : "personas"}`}
       >
         <p className="mt-1 text-menudo text-apagado">
           Esta lista es la lista de usuarios: quien está acá con un correo y un
           rol puede entrar, y quien no está no entra. La contraseña la elige cada
-          una la primera vez, y no la sabe nadie más.
+          una la primera vez, con el <strong>código de alta</strong> que figura
+          en su fila: pasáselo por donde le hablás siempre, nunca por el mismo
+          canal que el link de la aplicación.
         </p>
 
         {Object.keys(esperando).length > 0 && (
@@ -130,6 +145,7 @@ export default async function Admin() {
                 key={persona.id}
                 persona={persona}
                 tieneClave={conClave.has(persona.id)}
+                codigoDeAlta={codigos.get(persona.id) ?? null}
                 pidioOtraClave={Boolean(esperando[persona.id])}
                 // Para poder elegir a cuáles llega. Va el nombre porque el
                 // identificador de Drive no le dice nada a nadie.

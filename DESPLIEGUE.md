@@ -21,13 +21,18 @@ Lo que hay que saber para arrancar:
    acepta `CLAVE_DE_ADMIN` sola y lo dice: «Primera vez».
 2. Adentro, en **Admin → El equipo**, se da de alta gente con **un correo y un
    rol, y nada más**. No se pone contraseña: la elige esa persona la primera
-   vez que entra, y desde ahí no la sabe nadie más. Quien todavía no entró
-   aparece marcada: existe en la lista —se le asigna trabajo, le llegan los
-   avisos— pero nunca entró.
-3. **En cuanto alguien tiene la suya, el arranque se cierra solo.** De ahí en
-   más se entra con correo y contraseña. Quien ya fue dado de alta y todavía no
-   eligió la suya tiene, en esa misma pantalla, «Ya me dieron de alta: entrar
-   con mi correo».
+   vez que entra, y desde ahí no la sabe nadie más. Al darla de alta aparece
+   en su fila un **código de alta** (ocho letras, como `P7D6-RT85`): se lo
+   pasás por donde le hablás siempre, y nunca por el mismo canal que el link.
+   Quien todavía no entró aparece marcada: existe en la lista —se le asigna
+   trabajo, le llegan los avisos— pero nunca entró.
+3. Esa persona toca «Ya me dieron de alta: entrar con mi correo», escribe su
+   correo, **el código de alta** y la contraseña que elige. Sin el código no
+   entra: saber el correo de alguien no alcanza para quedarse con su cuenta.
+4. **En cuanto alguien tiene la suya, el arranque se cierra solo.** De ahí en
+   más `CLAVE_DE_ADMIN` no abre nada y se entra con correo y contraseña.
+   Quien se dio de alta antes de que existieran los códigos tiene en Admin el
+   botón «Generar código».
 
 ### Los roles
 
@@ -72,14 +77,34 @@ contraseña es una segunda puerta para cuidar. Quien no puede entrar toca
 —no se le pone una nueva; nadie elige la contraseña de otro— y esa persona
 elige la suya la próxima vez que entre.
 
-**Lo que hay que tener presente del alta por correo:** entre que se da de alta
-un correo y esa persona entra por primera vez, cualquiera que conozca ese correo
-podría llegar antes y quedarse con la cuenta. Por eso Admin muestra «todavía no
-entró» en cada fila: si alguien dice que nunca entró y la fila no lo marca,
-entró otro. Avisale por donde le hablás siempre y que entre el mismo día.
+Al reiniciarle la contraseña a alguien se le genera un código de alta nuevo, y
+**sus sesiones abiertas se cierran solas**: hasta que elija la contraseña
+nueva, nadie entra con su nombre.
 
-Cambiar `CLAVE_DE_ADMIN` echa a todo el mundo en el acto: la firma de las
-sesiones sale de ahí. No hay lista de sesiones abiertas que mantener.
+### Las sesiones
+
+Duran **siete días** desde que se entra, y el vencimiento va firmado adentro
+de la galleta: una galleta copiada de otra máquina no dura más que eso. Se
+cierran antes si a la persona se le reinicia la contraseña, si se la saca del
+equipo, o si cambia `CLAVE_DE_ADMIN`, que es la llave que firma todas las
+sesiones. No hay lista de sesiones abiertas que mantener.
+
+Para ver o cambiar la clave con la que entra un cliente, la aplicación vuelve a
+pedir **tu** contraseña —no la llave del servidor—.
+
+### Si nadie de Administración puede entrar
+
+Puede pasar: la única administradora se olvidó la contraseña y no hay otra que
+se la reinicie. La salida es **reabrir el arranque**: borrar las contraseñas
+del equipo. En Supabase, en el SQL Editor:
+
+```sql
+delete from documentos where coleccion = 'claves';
+```
+
+(En una computadora, borrar `datos/claves.json`.) Con eso la puerta vuelve a
+aceptar `CLAVE_DE_ADMIN`, y desde Admin se genera un código de alta para cada
+persona. Nadie pierde nada más que su contraseña: todos eligen otra.
 
 **Lo que esto cerró**, y era peor de lo que parecía: mientras la puerta estuvo
 sacada, una sola visita a `/gestion` dejaba una galleta de treinta días que las
@@ -195,7 +220,19 @@ mostrar, y que una conversación tenga sus mensajes.
    tal como vienen en el JSON de Google. Si Netlify la corta en varias líneas,
    está mal pegada.
 
-4. Compilar.
+   `CLAVE_DE_ADMIN` y `SECRETO_DE_SESION` en internet **no pueden ser las de
+   esta computadora**: son llaves, y una llave que anduvo por un `.env.local`
+   de prueba no es una llave. Se generan así, una vez cada una:
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+   ```
+
+4. Compilar. La aplicación usa **Next 16**, que Netlify compila con su runtime
+   para Next. Si la compilación falla mencionando `proxy` o `middleware`, es
+   que el runtime de Netlify todavía no entiende `src/proxy.ts` (el nombre nuevo
+   de `middleware.ts`): parar ahí, no publicar, y mirar la versión de
+   `@netlify/plugin-nextjs` en el registro de la compilación.
 
 ---
 
@@ -207,10 +244,16 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
       dice archivos, algo está mal y hay que parar acá.
 - [ ] Abrir `/` a secas: no tiene que llevar a ningún lado. Es la dirección que
       queda cuando alguien borra el final del link.
-- [ ] Abrir `/gestion`. **Tiene que pedir la contraseña del equipo.** Si abre
-      derecho, la puerta no se volvió a poner: parar acá y leer lo primero de
-      este documento. Probá también `/gestion/chats` y `/diagnostico` directo:
-      las dos tienen que mandarte a la misma puerta.
+- [ ] Abrir `/gestion`. **Tiene que pedir entrar.** Si abre derecho, la puerta
+      no se volvió a poner: parar acá y leer lo primero de este documento.
+      Probá también `/gestion/chats` y `/diagnostico` directo: las dos tienen
+      que mandarte a la misma puerta.
+- [ ] Entrar con `CLAVE_DE_ADMIN` (arranque), dar de alta a la primera
+      administradora, salir, y entrar con su correo, su código de alta y una
+      contraseña nueva. Volver a probar `CLAVE_DE_ADMIN`: **ya no tiene que
+      abrir**.
+- [ ] Con una persona de rol Diseño, escribir a mano `/gestion/admin` y
+      `/gestion/facturas`: tiene que rebotar a su pantalla.
 - [ ] Crear un cliente de prueba con una carpeta de Drive de prueba, ponerle un
       tag, abrir su link en una ventana de incógnito. Tiene que pedir el tag, y
       con el tag mal no tiene que dejar pasar.

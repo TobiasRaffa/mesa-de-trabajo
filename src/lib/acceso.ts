@@ -23,7 +23,7 @@
 import { anotarError, frenado, olvidarErrores, type Limite } from "@/lib/frenos";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { documento } from "@/lib/almacen";
-import { ajustesDe } from "@/lib/ajustes";
+import { ajustesDe, carpetasConLink } from "@/lib/ajustes";
 import { clientesHabilitados, type Cliente } from "@/lib/clientes";
 import { subcarpetasDe } from "@/lib/google";
 
@@ -110,23 +110,22 @@ export async function puertaDe(token: string): Promise<Puerta | null> {
   const porCliente = clientes.find((c) => c.token === token);
   if (porCliente) return { tipo: "cliente", cliente: porCliente };
 
-  // No es de ningún cliente: puede ser el de una carpeta suelta.
+  // Un link de carpeta. El token dice qué carpeta; Drive confirma que esa
+  // carpeta sigue colgando de un cliente habilitado, y nada más que eso.
+  const carpetaId = (await carpetasConLink())[token];
+  if (!carpetaId) return null;
+
+  const ajustes = await ajustesDe(carpetaId);
+  if (!ajustes.visible) return null;
+
   for (const cliente of clientes) {
     try {
-      const carpetas = await subcarpetasDe(cliente.id);
-      for (const carpeta of carpetas) {
-        const ajustes = await ajustesDe(carpeta.id);
-        if (ajustes.token === token && ajustes.visible) {
-          return {
-            tipo: "carpeta",
-            cliente,
-            carpetaId: carpeta.id,
-            carpetaNombre: carpeta.name,
-          };
-        }
+      const carpeta = (await subcarpetasDe(cliente.id)).find((c) => c.id === carpetaId);
+      if (carpeta) {
+        return { tipo: "carpeta", cliente, carpetaId, carpetaNombre: carpeta.name };
       }
     } catch {
-      // Un cliente que Drive no contesta no puede tumbar la búsqueda entera.
+      // Un cliente cuya carpeta no se puede leer no invalida a los demás.
     }
   }
 
@@ -205,29 +204,57 @@ export const olvidarIntentos = (token: string): Promise<void> =>
 export async function clienteQueEntro(
   galletas: { get(nombre: string): { value: string } | undefined }
 ): Promise<Cliente | null> {
+  return (await entradaDe(galletas))?.cliente ?? null;
+}
+
+/**
+ * Por dónde entró este navegador: el cliente, y la carpeta si entró por el
+ * link de una carpeta sola.
+ *
+ * **Un link de carpeta abre esa carpeta, no el cliente entero.** Es lo que
+ * promete la pantalla que lo genera —«si querés mandarle esa carpeta sola»—,
+ * y durante un tiempo fue mentira del lado de las acciones: la galleta decía
+ * «entró a algo de este cliente» y con eso se aprobaba, se pedían cambios o
+ * se escribía sobre cualquier carpeta del cliente, sabiendo su identificador.
+ * Ahora la entrada dice de qué carpeta es, y quien hace algo con otra carpeta
+ * se queda afuera.
+ */
+export type Entrada = {
+  cliente: Cliente;
+  /** La carpeta por la que entró, si fue por un link de carpeta. */
+  carpeta?: string;
+};
+
+export async function entradaDe(
+  galletas: { get(nombre: string): { value: string } | undefined }
+): Promise<Entrada | null> {
   let clientes: Cliente[];
   try {
     clientes = await clientesHabilitados();
   } catch {
-    // Si no se puede saber quién es cliente, no entró nadie. El lado seguro.
+    // Si no se puede saber quiénes son los clientes, nadie entró.
     return null;
   }
 
+  // Primero los links de cliente: una firma cada uno y no tocan Drive.
   for (const cliente of clientes) {
     const valor = galletas.get(await nombreDeGalleta(cliente.token))?.value;
-    if (await galletaValida(cliente.token, valor)) return cliente;
+    if (await galletaValida(cliente.token, valor)) return { cliente };
   }
 
-  for (const cliente of clientes) {
-    try {
-      for (const carpeta of await subcarpetasDe(cliente.id)) {
-        const { token } = await ajustesDe(carpeta.id);
-        if (!token) continue;
-        const valor = galletas.get(await nombreDeGalleta(token))?.value;
-        if (await galletaValida(token, valor)) return cliente;
+  // Después los de carpeta: el token sale del almacén, y Drive solo confirma
+  // la carpeta que la galleta nombra, en vez de recorrerlas todas.
+  for (const [token, carpetaId] of Object.entries(await carpetasConLink())) {
+    const valor = galletas.get(await nombreDeGalleta(token))?.value;
+    if (!(await galletaValida(token, valor))) continue;
+
+    for (const cliente of clientes) {
+      try {
+        const carpetas = await subcarpetasDe(cliente.id);
+        if (carpetas.some((c) => c.id === carpetaId)) return { cliente, carpeta: carpetaId };
+      } catch {
+        // Un cliente cuya carpeta no se puede leer no invalida a los demás.
       }
-    } catch {
-      // Un cliente que Drive no contesta no puede tumbar la búsqueda entera.
     }
   }
 

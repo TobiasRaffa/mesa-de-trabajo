@@ -73,7 +73,7 @@ export const QUE_HAY_EN: Record<Seccion, string> = {
   diagnostico: "El estado de la conexión con Drive.",
 };
 
-export const ROLES = ["admin", "diseno", "facturacion"] as const;
+export const ROLES = ["admin", "diseno", "facturacion", "personalizado"] as const;
 
 export type Rol = (typeof ROLES)[number];
 
@@ -81,7 +81,19 @@ export const NOMBRE_DE_ROL: Record<Rol, string> = {
   admin: "Administración",
   diseno: "Diseño",
   facturacion: "Facturación",
+  personalizado: "Personalizado",
 };
+
+/**
+ * El rol que no es un molde: **cada sección se elige para esa persona**.
+ *
+ * Los otros tres son moldes compartidos —cambiar «Diseño» cambia a todas las
+ * diseñadoras—. Este no da nada por sí mismo: lo que ve la persona son sus
+ * secciones sueltas, tildadas una por una en su ficha y guardadas ahí. Así una
+ * persona con un recorte raro no obliga a inventar un molde nuevo, y lo que se
+ * le da a una no se le aparece a otra.
+ */
+export const ROL_PERSONALIZADO: Rol = "personalizado";
 
 /**
  * Qué le da cada rol.
@@ -98,6 +110,8 @@ const DEL_ROL: Record<Rol, readonly Seccion[]> = {
   // Lo que se cobra, y nada más. Para lo demás están las sueltas: es
   // justamente el caso para el que existen.
   facturacion: ["facturas"],
+  // Nada de entrada: todo lo que ve sale de sus sueltas.
+  personalizado: [],
 };
 
 /**

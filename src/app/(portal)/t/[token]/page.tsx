@@ -13,6 +13,7 @@
 import { cookies } from "next/headers";
 import { galletaValida, nombreDeGalleta, puertaDe } from "@/lib/acceso";
 import { portalDelCliente } from "@/portal/datos/cliente";
+import { anotarVisita } from "@/lib/visitas";
 import { Portal } from "@/portal/Portal";
 import { Puerta } from "@/portal/Puerta";
 
@@ -43,6 +44,10 @@ export default async function Entrega({ params }: PageProps<"/t/[token]">) {
   const galletas = await cookies();
   const galleta = galletas.get(await nombreDeGalleta(token))?.value;
   if (!(await galletaValida(token, galleta))) return <Puerta token={token} />;
+
+  // Entró con la clave puesta: eso es una visita. Es lo que después contesta
+  // «¿vio el link?» del lado de la agencia.
+  await anotarVisita(puerta.cliente.id);
 
   let datos;
   try {

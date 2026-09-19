@@ -59,6 +59,16 @@ export function contrasenaCorrecta(escrita: string): boolean {
 export const GALLETA_DE_GESTION = "mdt_gestion";
 
 /**
+ * Cuánto dura una sesión, en segundos. Una semana.
+ *
+ * **El vencimiento va adentro de la firma y no solo en la galleta.** El
+ * `maxAge` de una galleta lo respeta el navegador; quien copia el valor y lo
+ * manda a mano no tiene navegador que se lo haga respetar. Antes de esto, una
+ * galleta robada valía para siempre —hasta que cambiara `CLAVE_DE_ADMIN`—.
+ */
+export const DURACION_DE_SESION = 60 * 60 * 24 * 7;
+
+/**
  * Quién entró con la llave del equipo y no con la suya.
  *
  * Es el arranque: la primera vez no hay ninguna contraseña cargada, así que
@@ -68,21 +78,64 @@ export const GALLETA_DE_GESTION = "mdt_gestion";
  */
 export const SIN_PERSONA = "equipo";
 
+export type Galleta = {
+  personaId: string;
+  /** Cuándo se emitió, en segundos desde 1970. */
+  emitida: number;
+};
+
+const ahoraEnSegundos = () => Math.floor(Date.now() / 1000);
+
 /**
  * Lo que se guarda en la galleta cuando alguien entra.
  *
- * Es el identificador de la persona **más una firma nuestra**. Leerla no sirve
- * para nada y fabricarla sin la llave no se puede: cambiar el identificador a
- * mano rompe la firma. Antes era una marca igual para todos —servía para decir
- * «este navegador es del equipo» y nada más—, así que hacerse pasar por otro
- * era imposible porque no había otro por quien pasarse.
+ * Es el identificador de la persona, cuándo entró, **más una firma nuestra**
+ * sobre las dos cosas. Leerla no sirve para nada y fabricarla sin la llave no
+ * se puede: cambiar el identificador o la fecha a mano rompe la firma.
  *
  * `null` cuando no hay `CLAVE_DE_ADMIN`, que es lo que hace que sin configurar
  * no se abra nada.
  */
-export function valorDeSesion(personaId: string): string | null {
-  const firma = firmarSesion(personaId);
-  return firma && `${personaId}.${firma}`;
+export function valorDeSesion(personaId: string, emitida = ahoraEnSegundos()): string | null {
+  const firma = firmarSesion(personaId, emitida);
+  return firma && `${personaId}.${emitida}.${firma}`;
+}
+
+/**
+ * De quién es esta galleta y cuándo se emitió, o `null` si no la firmamos
+ * nosotros o ya venció.
+ *
+ * Se lee de derecha a izquierda —firma, fecha, y lo que queda es la persona—
+ * para que un identificador con puntos adentro se lea entero.
+ */
+export function leerGalleta(
+  valor: string | undefined,
+  ahora = ahoraEnSegundos()
+): Galleta | null {
+  if (!valor) return null;
+
+  const corteFirma = valor.lastIndexOf(".");
+  if (corteFirma <= 0) return null;
+  const firma = valor.slice(corteFirma + 1);
+  const resto = valor.slice(0, corteFirma);
+
+  const corteFecha = resto.lastIndexOf(".");
+  if (corteFecha <= 0) return null;
+  const emitida = Number(resto.slice(corteFecha + 1));
+  const personaId = resto.slice(0, corteFecha);
+  if (!personaId || !Number.isInteger(emitida)) return null;
+
+  const esperada = firmarSesion(personaId, emitida);
+  if (!esperada) return null;
+
+  const a = Buffer.from(esperada);
+  const b = Buffer.from(firma);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+
+  // Vencida, o emitida en el futuro: ninguna de las dos la firmamos hoy.
+  if (emitida > ahora + 60 || ahora - emitida > DURACION_DE_SESION) return null;
+
+  return { personaId, emitida };
 }
 
 /**
@@ -93,27 +146,17 @@ export function valorDeSesion(personaId: string): string | null {
  * «El equipo».
  */
 export function personaDeLaGalleta(valor: string | undefined): string | null {
-  if (!valor) return null;
-
-  const corte = valor.lastIndexOf(".");
-  if (corte <= 0) return null;
-
-  const personaId = valor.slice(0, corte);
-  const firma = valor.slice(corte + 1);
-  const esperada = firmarSesion(personaId);
-  if (!esperada) return null;
-
-  const a = Buffer.from(esperada);
-  const b = Buffer.from(firma);
-  return a.length === b.length && timingSafeEqual(a, b) ? personaId : null;
+  return leerGalleta(valor)?.personaId ?? null;
 }
 
 /** Si esta galleta la firmamos nosotros. */
 export const galletaDeGestionValida = (valor: string | undefined): boolean =>
   personaDeLaGalleta(valor) !== null;
 
-function firmarSesion(personaId: string): string | null {
+function firmarSesion(personaId: string, emitida: number): string | null {
   const clave = process.env.CLAVE_DE_ADMIN?.trim();
   if (!clave) return null;
-  return createHmac("sha256", clave).update(`entro:${personaId}`).digest("base64url");
+  return createHmac("sha256", clave)
+    .update(`entro:${personaId}:${emitida}`)
+    .digest("base64url");
 }
