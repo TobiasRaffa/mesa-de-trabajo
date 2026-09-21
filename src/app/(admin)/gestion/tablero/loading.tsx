@@ -16,7 +16,11 @@ export default function Cargando() {
         <h1 className="text-grande font-extrabold tracking-tight">Tablero</h1>
       </header>
 
-      <div className="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+      <p role="status" className="mt-6 text-normal text-apagado">
+        Armando el tablero…
+      </p>
+
+      <div className="mt-4 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
         {COLUMNAS.map((titulo) => (
           <section key={titulo}>
             <h2 className="font-mono text-micro font-bold uppercase tracking-widest text-apagado">
@@ -32,9 +36,7 @@ export default function Cargando() {
         ))}
       </div>
 
-      <p className="sr-only" role="status">
-        Armando el tablero…
-      </p>
+
     </main>
   );
 }

@@ -43,14 +43,19 @@ export function Esqueleto({
           <span className="block h-9 w-56 animate-pulse bg-hueco" />
         )}
       </header>
-      <ul className="mt-8 border-t border-linea">
+      {/* **Dice qué está pasando, en voz alta.** Estaba solo para lectores de
+          pantalla, y los renglones grises sobre el fondo papel se leen como una
+          pantalla vacía: quien entra desde el teléfono y espera cinco segundos
+          no ve «cargando», ve que la aplicación no anda. */}
+      <p role="status" className="mt-6 text-normal text-apagado">
+        Leyendo de Drive…
+      </p>
+
+      <ul className="mt-4 border-t border-linea">
         {Array.from({ length: cuantos }, (_, i) => (
           <Renglon key={i} ancho={ANCHOS[i % ANCHOS.length]} />
         ))}
       </ul>
-      <p className="sr-only" role="status">
-        Leyendo de Drive…
-      </p>
     </main>
   );
 }
