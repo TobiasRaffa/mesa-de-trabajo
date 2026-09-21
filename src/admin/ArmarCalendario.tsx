@@ -22,12 +22,13 @@
 // Lo que se guarda acá es lo mismo que después ve el cliente en su portal: es
 // el mismo dato leído por las dos pantallas, no dos copias.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { guardarCalendario } from "@/app/(admin)/gestion/acciones";
 import type { PiezaParaFechar } from "@/admin/datos/carpetas";
 import { Boton } from "@/ui/Boton";
 import { IconoCerrar, IconoEditar, IconoEnviar, IconoFlecha } from "@/ui/Icono";
 import { urlDeMiniatura } from "@/lib/miniaturas";
+import { enPalabrasElMes } from "@/dominio/tiempo";
 import { Miniatura } from "@/ui/Miniatura";
 
 /** `AAAA-MM-DD` de un año, mes (0-11) y día. */
@@ -37,10 +38,17 @@ function dia(anio: number, mes: number, numero: number): string {
 
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
+/**
+ * «septiembre 2026».
+ *
+ * **Al mediodía UTC, no a la medianoche del navegador.** Se armaba con
+ * `new Date(anio, mes, 1)` —medianoche de quien mira— y se formateaba en
+ * Buenos Aires: en un servidor en UTC, la medianoche del 1 de octubre es el 30
+ * de septiembre a las 21 allá, así que el encabezado decía «septiembre» sobre
+ * la grilla de octubre. Es el mismo truco que usa `enPalabrasElDia`.
+ */
 const nombreDelMes = (anio: number, mes: number) =>
-  new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(
-    new Date(anio, mes, 1)
-  );
+  enPalabrasElMes(new Date(Date.UTC(anio, mes, 1, 12)));
 
 /**
  * Los días de la grilla del mes, empezando en lunes.
@@ -63,29 +71,62 @@ function grillaDelMes(anio: number, mes: number): Array<number | null> {
 type Props = {
   carpetaId: string;
   piezas: PiezaParaFechar[];
+  /**
+   * Si el cliente ve esta carpeta.
+   *
+   * El mensaje de éxito decía «El cliente ya lo ve así» siempre, también en
+   * una carpeta oculta, donde el cliente no ve nada.
+   */
+  visible?: boolean;
 };
 
-export function ArmarCalendario({ carpetaId, piezas }: Props) {
+export function ArmarCalendario({ carpetaId, piezas, visible = true }: Props) {
   // Lo guardado, y lo que se está tocando. Separados a propósito: cancelar es
   // volver a lo primero sin haberle preguntado nada al servidor.
   const [guardado, setGuardado] = useState<Record<string, string | null>>(() =>
     Object.fromEntries(piezas.map((p) => [p.id, p.dia]))
   );
   const [borrador, setBorrador] = useState<Record<string, string | null> | null>(null);
+
+  // **Y se actualiza cuando el servidor trae otras piezas.** Se inicializaba
+  // una sola vez: después de que alguien más guardara, o de que apareciera un
+  // archivo nuevo en Drive, llegaban piezas que `guardado` no tenía, así que
+  // caían en «Sin fecha» aunque tuvieran día puesto —y si se editaba, se
+  // mandaba ese estado viejo—. Mientras hay un borrador no se toca nada: lo
+  // que se está editando no puede moverse bajo la mano.
+  const [piezasVistas, setPiezasVistas] = useState(piezas);
+  if (piezas !== piezasVistas && borrador === null) {
+    setPiezasVistas(piezas);
+    setGuardado(Object.fromEntries(piezas.map((p) => [p.id, p.dia])));
+  }
   const [elegida, setElegida] = useState<string | null>(null);
   const [arrastrando, setArrastrando] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const [aviso, setAviso] = useState<string | null>(null);
+  // **El tono va con el texto.** Un error de guardado se dibujaba con el mismo
+  // marco violeta que «Listo»: se apretaba Guardar, aparecía un cartel, y
+  // había que leerlo entero para descubrir que no se había guardado nada.
+  const [aviso, setAviso] = useState<{ tono: "ok" | "mal"; texto: string } | null>(null);
 
   const editando = borrador !== null;
+
+  // Cómo se llama la pieza que está esperando un día. Va en la etiqueta del
+  // botón de cada número: con lector de pantalla, «Poner el 18» no dice qué se
+  // está poniendo, y hay una sola pieza elegida a la vez.
+  const nombreDeLaElegida = piezas.find((p) => p.id === elegida)?.nombre ?? "la pieza";
   const fechas = borrador ?? guardado;
 
   // El mes que se está mirando. Arranca en el de la primera pieza con fecha, o
   // en el actual si no hay ninguna: es lo que alguien espera ver al entrar.
+  // **La más temprana, no la primera que devolvió Drive.** Se tomaba
+  // `piezas.find((p) => p.dia)`, o sea la que viniera primera en la lista, que
+  // es el orden de Drive: con una pieza de noviembre antes que las de
+  // septiembre, el calendario abría en noviembre, vacío, y las otras parecían
+  // no estar.
   const [cursor, setCursor] = useState(() => {
-    const conFecha = piezas.find((p) => p.dia);
-    if (conFecha?.dia) {
-      const [a, m] = conFecha.dia.split("-").map(Number);
+    const fechados = piezas.map((p) => p.dia).filter((d): d is string => Boolean(d));
+    const primera = fechados.length > 0 ? fechados.reduce((a, b) => (a < b ? a : b)) : null;
+    if (primera) {
+      const [a, m] = primera.split("-").map(Number);
       return { anio: a, mes: m - 1 };
     }
     const hoy = new Date();
@@ -107,8 +148,48 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
   const sinFecha = piezas.filter((p) => !fechas[p.id]);
   const celdas = grillaDelMes(cursor.anio, cursor.mes);
 
+  // **Las que están fechadas en otro mes.** Mirando septiembre, una pieza de
+  // octubre no aparece en la grilla ni en «Sin fecha»: no está en ningún lado,
+  // y del lado de la agencia eso se lee como que se perdió. El portal ya avisa
+  // de esto; acá faltaba.
+  const mesActual = `${cursor.anio}-${String(cursor.mes + 1).padStart(2, "0")}`;
+  const enOtrosMeses = piezas.filter((p) => {
+    const d = fechas[p.id];
+    return d && !d.startsWith(mesActual);
+  });
+
   const hayCambios =
     borrador !== null && piezas.some((p) => (borrador[p.id] ?? null) !== (guardado[p.id] ?? null));
+
+  // **Salir con cambios sin guardar pregunta antes.** El borrador vive en la
+  // memoria de esta pantalla: tocar «volver», cerrar la pestaña o recargar lo
+  // tiraba entero y sin una palabra, después de veinte arrastres.
+  useEffect(() => {
+    if (!hayCambios) return;
+
+    const alIrse = (e: BeforeUnloadEvent) => e.preventDefault();
+
+    // Un enlace de la aplicación no dispara `beforeunload`: Next navega sin
+    // recargar. Se atiende el clic antes de que llegue al enlace.
+    const alTocar = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey) return;
+      const destino = (e.target as Element | null)?.closest?.("a[href]");
+      if (!(destino instanceof HTMLAnchorElement)) return;
+      if (destino.target === "_blank") return;
+      if (destino.href === location.href) return;
+      if (!confirm("Tenés fechas sin guardar. ¿Salís igual y las perdés?")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    window.addEventListener("beforeunload", alIrse);
+    document.addEventListener("click", alTocar, true);
+    return () => {
+      window.removeEventListener("beforeunload", alIrse);
+      document.removeEventListener("click", alTocar, true);
+    };
+  }, [hayCambios]);
 
   function moverMes(paso: -1 | 1) {
     setCursor(({ anio, mes }) => {
@@ -138,12 +219,17 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
       if (r.ok) {
         setGuardado(borrador);
         setBorrador(null);
-        setAviso("Listo. El cliente ya lo ve así.");
+        setAviso({
+          tono: "ok",
+          texto: visible
+            ? "Listo. El cliente ya lo ve así."
+            : "Listo. Guardadas. Esta carpeta está oculta: el cliente todavía no las ve.",
+        });
       } else {
-        setAviso(r.motivo);
+        setAviso({ tono: "mal", texto: r.motivo });
       }
     } catch {
-      setAviso("No pude guardar. Probá de nuevo.");
+      setAviso({ tono: "mal", texto: "No pude guardar. Probá de nuevo." });
     } finally {
       setGuardando(false);
     }
@@ -173,11 +259,32 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
           >
             <IconoFlecha />
           </button>
+          {/* Después de tres meses de flechas, volver al de hoy era tres
+              flechas más. */}
+          <button
+            type="button"
+            onClick={() => {
+              const hoy = new Date();
+              setCursor({ anio: hoy.getFullYear(), mes: hoy.getMonth() });
+            }}
+            className="min-h-toque px-2 text-menudo font-bold text-apagado underline
+                       underline-offset-4 transition-colors hover:text-tinta"
+          >
+            Hoy
+          </button>
         </div>
 
         <div className="flex flex-wrap gap-2">
           {!editando ? (
-            <Boton variante="principal" onClick={() => setBorrador({ ...guardado })}>
+            <Boton
+              variante="principal"
+              onClick={() => {
+                setBorrador({ ...guardado });
+                // Si no, el «Listo» de hace veinte minutos sigue colgado
+                // arriba mientras se mueven fechas nuevas.
+                setAviso(null);
+              }}
+            >
               <IconoEditar />
               Editar fechas
             </Boton>
@@ -199,7 +306,9 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
                 disabled={guardando || !hayCambios}
               >
                 <IconoEnviar />
-                {guardando ? "Guardando…" : "Guardar"}
+                {/* Apagado y sin decir por qué es un botón roto: con el
+                    borrador recién abierto todavía no hay nada que guardar. */}
+                {guardando ? "Guardando…" : hayCambios ? "Guardar" : "Sin cambios"}
               </Boton>
             </>
           )}
@@ -209,9 +318,13 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
       {aviso && (
         <p
           aria-live="polite"
-          className="mt-4 border-l-4 border-acento bg-acento-tenue px-4 py-3 text-normal font-semibold text-acento"
+          className={`mt-4 border-l-4 px-4 py-3 text-normal font-semibold ${
+            aviso.tono === "ok"
+              ? "border-acento bg-acento-tenue text-acento"
+              : "border-alerta bg-alerta-tenue text-alerta"
+          }`}
         >
-          {aviso}
+          {aviso.texto}
         </p>
       )}
 
@@ -222,6 +335,14 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
         </p>
       )}
 
+      {/* **La grilla y las piezas sueltas, a la vista al mismo tiempo.**
+          «Sin fecha» vivía abajo de todo el calendario: para arrastrar una
+          pieza a un día había que ver las dos cosas juntas, y en una pantalla
+          normal la grilla sola ya ocupa todo, así que el arrastre era bajar,
+          agarrar, subir a ciegas y soltar. Al costado se ven juntas; en el
+          teléfono queda abajo, pero pegada al borde mientras se edita. */}
+      <div className="lg:grid lg:grid-cols-[1fr_17rem] lg:items-start lg:gap-6">
+      <div>
       {/* ========================= El calendario ======================== */}
       <div className="mt-5 grid grid-cols-7 border-l border-t border-linea">
         {DIAS.map((d) => (
@@ -243,6 +364,13 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
           const esteDia = dia(cursor.anio, cursor.mes, numero);
           const delDia = porDia.get(esteDia) ?? [];
 
+          // **Un botón y no un `div`, para que se pueda soltar sin mouse.** El
+          // cartel dice «tocá una pieza de abajo y después tocá el día»: la
+          // pieza ya era un botón, así que con teclado se podía elegir y no
+          // había forma de soltarla en ningún lado. Arrastrar sigue existiendo
+          // para quien usa el mouse; esto es el otro camino, el que faltaba.
+          const seDeja = editando && Boolean(elegida);
+
           return (
             <div
               key={esteDia}
@@ -261,7 +389,25 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
                   : ""
               }`}
             >
-              <p className="cifras px-1 text-menudo font-extrabold text-apagado">{numero}</p>
+              {/* **El número del día es el objetivo cuando hay una pieza
+                  elegida**, y es lo que hace que esto se pueda usar sin mouse.
+                  El cartel dice «tocá una pieza de abajo y después tocá el
+                  día»: la pieza ya era un botón, así que con teclado se podía
+                  elegir y no había dónde soltarla. La celda entera no puede ser
+                  el botón —adentro hay otro, la X de cada pieza— así que el
+                  objetivo es el número. Arrastrar sigue igual para el mouse. */}
+              {seDeja ? (
+                <button
+                  type="button"
+                  onClick={() => elegida && ponerEn(elegida, esteDia)}
+                  aria-label={`Poner ${nombreDeLaElegida} el ${numero}`}
+                  className="cifras rounded-full px-1 text-menudo font-extrabold text-tinta underline decoration-dotted"
+                >
+                  {numero}
+                </button>
+              ) : (
+                <p className="cifras px-1 text-menudo font-extrabold text-apagado">{numero}</p>
+              )}
 
               <ul className="mt-1 flex flex-col gap-1">
                 {delDia.map((pieza) => (
@@ -308,23 +454,56 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
         })}
       </div>
 
+      {enOtrosMeses.length > 0 && (
+        <p className="mt-3 text-menudo text-apagado">
+          {enOtrosMeses.length === 1 ? "Hay 1 pieza" : `Hay ${enOtrosMeses.length} piezas`} en
+          otros meses:{" "}
+          {[...new Set(enOtrosMeses.map((p) => fechas[p.id]!.slice(0, 7)))]
+            .sort()
+            .map((m) => {
+              const [a, mm] = m.split("-").map(Number);
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setCursor({ anio: a, mes: mm - 1 })}
+                  className="mr-2 font-semibold capitalize text-acento underline underline-offset-4"
+                >
+                  {nombreDelMes(a, mm - 1)}
+                </button>
+              );
+            })}
+        </p>
+      )}
+      </div>
+
       {/* ==================== Las que no tienen día ===================== */}
-      <section className="mt-8">
+      <section
+        className={`mt-8 lg:sticky lg:top-4 lg:mt-5 ${
+          editando ? "sticky bottom-0 z-10 bg-papel pb-2 pt-2 lg:static lg:pb-0" : ""
+        }`}
+      >
         <h2 className="text-titulo font-extrabold tracking-tight">
           Sin fecha
-          <span className="ml-2 text-normal font-semibold text-apagado">
-            {sinFecha.length}
-          </span>
+          {sinFecha.length > 0 && (
+            <span className="ml-2 text-normal font-semibold text-apagado">
+              {sinFecha.length}
+            </span>
+          )}
         </h2>
-        <p className="mt-1 text-menudo text-apagado">
-          Estas no le aparecen al cliente en el calendario hasta que tengan día.
-        </p>
 
         {sinFecha.length === 0 ? (
-          <p className="mt-4 bg-acento-tenue px-4 py-3 text-normal font-semibold text-acento">
+          // **Sin el título repetido ni el cero.** Con todo fechado decía «Sin
+          // fecha 0» y abajo «Estas no le aparecen al cliente…», dos frases
+          // sobre un conjunto vacío.
+          <p className="mt-2 bg-acento-tenue px-4 py-3 text-menudo font-semibold text-acento">
             Todas las piezas tienen su día.
           </p>
         ) : (
+          <>
+          <p className="mt-1 text-menudo text-apagado">
+            Estas no le aparecen al cliente en el calendario hasta que tengan día.
+          </p>
           <ul className="mt-4 flex flex-wrap gap-2">
             {sinFecha.map((pieza) => {
               const activa = elegida === pieza.id;
@@ -353,9 +532,9 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
                       />
                     </span>
                     <span className="max-w-40 truncate">{pieza.nombre}</span>
-                    {pieza.vueltas > 1 && (
+                    {pieza.version > 1 && (
                       <span className="text-micro font-extrabold opacity-60">
-                        v{pieza.vueltas}
+                        v{pieza.version}
                       </span>
                     )}
                   </button>
@@ -363,8 +542,10 @@ export function ArmarCalendario({ carpetaId, piezas }: Props) {
               );
             })}
           </ul>
+          </>
         )}
       </section>
+      </div>
     </div>
   );
 }

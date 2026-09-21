@@ -27,7 +27,15 @@
 // cosa. Se probaron y tapaban lo importante: en una lista, lo que hay que leer
 // son los nombres y los estados, no un párrafo al lado de cada control.
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { abrirCarpeta, abrirCliente } from "@/app/(admin)/gestion/acciones";
 import type { Contenido, NodoArchivo, NodoCarpeta } from "@/admin/datos/arbol";
@@ -40,17 +48,12 @@ import { Entregar } from "@/admin/Entregar";
 import { ResumenDeTrabajo, type TrabajoParaMirar } from "@/admin/ResumenDeTrabajo";
 import { Visibilidad } from "@/admin/Visibilidad";
 import { Estado } from "@/ui/Estado";
-import { laTenemosNosotros } from "@/dominio/pieza";
+import { laTenemosNosotros, sigueEnJuego } from "@/dominio/pieza";
 import { coincide } from "@/dominio/texto";
 import { haceCuanto } from "@/lib/fechas";
+import { enPalabrasElDia } from "@/dominio/tiempo";
 import { IconoConfig, IconoDrive, IconoFlecha } from "@/ui/Icono";
 import { MensajesSinLeer } from "@/admin/MensajesSinLeer";
-
-const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
-const comoFecha = (dia: string) => {
-  const [a, m, d] = dia.split("-").map(Number);
-  return fecha.format(new Date(a, m - 1, d));
-};
 
 /** Cuánto se corre cada nivel del árbol, en píxeles. */
 const SANGRIA = 22;
@@ -76,10 +79,35 @@ const Abierta = createContext<{
    * pasarla de mano en mano obligaría a atravesar dos componentes que no la
    * usan, y la ventana es una sola para toda la pantalla.
    */
-  mirar: (carpeta: NodoCarpeta, clienteId: string, piezaId: string) => void;
+  mirar: (
+    /** La carpeta que **contiene** el archivo: de ahí salen sus piezas. */
+    contenedora: NodoCarpeta,
+    /** La carpeta de trabajo, la de primer nivel: es la que da el rótulo. */
+    trabajo: NodoCarpeta,
+    clienteId: string,
+    piezaId: string
+  ) => void;
   /** Lo que se escribió en el buscador. Vacío es «todo». */
   busqueda: string;
-}>({ cual: null, alternarConfig: () => {}, mirar: () => {}, busqueda: "" });
+  /**
+   * Qué carpetas están abiertas, en todo el árbol.
+   *
+   * **El buscador la necesita.** Filtraba cada nivel por su propio nombre, así
+   * que escribir el nombre de un archivo escondía la carpeta que lo contiene y
+   * con ella el archivo buscado: la pantalla quedaba diciendo «Nada acá se
+   * llama así» con el archivo adentro. Una carpeta abierta ya trajo su
+   * contenido, así que se deja pasar y el filtro sigue actuando adentro.
+   */
+  abiertas: Set<string>;
+  marcarAbierta: (id: string, abierta: boolean) => void;
+}>({
+  cual: null,
+  alternarConfig: () => {},
+  mirar: () => {},
+  busqueda: "",
+  abiertas: new Set(),
+  marcarAbierta: () => {},
+});
 
 /**
  * En qué trabajo estamos parados, mientras se dibuja el árbol hacia adentro.
@@ -89,9 +117,24 @@ const Abierta = createContext<{
  * qué cliente, sin que haya que pasárselo de mano en mano por componentes que
  * no lo usan.
  */
-const EnTrabajo = createContext<{ carpeta: NodoCarpeta; clienteId: string } | null>(
-  null
-);
+const EnTrabajo = createContext<{
+  /**
+   * La carpeta que contiene lo que se está dibujando.
+   *
+   * **Es distinta de la de trabajo en cuanto hay una subcarpeta, y confundirlas
+   * abría la pieza equivocada.** Acá se guardaba solo la de primer nivel: al
+   * tocar el nombre de un archivo que estaba dentro de «Banners / Setiembre»,
+   * la ventana pedía las piezas de «Banners» —que no lista lo de adentro de sus
+   * subcarpetas— y la pieza tocada no aparecía en esa lista. La ventana caía en
+   * la primera que hubiera y **la mostraba como si fuera la que se tocó**, con
+   * su botón de Configurar incluido; si «Banners» no tenía archivos sueltos,
+   * decía «Esta carpeta no tiene piezas». Sin un solo cartel de error.
+   */
+  contenedora: NodoCarpeta;
+  /** La de primer nivel: el trabajo del que esto forma parte. Da el rótulo. */
+  trabajo: NodoCarpeta;
+  clienteId: string;
+} | null>(null);
 
 /** El hueco de un botón que no está, para que la columna no se mueva. */
 const Hueco = () => <span aria-hidden="true" className="h-9 w-9 shrink-0" />;
@@ -231,9 +274,18 @@ function Panel({
 export function ArbolDeClientes({
   clientes,
   equipo,
+  abiertoDeEntrada,
 }: {
   clientes: ClienteEnGestion[];
   equipo: Persona[];
+  /**
+   * Abrir los clientes sin que haya que tocar nada.
+   *
+   * Lo usa la ficha de un cliente, que es una pantalla dedicada a uno solo:
+   * llegar ahí y encontrarse con que **todavía** hay que abrirlo, debajo de su
+   * nombre repetido, es un toque para pedir lo que se vino a ver.
+   */
+  abiertoDeEntrada?: boolean;
 }) {
   const [cual, setCual] = useState<string | null>(null);
 
@@ -292,30 +344,56 @@ export function ArbolDeClientes({
   const [busqueda, setBusqueda] = useState("");
   const aLaVista = clientes.filter((c) => coincide(c.nombre, busqueda));
 
+  /** Las carpetas abiertas: el buscador las deja pasar aunque no coincidan. */
+  const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
+  const marcarAbierta = useCallback((id: string, abierta: boolean) => {
+    setAbiertas((antes) => {
+      const ahora = new Set(antes);
+      if (abierta) ahora.add(id);
+      else ahora.delete(id);
+      return ahora;
+    });
+  }, []);
+
   const contexto = useMemo(
     () => ({
       busqueda,
+      abiertas,
+      marcarAbierta,
       cual,
       // Tocar la que ya está abierta la cierra; tocar otra cambia de una a la
       // otra, sin dejar las dos abiertas.
       alternarConfig: (id: string) => setCual((antes) => (antes === id ? null : id)),
-      mirar: (carpeta: NodoCarpeta, clienteId: string, piezaId: string) =>
+      mirar: (
+        contenedora: NodoCarpeta,
+        trabajo: NodoCarpeta,
+        clienteId: string,
+        piezaId: string
+      ) =>
         setMirando({
           pieza: piezaId,
           trabajo: {
-          clienteId,
-          // El nombre sale de la lista que ya tenemos: la fila no lo lleva
-          // encima y pasárselo de mano en mano era atravesar dos componentes
-          // que no lo usan.
-          cliente: clientes.find((x) => x.id === clienteId)?.nombre ?? "",
-          carpetaId: carpeta.id,
-          carpeta: carpeta.nombre,
-          diasQueCorren: carpeta.diasQueCorren,
-          responsableQueCorre: carpeta.responsableQueCorre,
+            clienteId,
+            // El nombre sale de la lista que ya tenemos: la fila no lo lleva
+            // encima y pasárselo de mano en mano era atravesar dos componentes
+            // que no lo usan.
+            cliente: clientes.find((x) => x.id === clienteId)?.nombre ?? "",
+            // **La carpeta que contiene la pieza, no la de primer nivel.** Es
+            // de acá de donde la ventana saca la lista de piezas, y el plazo y
+            // el responsable que de verdad corren para lo que hay adentro.
+            carpetaId: contenedora.id,
+            // El camino, como lo escribe el portal: «Banners / Setiembre». Sin
+            // esto el rótulo decía «Banners» sobre las piezas de «Setiembre».
+            carpeta:
+              trabajo.id === contenedora.id
+                ? trabajo.nombre
+                : `${trabajo.nombre} / ${contenedora.nombre}`,
+            diasQueCorren: contenedora.diasQueCorren,
+            responsableQueCorre: contenedora.responsableQueCorre,
           },
         }),
     }),
-    [cual, clientes, busqueda]
+    [cual, clientes, busqueda, abiertas, marcarAbierta]
   );
 
   return (
@@ -340,7 +418,12 @@ export function ArbolDeClientes({
       )}
       <ul className="border-t border-linea">
         {aLaVista.map((cliente) => (
-          <FilaCliente key={cliente.id} cliente={cliente} equipo={equipo} />
+          <FilaCliente
+            key={cliente.id}
+            cliente={cliente}
+            equipo={equipo}
+            abiertoDeEntrada={abiertoDeEntrada}
+          />
         ))}
         {aLaVista.length === 0 && (
           <li className="px-4 py-3 text-menudo text-apagado">Ningún cliente se llama así.</li>
@@ -362,11 +445,14 @@ export function ArbolDeClientes({
 function FilaCliente({
   cliente,
   equipo,
+  abiertoDeEntrada,
 }: {
   cliente: ClienteEnGestion;
   equipo: Persona[];
+  /** En la ficha de un cliente el árbol viene abierto: es lo único que hay. */
+  abiertoDeEntrada?: boolean;
 }) {
-  const [abierto, setAbierto] = useState(false);
+  const [abierto, setAbierto] = useState(Boolean(abiertoDeEntrada));
   const { cual, alternarConfig } = useContext(Abierta);
   const config = cual === cliente.id;
   const [contenido, setContenido] = useState<Contenido | null>(null);
@@ -376,12 +462,17 @@ function FilaCliente({
   const apagado = !cliente.habilitado;
   const sinClave = !cliente.tieneClave;
 
+  // Si ya se trajo algo alguna vez. Va en una marca y no en `contenido`
+  // porque lo lee `refrescar`, y `refrescar` no puede cambiar de identidad.
+  const hayContenido = useRef(false);
+
   const traer = useCallback(async () => {
     setCargando(true);
     try {
       const r = await abrirCliente(cliente.id);
       if (r.ok) {
         setContenido(r.contenido);
+        hayContenido.current = true;
         setError(null);
       } else {
         setError(r.motivo);
@@ -397,18 +488,36 @@ function FilaCliente({
    * Guardar cambia lo que dice la fila —«oculta», «calendario», quién la
    * lleva—. Si no se vuelve a pedir, el cartel sigue mostrando lo viejo y
    * parece que el cambio no se guardó.
+   *
+   * **No puede mirar `contenido`, y esa es toda la historia de un bucle.** La
+   * configuración avisa desde un efecto que tiene esta función entre sus
+   * dependencias. Mirando `contenido`, cada respuesta traía un objeto nuevo,
+   * la función cambiaba de identidad, el efecto volvía a correr y volvía a
+   * llamarla: guardar cualquier cosa dejaba a la aplicación pidiéndole a Drive
+   * en bucle mientras el panel estuviera abierto. La marca de arriba no cambia
+   * de identidad nunca, así que esta función tampoco.
    */
   const refrescar = useCallback(() => {
-    if (contenido) traer();
-  }, [contenido, traer]);
+    if (hayContenido.current) traer();
+  }, [traer]);
 
+  // Viene abierto: hay que traerle el contenido igual, que si no queda una
+  // flecha girada sobre un hueco.
+  useEffect(() => {
+    if (abiertoDeEntrada && !hayContenido.current) traer();
+  }, [abiertoDeEntrada, traer]);
+
+  // **Se vuelve a leer al abrir.** Se traía una sola vez y quedaba guardado
+  // para siempre: alguien subía un archivo a Drive desde otra pestaña, volvía,
+  // cerraba y abría —que es lo que cualquiera hace para actualizar— y seguía
+  // viendo la lista vieja, sin más salida que recargar la pantalla entera.
   async function alternar() {
     if (abierto) {
       setAbierto(false);
       return;
     }
     setAbierto(true);
-    if (!contenido) await traer();
+    await traer();
   }
 
   return (
@@ -435,10 +544,19 @@ function FilaCliente({
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <h3
-            className={`text-guia font-bold tracking-tight ${apagado ? "text-apagado" : ""}`}
-          >
-            {cliente.nombre}
+          {/* **El nombre lleva a su ficha.** La ficha existía —los números de
+              la cuenta, los mensajes listos, el chat, el portal como lo ve el
+              cliente— y no había un solo link que llevara a ella: se llegaba
+              escribiendo la dirección a mano. La flecha de la izquierda sigue
+              abriendo el árbol acá mismo, que es lo otro que se quiere. */}
+          <h3 className={`text-guia font-bold tracking-tight ${apagado ? "text-apagado" : ""}`}>
+            <Link
+              href={`/gestion/cliente/${cliente.id}`}
+              className="underline decoration-linea underline-offset-4 transition-colors
+                         hover:text-acento hover:decoration-acento"
+            >
+              {cliente.nombre}
+            </Link>
           </h3>
           {apagado && (
             <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
@@ -453,11 +571,17 @@ function FilaCliente({
           <MensajesSinLeer cuantos={cliente.sinLeer} clienteId={cliente.id} />
         </div>
         <p className="mt-0.5 text-menudo text-apagado">
+          {/* **«2 de 2 carpetas visibles» no dice nada**: los dos números
+              coinciden casi siempre, y cuando coinciden la frase pide leer dos
+              cifras para enterarse de que no pasa nada. Solo se escribe la
+              resta cuando hay algo escondido, que es cuando importa. */}
           {apagado
             ? "El robot ve su carpeta, pero el portal no la muestra."
-            : `${cliente.carpetasVisibles} de ${cliente.carpetas} ${
-                cliente.carpetas === 1 ? "carpeta visible" : "carpetas visibles"
-              }`}
+            : cliente.carpetasVisibles === cliente.carpetas
+              ? `${cliente.carpetas} ${cliente.carpetas === 1 ? "carpeta" : "carpetas"}`
+              : `${cliente.carpetasVisibles} de ${cliente.carpetas} ${
+                  cliente.carpetas === 1 ? "carpeta visible" : "carpetas visibles"
+                }`}
           {/* Si vio el link. Después de entregar, «no lo abrió» y «lo abrió y
               no decidió» piden mensajes distintos. */}
           {!apagado &&
@@ -487,6 +611,7 @@ function FilaCliente({
               contenido={contenido}
               nivel={1}
               clienteId={cliente.id}
+              carpetaId={cliente.id}
               equipo={equipo}
               alGuardar={traer}
               vacio="Este cliente no tiene nada adentro todavía."
@@ -513,21 +638,38 @@ function Adentro({
   contenido,
   nivel,
   clienteId,
+  carpetaId,
   equipo,
   alGuardar,
   vacio,
 }: {
   contenido: Contenido;
   nivel: number;
+  /**
+   * De qué **cliente** es todo esto.
+   *
+   * **Separado de la carpeta que lo contiene, y por eso.** Era una sola
+   * propiedad que servía para las dos cosas, y en el primer nivel coinciden
+   * —la carpeta que contiene es la del cliente—, así que el error no se veía.
+   * Del segundo nivel para abajo se le pasaba `carpeta.id`: el enlace «armar el
+   * calendario» quedaba armado con un identificador de carpeta donde va el del
+   * cliente, y llevaba a «No encontré ese cliente».
+   */
   clienteId: string;
+  /** La carpeta que contiene esto: es la que necesita configurar una pieza. */
+  carpetaId: string;
   equipo: Persona[];
   alGuardar: () => void;
   vacio: string;
 }) {
-  const { busqueda } = useContext(Abierta);
+  const { busqueda, abiertas } = useContext(Abierta);
   // Con algo escrito en el buscador, solo lo que se llama así. Una carpeta
-  // que no coincide se esconde entera: lo de adentro no se cargó todavía.
-  const carpetas = contenido.carpetas.filter((c) => coincide(c.nombre, busqueda));
+  // cerrada que no coincide se esconde entera: lo de adentro no se cargó
+  // todavía. **Una abierta se deja pasar**: ya trajo su contenido, y esconderla
+  // escondía también el archivo que se estaba buscando.
+  const carpetas = contenido.carpetas.filter(
+    (c) => coincide(c.nombre, busqueda) || abiertas.has(c.id)
+  );
   const archivos = contenido.archivos.filter((a) => coincide(a.nombreCompleto, busqueda));
 
   if (contenido.carpetas.length === 0 && contenido.archivos.length === 0) {
@@ -554,7 +696,7 @@ function Adentro({
           key={archivo.id}
           archivo={archivo}
           nivel={nivel}
-          carpetaId={clienteId}
+          carpetaId={carpetaId}
           equipo={equipo}
           alGuardar={alGuardar}
         />
@@ -577,7 +719,7 @@ function FilaCarpeta({
   alGuardar: () => void;
 }) {
   const [abierta, setAbierta] = useState(false);
-  const { cual, alternarConfig } = useContext(Abierta);
+  const { cual, alternarConfig, marcarAbierta } = useContext(Abierta);
   const enTrabajo = useContext(EnTrabajo);
   const config = cual === carpeta.id;
   const [contenido, setContenido] = useState<Contenido | null>(null);
@@ -611,13 +753,18 @@ function FilaCarpeta({
     }
   }, [carpeta.id, carpeta.diasQueCorren, carpeta.responsableQueCorre]);
 
+  // **Se vuelve a leer al abrir**, y se avisa al árbol para que el buscador
+  // no la esconda. Se traía una sola vez: cerrar y abrir —que es lo que
+  // cualquiera hace para actualizar— devolvía la misma lista vieja.
   async function alternar() {
     if (abierta) {
       setAbierta(false);
+      marcarAbierta(carpeta.id, false);
       return;
     }
     setAbierta(true);
-    if (!contenido) await traer();
+    marcarAbierta(carpeta.id, true);
+    await traer();
   }
 
   return (
@@ -644,9 +791,20 @@ function FilaCarpeta({
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`font-bold tracking-tight ${oculta ? "text-apagado" : ""}`}>
+          {/* **El nombre también abre.** Había que acertarle a la flecha de 36
+              píxeles: el nombre es el objetivo grande y obvio de la fila, y no
+              hacía nada. La flecha sigue estando para quien ya la usa. */}
+          <button
+            type="button"
+            onClick={alternar}
+            aria-expanded={abierta}
+            className={`text-left font-bold tracking-tight underline decoration-transparent
+                        underline-offset-4 transition-colors hover:decoration-linea ${
+                          oculta ? "text-apagado" : ""
+                        }`}
+          >
             {carpeta.nombre}
-          </span>
+          </button>
           {carpeta.reservada && (
             <span className="bg-hueco px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-apagado">
               Reservada
@@ -667,7 +825,15 @@ function FilaCarpeta({
 
         <p className="mt-0.5 text-menudo text-apagado">
           {carpeta.reservada ? (
-            "Acá sube el equipo el archivo final, ya terminado."
+            // **Son dos carpetas distintas y decían lo mismo.** «Facturas»
+            // aparecía descrita como la de entregas finales: la carpeta que el
+            // cliente no ve nunca, explicada como el lugar donde se sube lo
+            // terminado para que la vea.
+            carpeta.deFacturas ? (
+              "Las facturas del cliente. El cliente no las ve nunca."
+            ) : (
+              "Acá sube el equipo el archivo final, ya terminado."
+            )
           ) : (
             <>
               {carpeta.subcarpetas > 0 && (
@@ -699,18 +865,46 @@ function FilaCarpeta({
                       {carpeta.sinEntregar} sin entregar
                     </span>
                   )}
+                  {/* **«Esperando al cliente», que es lo que quiere decir.**
+                      Decía «N sin revisar», que del lado de la agencia se lee
+                      al revés: parece trabajo propio pendiente cuando es
+                      exactamente lo contrario. Es la frase que ya usa el
+                      tablero para el mismo conjunto de piezas. */}
                   {" · "}
-                  {carpeta.sinRevisar} sin revisar
+                  {carpeta.sinRevisar} esperando al cliente
                   {carpeta.terminadas > 0 &&
                     ` · ${carpeta.terminadas} aprobada${
                       carpeta.terminadas === 1 ? "" : "s"
                     }`}
+                  {/* **El plazo, solo donde describe algo que está pasando.**
+                      Se escribía siempre: una carpeta vacía y una con todo
+                      aprobado decían «7 días de revisión» sobre nada. */}
+                  {" · "}
+                  {carpeta.diasQueCorren}{" "}
+                  {carpeta.diasQueCorren === 1 ? "día" : "días"} de revisión
                 </>
               )}
+              {/* Quién la lleva, y nada cuando no la lleva nadie: «sin
+                  asignar» repetido en cada fila es una ausencia dibujada
+                  veinte veces. */}
+              {carpeta.responsableA && ` · ${carpeta.responsableA}`}
+            </>
+          )}
+          {/* **A la pantalla de la carpeta desde acá.** El enlace vivía al
+              fondo de lo que hay adentro: para llegar había que abrir la
+              sección, el cliente, la carpeta, y bajar hasta el último renglón
+              —cuatro toques y un desplazamiento— para algo que no depende de
+              lo que haya adentro. Y ahí están las dos cosas que solo se
+              pueden hacer ahí: ponerle fechas y ver qué pasó con cada pieza. */}
+          {!carpeta.reservada && !oculta && (
+            <>
               {" · "}
-              {carpeta.diasQueCorren}{" "}
-              {carpeta.diasQueCorren === 1 ? "día" : "días"} para revisar
-              {carpeta.responsableA ? ` · ${carpeta.responsableA}` : " · sin asignar"}
+              <Link
+                href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}?desde=clientes`}
+                className="font-bold text-acento underline underline-offset-4"
+              >
+                Ver la carpeta
+              </Link>
             </>
           )}
         </p>
@@ -745,7 +939,14 @@ function FilaCarpeta({
               cuantas={carpeta.sinEntregar}
               dias={carpeta.diasQueCorren}
               sangria={nivel * SANGRIA + 44}
-              alEntregar={alGuardar}
+              // **Los dos.** El propio vuelve a leer los archivos de esta
+              // carpeta —si no, los renglones de abajo siguen diciendo «falta
+              // entregar» sobre lo que se acaba de entregar— y el del padre
+              // actualiza el encabezado, que cuenta las que faltan.
+              alEntregar={() => {
+                traer();
+                alGuardar();
+              }}
             />
           )}
 
@@ -753,17 +954,21 @@ function FilaCarpeta({
             <p className="px-4 py-2 text-menudo font-semibold text-alerta">{error}</p>
           )}
           {contenido && (
-            // Las carpetas de trabajo —las del primer nivel— dejan puesto de
-            // qué trabajo es todo lo que tienen adentro. Más adentro no se
-            // vuelve a poner: una subcarpeta sigue siendo parte del mismo
-            // trabajo.
+            // **La contenedora cambia en cada nivel; el trabajo no.** Una
+            // subcarpeta sigue siendo parte del mismo trabajo —eso da el
+            // rótulo— pero las piezas que hay que listar son las suyas.
             <EnTrabajo.Provider
-              value={nivel === 1 ? { carpeta, clienteId } : enTrabajo}
+              value={{
+                contenedora: carpeta,
+                trabajo: nivel === 1 ? carpeta : (enTrabajo?.trabajo ?? carpeta),
+                clienteId,
+              }}
             >
               <Adentro
                 contenido={contenido}
                 nivel={nivel + 1}
-                clienteId={carpeta.id}
+                clienteId={clienteId}
+                carpetaId={carpeta.id}
                 equipo={equipo}
                 alGuardar={traer}
                 vacio="Esta carpeta está vacía."
@@ -771,19 +976,6 @@ function FilaCarpeta({
             </EnTrabajo.Provider>
           )}
 
-          {carpeta.vista === "calendario" && !carpeta.reservada && (
-            <div
-              className="border-t border-linea-tenue py-2"
-              style={{ paddingLeft: (nivel + 1) * SANGRIA + 44 }}
-            >
-              <Link
-                href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}`}
-                className="text-menudo font-bold text-acento underline underline-offset-4"
-              >
-                Armar el calendario de {carpeta.nombre} →
-              </Link>
-            </div>
-          )}
         </div>
       )}
     </li>
@@ -820,21 +1012,16 @@ function ConfiguracionDeReservada({
         />
       )}
 
-      <h4 className="text-micro font-extrabold uppercase tracking-widest text-apagado">
-        Carpeta con nombre reservado
-      </h4>
-      {carpeta.enlaceDrive && (
-        <a
-          href={carpeta.enlaceDrive}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="rounded-full mt-3 inline-flex min-h-toque items-center gap-2 border-2 border-tinta px-4
-                     text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
-        >
-          <IconoDrive />
-          Abrirla en Drive
-        </a>
-      )}
+      {/* **Lo que le falta al panel, no lo que ya está en la fila.** Era un
+          «Abrirla en Drive» que repetía exactamente el botón de Drive de la
+          fila de al lado: se tocaba el engranaje esperando algo que
+          configurar y salía el mismo botón de nuevo. Lo que hacía falta era
+          la frase que explica por qué acá no hay nada que configurar. */}
+      <p className="text-menudo text-apagado">
+        {carpeta.deFacturas
+          ? "Es de la agencia: el cliente no la ve nunca, y por eso no hay nada que configurar."
+          : "Acá va lo terminado. Lo único que se decide es si el cliente la ve."}
+      </p>
     </div>
   );
 }
@@ -892,7 +1079,14 @@ function FilaArchivo({
         {enTrabajo ? (
           <button
             type="button"
-            onClick={() => mirar(enTrabajo.carpeta, enTrabajo.clienteId, archivo.id)}
+            onClick={() =>
+              mirar(
+                enTrabajo.contenedora,
+                enTrabajo.trabajo,
+                enTrabajo.clienteId,
+                archivo.id
+              )
+            }
             title={`Ver ${archivo.nombreCompleto}`}
             className={`block max-w-full truncate text-left text-normal font-bold
                         tracking-tight underline decoration-linea underline-offset-4
@@ -914,7 +1108,7 @@ function FilaArchivo({
         )}
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Estado estado={archivo.estado} />
+          <Estado estado={archivo.estado} mirada="agencia" />
           {!archivo.visible && (
             <span className="bg-tinta px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
               Oculto
@@ -925,43 +1119,62 @@ function FilaArchivo({
               en finales
             </span>
           )}
-          {/* El archivo está, pero no es el que se muestra: sin decirlo, el
-              que lo subió no se entera de que no llegó a ningún lado. */}
-          {/* Dos trabajos con el mismo nombre en distinto formato: casi
-              siempre es un renombre que partió uno en dos, y el cliente puede
-              quedar mirando el pedazo equivocado. */}
+          {/* **Las dos alertas dicen qué hacer, en la fila.** Lo explicaban en
+              un `title`, o sea solo si alguien dejaba el mouse quieto encima:
+              en el teléfono no aparece nunca, y en la computadora hay que
+              adivinar que está. Aparecen poquísimas veces —son anomalías— así
+              que el renglón de más no cuesta nada cuando no están, y cuando
+              están es justo lo que hace falta leer. */}
           {archivo.comparteNombre && (
-            <span
-              title={`Hay otro trabajo en esta carpeta que también se llama «${archivo.nombre}», en otro formato. Si son el mismo, ponele la marca de versión al que falta —«V2_${archivo.nombre}»— y la aplicación los junta.`}
-              className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta"
-            >
+            <span className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta">
               nombre repetido
             </span>
           )}
           {archivo.vueltaAtrasada && (
-            <span
-              title={`Lo último que se tocó en Drive fue «${archivo.vueltaAtrasada.subida}», pero la vuelta que se muestra y se entrega es «${archivo.vueltaAtrasada.actual}», que tiene un número más alto. Si la nueva es la primera, renombrala con un número mayor.`}
-              className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta"
-            >
+            <span className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta">
               vuelta atrasada
             </span>
           )}
+          {/* **Lo que corre, y nada más.** El renglón decía las dos cuentas a
+              la vez —«7 días · vence el 20 sept»— y son la misma: el plazo es
+              con lo que se calcula el vencimiento. Mientras la pieza está de
+              nuestro lado lo que importa es qué plazo le va a tocar al cliente;
+              cuando ya es de él, la fecha. Y «sin asignar» se dibujaba en cada
+              fila que no tuviera responsable: lo que hay que ver es quién la
+              lleva, no la ausencia repetida veinte veces. */}
           <span className="text-micro text-apagado">
-            {archivo.vueltas > 1 && `v${archivo.vueltas} · `}
-            {archivo.diasQueCorren} {archivo.diasQueCorren === 1 ? "día" : "días"}
-            {/* **El vencimiento es del cliente, no nuestro.** Cuando la
-                pieza vuelve a nuestro lado ese reloj dejó de correr: lo que
-                importa es desde cuándo la tenemos. Mostrar los dos relojes
-                como si fueran uno hacía leer «vence el 11 oct» sobre algo que
-                el cliente ya contestó. */}
-            {laTenemosNosotros(archivo.estado)
-              ? archivo.entregadaEl &&
-                ` · se entregó el ${comoFecha(archivo.entregadaEl.slice(0, 10))}`
-              : archivo.vence && ` · vence el ${comoFecha(archivo.vence)}`}
-            {archivo.publicaEl && ` · sale el ${comoFecha(archivo.publicaEl)}`}
-            {archivo.responsableA ? ` · ${archivo.responsableA}` : " · sin asignar"}
+            {/* **La vuelta que dice el archivo, no cuántos archivos hay.** Con
+                «V1», «V2», «V4» y «V6» en Drive son cuatro archivos y la vuelta
+                seis: el renglón decía «v4» al lado de «V6_stickers.jpeg». */}
+            {archivo.version > 1 && `v${archivo.version} · `}
+            {/* **Y el reloj solo mientras haya un reloj.** Una pieza aprobada o
+                caída no vence: decía «vence el 11 oct» debajo de la pastilla
+                «Aprobada», que es una fecha que ya no va a pasar nada. */}
+            {sigueEnJuego(archivo.estado) &&
+              (laTenemosNosotros(archivo.estado) || !archivo.vence
+                ? `${archivo.diasQueCorren} ${archivo.diasQueCorren === 1 ? "día" : "días"} de revisión · `
+                : `vence el ${enPalabrasElDia(archivo.vence)} · `)}
+            {archivo.publicaEl && `sale el ${enPalabrasElDia(archivo.publicaEl)} · `}
+            {archivo.responsableA}
           </span>
         </div>
+
+        {/* La explicación de la alerta, cuando la hay. */}
+        {archivo.comparteNombre && (
+          <p className="mt-1 text-micro text-alerta">
+            Hay otro trabajo en esta carpeta que también se llama «{archivo.nombre}», en
+            otro formato. Si son el mismo, ponele la marca de versión al que falta
+            —«V2_{archivo.nombre}»— y se juntan solos.
+          </p>
+        )}
+        {archivo.vueltaAtrasada && (
+          <p className="mt-1 text-micro text-alerta">
+            Lo último que se tocó en Drive fue «{archivo.vueltaAtrasada.subida}», pero la
+            vuelta que se muestra y se entrega es «{archivo.vueltaAtrasada.actual}», que
+            tiene un número más alto. Si la nueva es la buena, renombrala con un número
+            mayor.
+          </p>
+        )}
       </Fila>
 
       {config && (

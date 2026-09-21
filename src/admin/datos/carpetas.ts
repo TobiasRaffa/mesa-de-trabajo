@@ -5,7 +5,12 @@
 // visible —no puede filtrar lo que nunca le llegó—. Acá llega todo, porque de
 // eso se trata la pantalla: decidir qué se muestra.
 
-import { ajustesDe, esCarpetaReservada, type AjustesDeCarpeta } from "@/lib/ajustes";
+import {
+  ajustesDe,
+  ajustesDeVarias,
+  esCarpetaReservada,
+  type AjustesDeCarpeta,
+} from "@/lib/ajustes";
 import {
   esCarpetaDeMiCliente,
   miCliente,
@@ -41,7 +46,14 @@ export type PiezaParaFechar = {
   archivo: string;
   nombre: string;
   modificado?: string;
-  vueltas: number;
+  /**
+   * En qué vuelta va, según el número escrito en el archivo más alto.
+   *
+   * **No es cuántos archivos hay.** Con «V1», «V2», «V4» y «V6» son cuatro
+   * archivos y la vuelta seis; la pastilla del calendario mostraba lo primero
+   * con una «v» adelante, así que decía «v4» sobre un archivo llamado «V6».
+   */
+  version: number;
   /** `AAAA-MM-DD`, o `null` si todavía no tiene día. */
   dia: DiaSuelto | null;
 };
@@ -122,7 +134,7 @@ export async function carpetaParaFechar(
         archivo: ultima.id,
         nombre: pieza.titulo,
         modificado: ultima.modifiedTime,
-        vueltas: pieza.versiones.length,
+        version: conArchivos[i].version,
         dia: dias[identidades[i]] ?? null,
       };
     }),
@@ -170,37 +182,50 @@ export async function panelDeClientes(): Promise<ClienteEnGestion[]> {
     ultimasVisitas(ids),
   ]);
 
-  return Promise.all(
-    clientes.map(async (cliente): Promise<ClienteEnGestion> => {
-      // De un cliente apagado no se cuenta nada: no se le pide a Drive lo que
-      // no se va a mostrar.
-      const { tag, ...sinTag } = cliente;
-      const comun = {
-        ...sinTag,
-        tieneClave: tag.trim() !== "",
-        dias: propios[cliente.id] ?? DIAS_POR_OMISION,
-        diasPropios: propios[cliente.id] !== undefined,
-        responsable: quienes[cliente.id] ?? null,
-        responsablePropio: cliente.id in quienes,
-        ultimaVisita: visitas[cliente.id] ?? null,
-      };
-
-      if (!cliente.habilitado) {
-        return { ...comun, carpetas: 0, carpetasVisibles: 0, sinLeer: 0 };
-      }
-
-      const subcarpetas = await subcarpetasDe(cliente.id);
-      const deTrabajo = subcarpetas.filter((c) => !esCarpetaReservada(c.name));
-      const visibles = await Promise.all(
-        deTrabajo.map(async (c) => (await ajustesDe(c.id)).visible)
-      );
-
-      return {
-        ...comun,
-        carpetas: deTrabajo.length,
-        carpetasVisibles: visibles.filter(Boolean).length,
-        sinLeer: sinLeer[cliente.id] ?? 0,
-      };
-    })
+  // **Las carpetas de trabajo de todos, antes del `map`.** Los ajustes se
+  // pedían de a uno, adentro de dos `map` anidados: un documento por carpeta,
+  // por cliente, en cada visita a la pantalla que más se abre del día. Con
+  // ocho clientes de cinco carpetas son cuarenta viajes de red para dibujar
+  // una lista cerrada. Es el mismo atajo que ya usa `subcarpetasDeCarpeta`.
+  const deTrabajoPorCliente = new Map<string, string[]>();
+  await Promise.all(
+    clientes
+      .filter((c) => c.habilitado)
+      .map(async (cliente) => {
+        const subcarpetas = await subcarpetasDe(cliente.id);
+        deTrabajoPorCliente.set(
+          cliente.id,
+          subcarpetas.filter((c) => !esCarpetaReservada(c.name)).map((c) => c.id)
+        );
+      })
   );
+  const ajustes = await ajustesDeVarias([...deTrabajoPorCliente.values()].flat());
+
+  return clientes.map((cliente): ClienteEnGestion => {
+    // De un cliente apagado no se cuenta nada: no se le pide a Drive lo que
+    // no se va a mostrar.
+    const { tag, ...sinTag } = cliente;
+    const comun = {
+      ...sinTag,
+      tieneClave: tag.trim() !== "",
+      dias: propios[cliente.id] ?? DIAS_POR_OMISION,
+      diasPropios: propios[cliente.id] !== undefined,
+      responsable: quienes[cliente.id] ?? null,
+      responsablePropio: cliente.id in quienes,
+      ultimaVisita: visitas[cliente.id] ?? null,
+    };
+
+    if (!cliente.habilitado) {
+      return { ...comun, carpetas: 0, carpetasVisibles: 0, sinLeer: 0 };
+    }
+
+    const deTrabajo = deTrabajoPorCliente.get(cliente.id) ?? [];
+
+    return {
+      ...comun,
+      carpetas: deTrabajo.length,
+      carpetasVisibles: deTrabajo.filter((id) => ajustes[id]?.visible).length,
+      sinLeer: sinLeer[cliente.id] ?? 0,
+    };
+  });
 }

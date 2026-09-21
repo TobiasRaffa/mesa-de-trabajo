@@ -20,12 +20,12 @@
 // corre en él. Así la regla es la misma a cualquier profundidad.
 
 import {
-  ajustesDe,
+  ajustesDeVarias,
   esCarpetaDeFacturas,
   esCarpetaReservada,
   escondidosEntre,
 } from "@/lib/ajustes";
-import { personaPorId } from "@/lib/equipo";
+import { nombresDelEquipo } from "@/lib/equipo";
 import { subcarpetasDe } from "@/lib/google";
 import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
@@ -155,6 +155,17 @@ export type NodoArchivo = {
   estado: Estado;
   /** Cuántos archivos tiene: el original más cada vuelta nueva. */
   vueltas: number;
+  /**
+   * En qué vuelta va, según el número escrito en el nombre del archivo más alto.
+   *
+   * **No es lo mismo que `vueltas` y confundirlos se veía en pantalla.** Una
+   * pieza con «V1», «V2», «V4» y «V6» tiene cuatro archivos y va por la vuelta
+   * **seis**: el renglón mostraba `vueltas` con una «v» adelante, así que al
+   * lado de un archivo llamado «V6_stickers.jpeg» decía «v4». Los números que
+   * el equipo escribe en Drive no siempre son seguidos —se saltean, se
+   * renombran— y el que importa es el que está escrito en el archivo.
+   */
+  version: number;
   /** El número de vuelta que se le entregó al cliente, si se le entregó alguno. */
   versionEntregada?: number;
   /**
@@ -226,15 +237,24 @@ async function subcarpetasDeCarpeta(
 ): Promise<NodoCarpeta[]> {
   const carpetas = await subcarpetasDe(carpetaId);
   const ids = carpetas.map((c) => c.id);
-  const [propios, responsables] = await Promise.all([plazosDe(ids), responsablesDe(ids)]);
+  // **Las cuatro preguntas, una vez cada una.** Los ajustes y el nombre de
+  // quien lleva cada carpeta se pedían **adentro** del `map`, o sea un
+  // documento por carpeta: en Supabase, dos viajes de red por renglón para
+  // dibujar una lista. Los plazos y los responsables ya se pedían así.
+  const [propios, responsables, ajustesDeTodas, nombres] = await Promise.all([
+    plazosDe(ids),
+    responsablesDe(ids),
+    ajustesDeVarias(ids),
+    nombresDelEquipo(),
+  ]);
 
   return Promise.all(
     carpetas.map(async (carpeta): Promise<NodoCarpeta> => {
       const reservada = esCarpetaReservada(carpeta.name);
-      const ajustes = await ajustesDe(carpeta.id);
+      const ajustes = ajustesDeTodas[carpeta.id];
       const propio = carpeta.id in responsables ? responsables[carpeta.id] : undefined;
       const quien = responsableQueCorre(propio, heredado.responsable, undefined);
-      const persona = await personaPorId(quien ?? undefined);
+      const nombreDeQuien = quien ? (nombres.get(quien) ?? null) : null;
 
       const base = {
         id: carpeta.id,
@@ -245,7 +265,7 @@ async function subcarpetasDeCarpeta(
         token: ajustes.token,
         responsable: propio,
         responsableQueCorre: quien,
-        responsableA: persona?.nombre ?? null,
+        responsableA: nombreDeQuien,
         dias: propios[carpeta.id],
         diasQueCorren: plazoQueCorre(propios[carpeta.id], heredado.dias, undefined),
         reservada,
@@ -315,12 +335,16 @@ async function archivosDeCarpeta(
     escondidosEntre(agrupadas.flatMap((p) => p.versiones.map((v) => v.archivo.id))),
   ]);
 
-  const nombres = new Map<string, string | null>();
-  for (const id of new Set(Object.values(responsables))) {
-    if (id) nombres.set(id, (await personaPorId(id))?.nombre ?? null);
-  }
+  // El equipo entero de una sola lectura, en vez de un documento por persona
+  // distinta que aparezca en la lista.
+  const delEquipo = await nombresDelEquipo();
+  const nombres = new Map<string, string | null>(
+    [...new Set(Object.values(responsables))]
+      .filter((id): id is string => Boolean(id))
+      .map((id) => [id, delEquipo.get(id) ?? null])
+  );
   const nombreDelHeredado = heredado.responsable
-    ? ((await personaPorId(heredado.responsable))?.nombre ?? null)
+    ? (delEquipo.get(heredado.responsable) ?? null)
     : null;
 
   return agrupadas.map((pieza, i): NodoArchivo => {
@@ -367,6 +391,7 @@ async function archivosDeCarpeta(
       versionEntregada: estado.versionEntregada,
       entregadaEl: estado.entregadaEl,
       vueltas: pieza.versiones.length,
+      version: conArchivos[i].version,
       ronda: estado.ronda,
       mudada: estado.mudada,
       publicaEl: dias[suya],

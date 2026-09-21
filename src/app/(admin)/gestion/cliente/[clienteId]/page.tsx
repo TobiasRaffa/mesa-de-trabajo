@@ -14,6 +14,7 @@ import { ChatDeCliente } from "@/admin/ChatDeCliente";
 import { elEquipo } from "@/lib/equipo";
 import { comoMePresentoEnElChat } from "@/lib/sesion";
 import { estadisticasDe, type Estadisticas } from "@/admin/datos/estadisticas";
+import { BotonEnlace } from "@/ui/Boton";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function UnCliente({
       estadisticasDe(clienteId).catch(() => null),
     ]);
   } catch (error) {
-    return <ErrorDeDrive error={error} />;
+    return <ErrorDeDrive error={error} titulo="El cliente" />;
   }
 
   // La primera carpeta de trabajo visible: es de la que se suele hablar, y la
@@ -57,43 +58,39 @@ export default async function UnCliente({
                 ningun link de vuelta a administracion: eso seria una puerta de un
                 mundo al otro, y la veria tambien el cliente.
               */}
-              <a
+              <BotonEnlace
+                variante="principal"
                 href={`/t/${cliente.token}`}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex min-h-toque items-center rounded-full bg-acento px-6 text-normal font-bold
-                           tracking-tight text-white transition-colors hover:bg-acento-hover"
               >
                 Ver el portal como el cliente
-              </a>
+              </BotonEnlace>
               {cliente.enlaceDrive && (
-                <a
+                <BotonEnlace
                   href={cliente.enlaceDrive}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="inline-flex min-h-toque items-center rounded-full border-2 border-tinta px-6
-                             text-normal font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
                 >
                   Abrir la carpeta en Drive
-                </a>
+                </BotonEnlace>
               )}
               {/* Todo lo que le pasó a cada pieza, para una planilla. Pasa por
                   nuestro servidor, que es quien sabe si este cliente es tuyo. */}
-              <a
-                href={`/api/historial/${cliente.id}`}
-                className="inline-flex min-h-toque items-center rounded-full border-2 border-tinta px-6
-                           text-normal font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
-              >
+              <BotonEnlace href={`/api/historial/${cliente.id}`} download>
                 Descargar historial (CSV)
-              </a>
+              </BotonEnlace>
             
           </>
         }
       />
       {numeros && <Numeros de={numeros} />}
 
+      {/* Abierto de entrada: esta pantalla es de un cliente solo, y llegar
+          acá y tener que abrirlo otra vez —debajo de su nombre, que ya está
+          en el encabezado— es un toque para pedir lo que se vino a ver. */}
       <div className="mt-6">
-        <ArbolDeClientes clientes={[cliente]} equipo={equipo} />
+        <ArbolDeClientes clientes={[cliente]} equipo={equipo} abiertoDeEntrada />
       </div>
 
       <MensajesListos

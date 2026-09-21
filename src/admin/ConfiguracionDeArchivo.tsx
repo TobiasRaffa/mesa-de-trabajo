@@ -18,6 +18,7 @@ import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
 import { TITULO } from "@/admin/estilos";
+import { Boton } from "@/ui/Boton";
 
 export function ConfiguracionDeArchivo({
   archivo,
@@ -48,7 +49,7 @@ export function ConfiguracionDeArchivo({
         entregó por otro lado—, es una decisión, no un descuido. Se avisa y se
         deja pasar.
       */}
-      {archivo.estado === "en_curso" && archivo.vueltas <= archivo.ronda && (
+      {archivo.estado === "en_curso" && archivo.version <= archivo.ronda && (
         <p className="border-l-4 border-espera-borde bg-espera-tenue px-3 py-2 text-menudo text-espera">
           El cliente devolvió esta pieza con cambios y todavía no hay una vuelta
           nueva en Drive. Si la entregás así, le llega el mismo archivo.
@@ -84,7 +85,6 @@ export function ConfiguracionDeArchivo({
             id={archivo.id}
             carpetaId={carpetaId}
             quien={archivo.responsableQueCorre}
-            propio={archivo.responsable !== undefined}
             equipo={equipo}
             alGuardar={alGuardar}
           />
@@ -99,7 +99,6 @@ export function ConfiguracionDeArchivo({
             id={archivo.id}
             carpetaId={carpetaId}
             dias={archivo.diasQueCorren}
-            propio={archivo.dias !== undefined}
             alGuardar={alGuardar}
           />
         </div>
@@ -169,15 +168,14 @@ function AccionesDeAgencia({
           <p className="mt-1 text-menudo text-apagado">
             El cliente se quedó sin rondas y pidió una más. Está esperando.
           </p>
-          <button
-            type="button"
+          <Boton
             disabled={yendo}
             onClick={() => hacer(() => habilitarExtraDePieza(carpetaId, archivo.id))}
-            className="rounded-full mt-2 min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
-                       text-white transition-colors hover:bg-acento-hover disabled:opacity-40"
+            tamano="chico"
+            className="mt-2"
           >
             {yendo ? "…" : "Habilitar una revisión más"}
-          </button>
+          </Boton>
         </>
       ) : (
         <>
@@ -185,15 +183,15 @@ function AccionesDeAgencia({
             Reabrirla se la devuelve al cliente para que la mire de nuevo, y saca
             el archivo de «Entregas finales».
           </p>
-          <button
-            type="button"
+          <Boton
+            variante="contorno"
             disabled={yendo}
             onClick={() => hacer(() => reabrirPieza(carpetaId, archivo.id))}
-            className="rounded-full mt-2 min-h-toque border-2 border-tinta px-4 text-normal font-bold
-                       tracking-tight text-tinta transition-colors hover:bg-hueco disabled:opacity-40"
+            tamano="chico"
+            className="mt-2"
           >
             {yendo ? "…" : "Reabrir"}
-          </button>
+          </Boton>
         </>
       )}
 

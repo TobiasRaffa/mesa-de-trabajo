@@ -19,6 +19,14 @@ vi.mock("@/lib/carpetas", () => ({
   clienteDeCarpeta: vi.fn(async () => null),
 }));
 vi.mock("@/lib/piezas", () => ({ piezasDeLaCarpeta: vi.fn() }));
+// Quien llama entra a la sección: acá se prueba qué hace la acción con lo que
+// le llega, no el segundo cerrojo —eso lo cubre `cimientos.test.ts`—.
+vi.mock("@/lib/sesion", () => ({
+  puedoAlgunaDe: vi.fn(async () => true),
+  puedoVer: vi.fn(async () => true),
+  firmaDeAgencia: vi.fn(async () => "El equipo"),
+  contrasenaDeQuienEsta: vi.fn(async () => true),
+}));
 vi.mock("@/lib/publicaciones", async () => {
   const real = await vi.importActual<typeof import("@/lib/publicaciones")>(
     "@/lib/publicaciones"

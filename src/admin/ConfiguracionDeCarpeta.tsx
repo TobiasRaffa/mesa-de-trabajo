@@ -3,7 +3,6 @@
 // Todo lo que se configura de una carpeta de trabajo.
 
 import { useActionState, useEffect, useState } from "react";
-import Link from "next/link";
 import { guardarCarpeta, pedirLinkDeCarpeta } from "@/app/(admin)/gestion/acciones";
 import { DiasDeRevision } from "@/admin/DiasDeRevision";
 import { Responsable } from "@/admin/Responsable";
@@ -13,6 +12,7 @@ import type { NodoCarpeta } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
 import { BOTON, TITULO } from "@/admin/estilos";
+import { BotonEnlace } from "@/ui/Boton";
 
 /**
  * Dos botones que dicen qué está pasando, no qué va a pasar.
@@ -133,14 +133,19 @@ export function ConfiguracionDeCarpeta({
             />
           </form>
 
-          {carpeta.vista === "calendario" && !oculta && (
-            <Link
-              href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}`}
-              className="rounded-full inline-flex h-8 items-center bg-acento px-3 text-menudo font-bold
-                         tracking-tight text-white transition-colors hover:bg-acento-hover"
+          {/* **Un solo nombre para esa pantalla.** Se llamaba de tres
+              formas —«Armar calendario», «Armar el calendario de X», «Abrir la
+              carpeta»— y la última chocaba de frente con «Abrir la carpeta en
+              Drive», que va a otro lado. El calendario es una de las cosas que
+              hay ahí; también está qué pasó con cada pieza. */}
+          {!oculta && (
+            <BotonEnlace
+              variante="principal"
+              tamano="chico"
+              href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}?desde=clientes`}
             >
-              Armar calendario
-            </Link>
+              Ver la carpeta
+            </BotonEnlace>
           )}
         </div>
       </section>
@@ -153,7 +158,6 @@ export function ConfiguracionDeCarpeta({
             nivel="carpeta"
             id={carpeta.id}
             quien={carpeta.responsableQueCorre}
-            propio={carpeta.responsable !== undefined}
             equipo={equipo}
             alGuardar={alGuardar}
           />
@@ -168,7 +172,6 @@ export function ConfiguracionDeCarpeta({
             nivel="carpeta"
             id={carpeta.id}
             dias={carpeta.diasQueCorren}
-            propio={carpeta.dias !== undefined}
             alGuardar={alGuardar}
           />
         </div>

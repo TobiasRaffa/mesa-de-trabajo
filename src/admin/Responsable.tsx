@@ -32,8 +32,6 @@ export function Responsable({
   carpetaId?: string;
   /** Quién lleva esto, ya heredado. */
   quien: string | null;
-  /** Está puesto acá, no heredado de arriba. */
-  propio: boolean;
   equipo: Persona[];
   alGuardar?: () => void;
 }) {

@@ -10,8 +10,12 @@
 // plazo de doce archivos es demasiado para un movimiento del mouse: aparece
 // Guardar, y hasta apretarlo no pasa nada.
 //
-// Dice si el número es propio o heredado. Sin eso, un «3» no distingue entre
-// «alguien eligió tres» y «nadie eligió nada».
+// **No dice si el número es propio o heredado, y es a propósito.** Lo decía,
+// con el argumento de que un «3» no distingue entre «alguien eligió tres» y
+// «nadie eligió nada». El rótulo «heredado» se sacó al rediseñar: lo que
+// importa es el plazo que corre, y una etiqueta al lado de cada número era
+// ruido en una pantalla que ya tiene mucho. Quedaba la propiedad declarada y
+// calculada en cuatro pantallas, sin que nadie la dibujara.
 
 import { useState, useTransition } from "react";
 import { guardarDiasDeRevision } from "@/app/(admin)/gestion/acciones";
@@ -30,8 +34,6 @@ export function DiasDeRevision({
   /** Solo para un archivo: su carpeta, para poder comprobarlo. */
   carpetaId?: string;
   dias: number;
-  /** El número está puesto acá, no heredado de arriba. */
-  propio: boolean;
   alGuardar?: () => void;
 }) {
   const [elegidos, setElegidos] = useState(dias);

@@ -1,6 +1,7 @@
 "use client";
 
 import { Miniatura } from "@/ui/Miniatura";
+import { enPalabrasElMes } from "@/dominio/tiempo";
 
 // La entrega puesta en el tiempo.
 //
@@ -59,10 +60,7 @@ export function Calendario({ modo, mes, piezas, onAbrir }: Props) {
   const esDeHoy = (dia: number) =>
     hoy.getFullYear() === anio && hoy.getMonth() === numeroDeMes && hoy.getDate() === dia;
 
-  const nombreDelMes = new Intl.DateTimeFormat("es-AR", {
-    month: "long",
-    year: "numeric",
-  }).format(mes);
+  const nombreDelMes = enPalabrasElMes(mes);
 
   return (
     <section aria-label={`Calendario de ${nombreDelMes}`}>
@@ -107,7 +105,15 @@ type VistaProps = {
   onAbrir: (id: string) => void;
 };
 
-/** Una celda de día con trabajo: bloque oscuro, miniatura y estado en palabras. */
+/**
+ * Una celda de día con trabajo: bloque oscuro, miniatura y estado en palabras.
+ *
+ * **Con dos piezas el mismo día, las dos se pueden abrir.** La celda era un
+ * solo botón que abría siempre la primera, y las otras aparecían como un «+2»
+ * en la esquina que no era un botón ni llevaba a ningún lado: dos piezas que
+ * salen el mismo martes son un caso común —un posteo y su story— y una de las
+ * dos no tenía forma de abrirse desde el calendario.
+ */
 function Celda({
   dia,
   piezas,
@@ -122,41 +128,95 @@ function Celda({
   alto?: string;
 }) {
   const [primera, ...resto] = piezas;
+  const marco = `flex flex-col gap-1.5 bg-tinta p-2 text-left ${
+    hoy ? "outline-3 outline-acento" : ""
+  }`;
 
+  const estado = (pieza: PiezaEnCalendario) =>
+    // **Aprobada es lima en todos lados menos acá.** Era violeta, que en esta
+    // misma pantalla ya quiere decir «hoy»: el contorno de la celda y el
+    // cuadrado del día. Dos sentidos para un color en la misma grilla es el
+    // color no diciendo nada.
+    pieza.aprobada ? "bg-lima text-tinta" : "bg-lienzo/20 text-lienzo";
+
+  if (resto.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={() => onAbrir(primera.id)}
+        aria-label={`${dia}: ${primera.nombre}, ${primera.paso}`}
+        className={`group ${marco} transition-all duration-150 hover:z-10 hover:scale-[1.1] hover:shadow-xl`}
+      >
+        <span className="flex items-baseline justify-between">
+          <span className="text-menudo font-extrabold text-lienzo">{dia}</span>
+        </span>
+
+        <span className={`relative ${alto} w-full overflow-hidden bg-hueco`}>
+          <Miniatura
+            src={primera.miniatura}
+            alt=""
+            nombre={primera.nombre}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        </span>
+
+        <span
+          className={`truncate px-1.5 py-1 text-center text-micro font-extrabold uppercase tracking-wider ${estado(
+            primera
+          )}`}
+        >
+          {primera.paso}
+        </span>
+      </button>
+    );
+  }
+
+  // Varias el mismo día: un renglón por pieza, cada uno su botón. La celda deja
+  // de ser un botón —no se puede meter un botón adentro de otro— y pasa a ser
+  // la lista de lo que sale ese día.
   return (
-    <button
-      type="button"
-      onClick={() => onAbrir(primera.id)}
-      aria-label={`${dia}: ${primera.nombre}, ${primera.paso}${
-        resto.length ? ` y ${resto.length} más` : ""
-      }`}
-      className={`group flex flex-col gap-1.5 bg-tinta p-2 text-left transition-all duration-150
-                  hover:z-10 hover:scale-[1.1] hover:shadow-xl ${hoy ? "outline-3 outline-acento" : ""}`}
-    >
+    <div className={marco}>
       <span className="flex items-baseline justify-between">
         <span className="text-menudo font-extrabold text-lienzo">{dia}</span>
-        {resto.length > 0 && (
-          <span className="text-micro font-bold text-lienzo/60">+{resto.length}</span>
-        )}
+        <span className="text-micro font-bold text-lienzo/60">{piezas.length}</span>
       </span>
 
-      <span className={`relative ${alto} w-full overflow-hidden bg-hueco`}>
-        <Miniatura
-          src={primera.miniatura}
-          alt=""
-          nombre={primera.nombre}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      </span>
-
-      <span
-        className={`truncate px-1.5 py-1 text-center text-micro font-extrabold uppercase tracking-wider ${
-          primera.aprobada ? "bg-acento text-white" : "bg-lienzo/20 text-lienzo"
-        }`}
-      >
-        {primera.paso}
-      </span>
-    </button>
+      <ul className="flex flex-col gap-1">
+        {piezas.map((pieza) => (
+          <li key={pieza.id}>
+            <button
+              type="button"
+              onClick={() => onAbrir(pieza.id)}
+              aria-label={`${dia}: ${pieza.nombre}, ${pieza.paso}`}
+              className="flex w-full items-center gap-1.5 bg-lienzo/10 p-1 text-left
+                         transition-colors hover:bg-lienzo/25"
+            >
+              <span className="relative h-7 w-7 shrink-0 overflow-hidden bg-hueco">
+                <Miniatura
+                  src={pieza.miniatura}
+                  alt=""
+                  nombre={pieza.nombre}
+                  tono="oscuro"
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-micro font-bold text-lienzo">
+                  {pieza.nombre}
+                </span>
+                <span
+                  className={`mt-0.5 inline-block max-w-full truncate px-1 text-micro font-extrabold uppercase tracking-wider ${estado(
+                    pieza
+                  )}`}
+                >
+                  {pieza.paso}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -257,7 +317,7 @@ function VistaAgenda({ porDia, esDeHoy, onAbrir }: VistaProps) {
                 <span className="block truncate font-bold">{pieza.nombre}</span>
                 <span
                   className={`mt-1 inline-flex px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider ${
-                    pieza.aprobada ? "bg-acento text-white" : "bg-hueco text-tinta-suave"
+                    pieza.aprobada ? "bg-lima text-tinta" : "bg-hueco text-tinta-suave"
                   }`}
                 >
                   {pieza.paso}

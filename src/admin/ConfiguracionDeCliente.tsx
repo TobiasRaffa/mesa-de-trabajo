@@ -80,7 +80,6 @@ export function ConfiguracionDeCliente({
             nivel="cliente"
             id={cliente.id}
             quien={cliente.responsable}
-            propio={cliente.responsablePropio}
             equipo={equipo}
             alGuardar={alGuardar}
           />
@@ -95,7 +94,6 @@ export function ConfiguracionDeCliente({
             nivel="cliente"
             id={cliente.id}
             dias={cliente.dias}
-            propio={cliente.diasPropios}
             alGuardar={alGuardar}
           />
         </div>
