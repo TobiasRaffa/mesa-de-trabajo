@@ -53,7 +53,23 @@ function esMensaje(m: unknown): m is Mensaje {
 }
 
 /** Una conversación es un documento: el hilo vivo de un cliente. */
-type Hilo = { mensajes: Mensaje[] };
+type Hilo = {
+  mensajes: Mensaje[];
+  /**
+   * Si este cliente tiene tramos viejos guardados aparte.
+   *
+   * **Vive en el hilo vivo para no tener que buscarlo.** La pregunta «¿hay algo
+   * anterior?» se hace en **cada** vuelta del sondeo —cada seis segundos, por
+   * cada chat abierto, de los dos lados— y se contestaba recorriendo la
+   * colección entera de tramos: en Supabase eso es bajarse las conversaciones
+   * viejas de **todos** los clientes para saber algo de uno. Justo el costo que
+   * el techo del hilo vino a evitar.
+   *
+   * Sin definir en los hilos guardados antes de que esto existiera: la primera
+   * pregunta lo averigua a la manera vieja y lo anota, y no vuelve a pasar.
+   */
+  tieneAnteriores?: boolean;
+};
 
 const esHilo = (v: unknown): v is Hilo =>
   Boolean(v) && typeof v === "object" && Array.isArray((v as Hilo).mensajes);
@@ -102,7 +118,8 @@ const tramos = coleccion<Hilo>("conversaciones-antes", esHilo);
 const nombreDeTramo = (clienteId: string, primero: Mensaje) =>
   `${clienteId}::${primero.id}`;
 
-const esDe = (clave: string, clienteId: string) => clave.startsWith(`${clienteId}::`);
+/** El comienzo de la clave de todos los tramos de un cliente. */
+const prefijoDe = (clienteId: string) => `${clienteId}::`;
 
 /** Lo que sale del almacén se valida y se ordena por cuándo se dijo. */
 const enOrden = (mensajes: Mensaje[]) =>
@@ -117,7 +134,22 @@ export async function leerConversacion(clienteId: string): Promise<Mensaje[]> {
 
 /** Si este cliente tiene mensajes guardados de antes del hilo vivo. */
 export async function hayAnteriores(clienteId: string): Promise<boolean> {
-  return Object.keys(await tramos.todo()).some((clave) => esDe(clave, clienteId));
+  const hilo = await almacen.uno(clienteId);
+  if (typeof hilo?.tieneAnteriores === "boolean") return hilo.tieneAnteriores;
+
+  // Todavía no está anotado: se averigua una vez —solo los tramos de este
+  // cliente, no los de todos— y se deja escrito para que la próxima sea una
+  // sola lectura.
+  const hay = Object.keys(await tramos.losQueEmpiezanCon(prefijoDe(clienteId))).length > 0;
+
+  // **También cuando todavía no hay hilo.** Se anotaba solo `if (hilo)`, o sea
+  // que un cliente sin conversación empezada repetía el escaneo entero en cada
+  // vuelta del reloj, para siempre, para contestar que no hay nada.
+  await almacen
+    .cambiar(clienteId, (actual) => ({ ...(actual ?? { mensajes: [] }), tieneAnteriores: hay }))
+    .catch(() => undefined);
+
+  return hay;
 }
 
 /**
@@ -128,17 +160,47 @@ export async function hayAnteriores(clienteId: string): Promise<boolean> {
  * una línea.
  */
 export async function leerConversacionEntera(clienteId: string): Promise<Mensaje[]> {
-  const [viejos, vivos] = await Promise.all([tramos.todo(), leerConversacion(clienteId)]);
+  // **Solo los tramos de este cliente.** Se traían los de todos y se filtraba
+  // acá: con el chat abierto en «ver lo anterior», el sondeo de cada seis
+  // segundos bajaba años de conversación de la agencia entera para dibujar la
+  // de uno.
+  const [viejos, vivos] = await Promise.all([
+    tramos.losQueEmpiezanCon(prefijoDe(clienteId)),
+    leerConversacion(clienteId),
+  ]);
 
-  const todos = Object.entries(viejos)
-    .filter(([clave]) => esDe(clave, clienteId))
-    .flatMap(([, hilo]) => hilo.mensajes)
+  const todos = Object.values(viejos)
+    .flatMap((hilo) => hilo.mensajes)
     .concat(vivos);
 
   // Sin repetidos: si se cortó la luz entre escribir el tramo y sacarlos del
   // hilo vivo, los mismos mensajes están en los dos lados.
   const porId = new Map(todos.filter(esMensaje).map((m) => [m.id, m]));
   return enOrden([...porId.values()]);
+}
+
+/**
+ * Anota en la conversación algo que hizo la aplicación.
+ *
+ * **La promesa estaba escrita en cuatro lugares y no la cumplía nadie.** El
+ * tipo `Quien` tiene `"sistema"`, la pantalla lo dibuja distinto —centrado, en
+ * gris, sin burbuja— y `DECISIONES` lo explica, pero no había una sola llamada
+ * que escribiera uno: la rama existía para un caso que no ocurría nunca.
+ *
+ * Se anotan los **hitos de a tanda**: la entrega y el envío de una revisión.
+ * Uno por pieza aprobada convertiría la conversación en un registro, que es lo
+ * contrario de lo que es: un lugar donde dos personas hablan, con las marcas
+ * justas para saber de qué.
+ *
+ * No devuelve nada y no falla hacia afuera: que no se pueda anotar una marca
+ * no puede tumbar la entrega que acaba de pasar.
+ */
+export async function anotarHito(clienteId: string, texto: string): Promise<void> {
+  try {
+    await agregarMensaje(clienteId, "sistema", "Mesa de trabajo", texto);
+  } catch {
+    // Queda sin la marca. Lo que importaba ya se guardó.
+  }
 }
 
 /**
@@ -169,7 +231,12 @@ export async function agregarMensaje(
     cuando: new Date().toISOString(),
   };
 
+  // **Se conserva lo que ya tenía.** Devolvía un objeto nuevo con solo los
+  // mensajes, así que cada mensaje enviado borraba `tieneAnteriores`: la marca
+  // que existe para no volver a escanear los tramos se perdía en cuanto
+  // alguien escribía, y el escaneo caro volvía a correr.
   const hilo = await almacen.cambiar(clienteId, (actual) => ({
+    ...actual,
     mensajes: [...(actual?.mensajes ?? []).filter(esMensaje), nuevo],
   }));
 
@@ -199,6 +266,8 @@ async function mudarLoViejo(clienteId: string, mensajes: Mensaje[]): Promise<Men
       // Por identificador y no por posición: entre el tramo y esto pudo entrar
       // otro mensaje, y cortar por número se lo llevaría puesto.
       mensajes: (actual?.mensajes ?? []).filter((m) => !mudados.has(m.id)),
+      // Se anota acá mismo, que es el único momento en que pasa a ser cierto.
+      tieneAnteriores: true,
     }));
     return quedo?.mensajes ?? mensajes;
   } catch {

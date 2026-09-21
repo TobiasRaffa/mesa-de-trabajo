@@ -15,7 +15,8 @@
 // dos razones: hay que acordarse de mirarlo cada vez, y el día que se firma
 // mal no hay a quién preguntarle.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   escribirComoAgencia,
   marcarChatLeido,
@@ -30,10 +31,20 @@ export function ChatDeCliente({
   sinLeer,
   firma,
   abrirDeEntrada = false,
+  renglon,
 }: {
   clienteId: string;
   nombre: string;
   sinLeer: number;
+  /**
+   * Con qué se abre, cuando no alcanza un botón.
+   *
+   * En la lista de Conversaciones el renglón entero es el objetivo: se venía
+   * a abrir esa conversación, y había que cruzar la pantalla hasta un botón
+   * del extremo derecho que decía «Conversación» al lado de un renglón que ya
+   * dice de qué es. Pasándole el renglón, todo él abre.
+   */
+  renglon?: ReactNode;
   /** Cómo se presenta quien escribe: «Nari · Matter». Sale de la sesión. */
   firma: string;
   /**
@@ -44,9 +55,16 @@ export function ChatDeCliente({
    */
   abrirDeEntrada?: boolean;
 }) {
+  const router = useRouter();
   const [abierto, setAbierto] = useState(abrirDeEntrada);
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [enviando, setEnviando] = useState(false);
+  /** Lo que dijo el servidor cuando el mensaje no salió. */
+  const [fallo, setFallo] = useState<string | null>(null);
+  /** Lo que dijo el servidor cuando no se pudo leer la conversación. */
+  const [noSePudoLeer, setNoSePudoLeer] = useState<string | null>(null);
+  /** Lo escrito a medias, para que sobreviva a cerrar y volver a abrir. */
+  const [borrador, setBorrador] = useState("");
   const [leidos, setLeidos] = useState(false);
   /**
    * Si se pidió ver lo de antes.
@@ -70,11 +88,21 @@ export function ChatDeCliente({
         // Por acción y no por la ruta del portal: esa pide la galleta del
         // cliente, y la agencia está del otro lado del mostrador.
         const r = await traerConversacion(clienteId, entera);
-        if (r.ok && vivo) {
+        if (!vivo) return;
+        if (r.ok) {
           setMensajes(r.mensajes);
           setHayAnteriores(r.hayAnteriores);
+          setNoSePudoLeer(null);
+        } else {
+          // **Un error de lectura no es un hilo vacío.** Se tragaba entero y
+          // la ventana dibujaba «Todavía no hablaron por acá.»: alguien
+          // miraba, leía que no hay nada, y cerraba sin enterarse de que había
+          // mensajes sin leer del otro lado.
+          setNoSePudoLeer(r.motivo);
         }
-      } catch {}
+      } catch {
+        if (vivo) setNoSePudoLeer("No pude leer la conversación.");
+      }
     }
 
     traer();
@@ -96,45 +124,81 @@ export function ChatDeCliente({
         setMensajes(r.mensajes);
         setHayAnteriores(false);
         setEntera(true);
+        setNoSePudoLeer(null);
+      } else {
+        setNoSePudoLeer(r.motivo);
       }
     } finally {
       setTrayendo(false);
     }
   }
 
-  async function enviar(texto: string) {
+  async function enviar(texto: string): Promise<boolean> {
     setEnviando(true);
     try {
       const r = await escribirComoAgencia(clienteId, texto);
-      if (r.ok) setMensajes(r.mensajes);
+      if (r.ok) {
+        setMensajes(r.mensajes);
+        setFallo(null);
+        return true;
+      }
+      // **Antes acá no pasaba nada.** Un `if (r.ok)` sin `else`: el servidor
+      // decía que no y la pantalla se quedaba callada, con el campo ya vacío.
+      setFallo(r.motivo);
+      return false;
+    } catch {
+      setFallo("No pudimos mandar el mensaje. Probá de nuevo.");
+      return false;
     } finally {
       setEnviando(false);
     }
   }
 
-  const pendientes = leidos ? 0 : sinLeer;
+  // **El número vuelve a contar al cerrar.** `leidos` se quedaba en `true`
+  // para siempre: después de cerrar la ventana, el botón decía cero mientras
+  // el renglón de al lado —que sale del servidor— seguía diciendo «2 sin
+  // leer». La marca solo vale mientras la ventana está abierta; cerrada,
+  // manda lo que dice el servidor.
+  const pendientes = abierto && leidos ? 0 : sinLeer;
   /** Cuántos faltaban leer cuando se abrió: donde arranca la conversación. */
   // Si se abrió sola, lo que faltaba leer es lo que decía el número al llegar.
   const [alAbrir, setAlAbrir] = useState(abrirDeEntrada ? sinLeer : 0);
 
+  function abrir() {
+    setAlAbrir(pendientes);
+    setAbierto(true);
+  }
+
+  function cerrar() {
+    setAbierto(false);
+    setLeidos(false);
+    // **La dirección no se queda con `?abrir=` puesto.** Quedaba pegada, así
+    // que recargar o volver atrás reabría la conversación que se acababa de
+    // cerrar, y el link quedaba inservible para compartir la pantalla.
+    if (abrirDeEntrada) router.replace("/gestion/chats", { scroll: false });
+  }
+
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-          setAlAbrir(pendientes);
-          setAbierto(true);
-        }}
-        className="rounded-full min-h-toque border-2 border-tinta px-4 text-normal font-bold tracking-tight
-                   text-tinta transition-colors hover:bg-hueco"
-      >
-        Conversación
-        {pendientes > 0 && (
-          <span className="ml-2 bg-acento px-1.5 text-micro font-extrabold text-white">
-            {pendientes}
-          </span>
-        )}
-      </button>
+      {renglon ? (
+        <button type="button" onClick={abrir} className="block w-full text-left">
+          {renglon}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={abrir}
+          className="rounded-full min-h-toque border-2 border-tinta px-4 text-normal font-bold tracking-tight
+                     text-tinta transition-colors hover:bg-hueco"
+        >
+          Conversación
+          {pendientes > 0 && (
+            <span className="ml-2 bg-acento px-1.5 text-micro font-extrabold text-white">
+              {pendientes}
+            </span>
+          )}
+        </button>
+      )}
 
       {abierto && (
         <Conversacion
@@ -143,7 +207,10 @@ export function ChatDeCliente({
           yo="agencia"
           enviando={enviando}
           onEnviar={enviar}
-          onCerrar={() => setAbierto(false)}
+          onCerrar={cerrar}
+          error={noSePudoLeer}
+          borrador={borrador}
+          onBorrador={setBorrador}
           anteriores={{ hay: hayAnteriores, trayendo, onTraer: verLoAnterior }}
           // Lo que faltaba leer al abrir: ahí arranca la pantalla. Se anota al
           // tocar el botón y no se lee del número vivo, porque marcar leído
@@ -153,9 +220,22 @@ export function ChatDeCliente({
           // Con qué nombre lo va a leer el cliente: «Nari · Matter». Decía
           // «Sale firmado por…», y la explicación sobraba.
           firma={
-            <p className="mb-2 text-micro font-extrabold uppercase tracking-wider text-tinta">
-              {firma}
-            </p>
+            <>
+              {/* Si no salió, se dice, y encima del campo —que sigue teniendo
+                  lo escrito— para que se vea junto con lo que hay que
+                  reintentar. */}
+              {fallo && (
+                <p
+                  role="alert"
+                  className="mb-2 border-l-4 border-alerta bg-alerta-tenue px-3 py-2 text-menudo font-semibold text-alerta"
+                >
+                  {fallo}
+                </p>
+              )}
+              <p className="mb-2 text-micro font-extrabold uppercase tracking-wider text-tinta">
+                {firma}
+              </p>
+            </>
           }
         />
       )}

@@ -20,55 +20,51 @@
 // hace es mostrar lo que cada uno escribió y cuándo. Si alguna vez esta
 // pantalla parece contestar sola, algo se rompió.
 //
-// Lo que sí hace la aplicación es escribir **avisos de estado**: «el cliente
-// aprobó 4 piezas», «se envió la revisión». Van marcados distinto justamente
-// para que no se confundan con lo que dijo alguien.
+// Lo que sí hace la aplicación es escribir **avisos de estado**: «se
+// entregaron 4 piezas en Banners», «se envió la revisión». Van marcados
+// distinto —centrados, en gris, sin burbuja— justamente para que no se
+// confundan con lo que dijo alguien. Son los hitos de a tanda y nada más: uno
+// por pieza aprobada convertiría esto en un registro, que es lo contrario de
+// una conversación.
 
 import { useEffect, useRef, useState } from "react";
 import { Boton } from "@/ui/Boton";
 import { IconoEnviar } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
 import { EncabezadoDeVentana } from "@/ui/EncabezadoDeVentana";
+import {
+  diaEnBuenosAires,
+  enPalabrasElDiaLargo,
+  enPalabrasLaFecha,
+  enPalabrasSoloLaHora,
+} from "@/dominio/tiempo";
 import { Fondo } from "@/ui/Fondo";
 import { LARGO_MAXIMO } from "@/dominio/texto";
 import type { Mensaje } from "@/lib/conversaciones";
 
 export type { Mensaje };
 
-// En 24 horas: es como se escribe y se dice la hora en Argentina. El formato
-// que sale por omisión —«05:31 P. M.»— se lee como traducido de otro lado.
-const hora = new Intl.DateTimeFormat("es-AR", {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
+// En 24 horas y en hora de Buenos Aires: los dos formatos salen del dominio,
+// que es el único lugar donde se decide cómo se escribe una fecha.
+const cuandoEnPalabras = enPalabrasLaFecha;
+const diaEnPalabras = enPalabrasElDiaLargo;
 
-function cuandoEnPalabras(iso: string): string {
-  const fecha = new Date(iso);
-  return Number.isNaN(fecha.getTime()) ? "" : hora.format(fecha);
-}
-
-// El día solo, para la raya que separa un día del siguiente.
-const dia = new Intl.DateTimeFormat("es-AR", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-});
-
-function diaEnPalabras(iso: string): string {
-  const fecha = new Date(iso);
-  return Number.isNaN(fecha.getTime()) ? "" : dia.format(fecha);
-}
-
-/** ¿Este mensaje es de otro día que el de arriba? El primero siempre lo es. */
+/**
+ * ¿Este mensaje es de otro día que el de arriba? El primero siempre lo es.
+ *
+ * **El día se decide en Buenos Aires, igual que como se escribe.** Comparaba
+ * con `toDateString()`, que usa la zona del navegador, mientras el rótulo que
+ * se dibuja está fijado a Buenos Aires: con el navegador en UTC, un mensaje de
+ * las 22:30 porteñas ya era del día siguiente, así que aparecía un separador
+ * donde el día no había cambiado —repitiendo la misma fecha del de arriba— y
+ * faltaba donde sí. Es el agujero que `tiempo.ts` vino a cerrar.
+ */
 export function cambiaElDia(anterior: Mensaje | undefined, mensaje: Mensaje): boolean {
   if (!anterior) return true;
   const a = new Date(anterior.cuando);
   const b = new Date(mensaje.cuando);
   if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
-  return a.toDateString() !== b.toDateString();
+  return diaEnBuenosAires(a) !== diaEnBuenosAires(b);
 }
 
 /** El mínimo para que un dedo acierte, en píxeles. Es `--spacing-toque`. */
@@ -79,7 +75,16 @@ type Props = {
   mensajes: Mensaje[];
   /** De qué lado del mostrador está quien mira esta pantalla. */
   yo: "cliente" | "agencia";
-  onEnviar: (texto: string) => void;
+  /**
+   * Manda el mensaje. Contesta si salió.
+   *
+   * **El campo se vacía recién cuando contestó que sí.** Se vaciaba en el acto,
+   * sin esperar: si el envío fallaba, el texto ya no estaba en ninguna parte
+   * —ni en la pantalla ni en el servidor— y del lado de la agencia ni siquiera
+   * aparecía un cartel. Alguien escribía tres renglones, tocaba enviar, y
+   * desaparecían.
+   */
+  onEnviar: (texto: string) => Promise<boolean>;
   onCerrar: () => void;
   /** Se está esperando al servidor. */
   enviando?: boolean;
@@ -109,6 +114,18 @@ type Props = {
    * está lo último dicho.
    */
   sinLeer?: number;
+  /**
+   * No se pudo leer la conversación.
+   *
+   * **«Todavía no hablaron por acá» es una mentira cuando el error es de
+   * lectura.** Sin mensajes y con un fallo se veía exactamente igual que un
+   * hilo vacío: alguien miraba, leía que no hay nada, y cerraba. Los dos casos
+   * son `mensajes === []` y hay que distinguirlos.
+   */
+  error?: string | null;
+  /** Lo que se estaba escribiendo, para que sobreviva a cerrar y volver. */
+  borrador?: string;
+  onBorrador?: (texto: string) => void;
 };
 
 export function Conversacion({
@@ -121,9 +138,22 @@ export function Conversacion({
   firma,
   anteriores,
   sinLeer = 0,
+  error = null,
+  borrador,
+  onBorrador,
 }: Props) {
-  const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
-  const [texto, setTexto] = useState("");
+  // **Cerrar con algo escrito pregunta antes.** Tocar fuera de la ventana
+  // —o Escape— la cerraba y con ella se iba la respuesta a medio escribir, sin
+  // una palabra. Es el mismo gesto que se usa para volver a mirar el trabajo
+  // del que se está hablando.
+  const [texto, setTexto] = useState(borrador ?? "");
+
+  const cerrar = () => {
+    if (texto.trim() && !confirm("Tenés un mensaje sin enviar. ¿Cerrás igual?")) return;
+    onCerrar();
+  };
+
+  const marco = useTrampaDeFoco<HTMLDivElement>(cerrar);
   const lista = useRef<HTMLDivElement>(null);
   const primeroNuevo = useRef<HTMLLIElement>(null);
   const campo = useRef<HTMLTextAreaElement>(null);
@@ -193,16 +223,20 @@ export function Conversacion({
     }
   }, [mensajes, idDelPrimeroNuevo]);
 
-  function enviar() {
+  async function enviar() {
     const limpio = texto.trim();
     if (!limpio) return;
-    onEnviar(limpio);
-    setTexto("");
+    // Lo escrito se queda hasta que el servidor confirme. Si falla, sigue ahí
+    // para volver a intentar sin escribirlo de nuevo.
+    if (await onEnviar(limpio)) {
+      setTexto("");
+      onBorrador?.("");
+    }
   }
 
   return (
     <Fondo
-      onCerrar={onCerrar}
+      onCerrar={cerrar}
       className="z-50 flex items-end justify-center sm:items-center sm:p-6"
     >
       <div
@@ -211,12 +245,12 @@ export function Conversacion({
         role="dialog"
         aria-modal="true"
         aria-label={`Conversación con ${carpeta}`}
-        className="flex h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-t-tarjeta bg-lienzo sm:h-[80vh] sm:rounded-tarjeta"
+        className="flex h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-t-tarjeta bg-lienzo sm:rounded-tarjeta"
       >
         {/* Arriba va con quién se habla, y nada más. Decía «Conversación» en
             grande y el nombre chiquito abajo: la palabra no informa nada —ya
             se ve que es una conversación— y el nombre es lo que hay que leer. */}
-        <EncabezadoDeVentana titulo={carpeta} onCerrar={onCerrar} />
+        <EncabezadoDeVentana titulo={carpeta} onCerrar={cerrar} />
 
         <div ref={lista} className="min-h-0 flex-1 overflow-y-auto bg-papel px-4 pb-6 pt-4">
           {/* Arriba de todo, que es donde termina el que sube leyendo. */}
@@ -235,10 +269,21 @@ export function Conversacion({
             </div>
           )}
 
-          {mensajes.length === 0 ? (
-            <p className="py-10 text-center text-normal text-apagado">
-              Todavía no hablaron por acá.
+          {error && (
+            <p
+              role="alert"
+              className="mb-3 border-l-4 border-alerta bg-alerta-tenue px-3 py-2 text-menudo font-semibold text-alerta"
+            >
+              {error}
             </p>
+          )}
+
+          {mensajes.length === 0 ? (
+            error ? null : (
+              <p className="py-10 text-center text-normal text-apagado">
+                Todavía no hablaron por acá.
+              </p>
+            )
           ) : (
             <ul className="flex flex-col">
               {mensajes.map((mensaje, i) => {
@@ -278,7 +323,10 @@ export function Conversacion({
             <textarea
               ref={campo}
               value={texto}
-              onChange={(e) => setTexto(e.target.value)}
+              onChange={(e) => {
+                setTexto(e.target.value);
+                onBorrador?.(e.target.value);
+              }}
               // **Enter manda.** Es lo que hace cualquier chat, y lo que la
               // mano ya sabe. Shift+Enter deja bajar un renglón para quien
               // escribe un párrafo.
@@ -289,7 +337,11 @@ export function Conversacion({
               }}
               maxLength={LARGO_MAXIMO}
               rows={1}
+              // Se abre un chat para escribir: el cursor arranca acá. El
+              // `autoFocus` solo no alcanza —la trampa de foco corre después—,
+              // así que además se marca cuál es el campo que manda.
               autoFocus
+              data-enfocar
               placeholder={
                 yo === "cliente" ? "Escribile al equipo…" : "Escribile al cliente…"
               }
@@ -358,7 +410,10 @@ export function sigueALaAnterior(anterior: Mensaje | undefined, mensaje: Mensaje
   const a = new Date(anterior.cuando);
   const b = new Date(mensaje.cuando);
   if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
-  return a.toDateString() === b.toDateString();
+  // En Buenos Aires, que es la zona en la que se escriben los separadores: con
+  // la del navegador, la racha se cortaba en un lugar y la raya del día en
+  // otro, y el nombre se repetía de más.
+  return diaEnBuenosAires(a) === diaEnBuenosAires(b);
 }
 
 function Burbuja({
@@ -427,11 +482,22 @@ function Burbuja({
       {fecha && <div className="w-full">{fecha}</div>}
       {raya}
       <div className="max-w-[85%]">
+        {/* **La hora se lee, no se descubre.** Existía solo en un `title`, o
+            sea apoyando el mouse encima de cada burbuja: en el teléfono no
+            aparece nunca, y con lector de pantalla tampoco. En una
+            conversación la hora es la mitad de lo que se lee —si contestaron
+            hace cinco minutos o ayer a la noche— así que va con el nombre, en
+            el primero de cada racha, que es donde el rótulo ya está. */}
         {!sigue && (
           <p
-            className={`px-1 text-menudo font-bold text-tinta-suave ${mio ? "text-right" : ""}`}
+            className={`flex items-baseline gap-2 px-1 text-menudo font-bold text-tinta-suave ${
+              mio ? "flex-row-reverse text-right" : ""
+            }`}
           >
             {mensaje.quien}
+            <span className="cifras text-micro font-semibold text-apagado">
+              {enPalabrasSoloLaHora(mensaje.cuando)}
+            </span>
           </p>
         )}
         <p

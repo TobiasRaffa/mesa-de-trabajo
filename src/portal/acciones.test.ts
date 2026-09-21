@@ -28,13 +28,24 @@ describe("lo que el cliente puede hacer queda anotado", () => {
       "pedir_cambios",
       "descartar_cambios",
       "pedir_revision_extra",
-      "cerrar_revision",
     ]);
   });
 
+  it("cerrar la vuelta no se despacha desde acá", () => {
+    // Estaba en la lista «para que el dominio lo valide igual», pero
+    // `moverPieza` no se detenía en validarlo: aplicaba el evento y gastaba la
+    // ronda. Como el hito era `null` no quedaba anotado, y como no está en
+    // `AVISAN` tampoco avisaba, así que un POST a mano le quemaba una revisión
+    // al cliente en silencio. Lo cierra `enviarRevision`, que llama al dominio
+    // por su cuenta, anota y avisa.
+    const claves = [...tabla.matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]);
+    expect(claves).not.toContain("cerrar_revision");
+    expect(FUENTE).toContain('{ tipo: "cerrar_revision" }');
+  });
+
   it("las que cambian algo dejan rastro", () => {
-    // `abrir` y `cerrar_revision` son las dos excepciones, y las dos están
-    // explicadas al lado: una es ruido, la otra la anota quien la cierra.
+    // `abrir` es la única excepción, y está explicada al lado: anotar cada vez
+    // que alguien mira algo es ruido que tapa lo que importa.
     for (const accion of ["aprobar", "pedir_cambios", "descartar_cambios", "pedir_revision_extra"]) {
       expect(tabla, `«${accion}» tiene que anotar algo`).toContain(`${accion}: "`);
     }

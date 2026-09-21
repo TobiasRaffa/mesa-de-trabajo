@@ -29,7 +29,12 @@ import { avisar } from "@/lib/avisar";
 import type { ClaseDeAviso } from "@/lib/avisos";
 import { clienteDeCarpeta, esCarpetaDelCliente } from "@/lib/carpetas";
 import { datosDeCarpeta } from "@/lib/google";
-import { agregarMensaje, LARGO_MAXIMO, type Mensaje } from "@/lib/conversaciones";
+import {
+  agregarMensaje,
+  anotarHito,
+  LARGO_MAXIMO,
+  type Mensaje,
+} from "@/lib/conversaciones";
 
 import {
   anotar,
@@ -120,9 +125,16 @@ const DESDE_EL_PORTAL: Partial<Record<Evento["tipo"], Hito | null>> = {
   pedir_cambios: "cambios_pedidos",
   descartar_cambios: "cambios_descartados",
   pedir_revision_extra: "extra_pedida",
-  // Lo cierra `enviarRevision`, que toca varias piezas de una: acá se acepta
-  // para que el dominio lo valide igual, y la anotación la hace aquella.
-  cerrar_revision: null,
+  // **`cerrar_revision` no está, y antes sí.** Estaba con la idea de «que el
+  // dominio lo valide igual», pero `moverPieza` no se detenía ahí: aplicaba el
+  // evento, gastaba la vuelta —`ronda + 1`— y guardaba. Como el hito era
+  // `null` no quedaba anotado nada, y como no está en `AVISAN` tampoco se
+  // avisaba: un POST a mano sobre una pieza con cambios marcados le quemaba
+  // una revisión al cliente, la mandaba a «Con el equipo» con `enviada` en
+  // falso, y nadie se enteraba de que había pedidos esperando.
+  //
+  // Cerrar la vuelta es asunto de `enviarRevision`, que llama al dominio por
+  // su cuenta, marca `enviada`, anota qué se pidió y avisa.
 };
 
 export type RespuestaDePieza =
@@ -130,7 +142,7 @@ export type RespuestaDePieza =
   | { ok: false; motivo: string };
 
 export type RespuestaDeCarpeta =
-  | { ok: true; piezas: Record<string, EstadoDePieza> }
+  | { ok: true; cuantas: number; piezas: Record<string, EstadoDePieza> }
   | { ok: false; motivo: string };
 
 export type RespuestaDeChat =
@@ -470,6 +482,12 @@ export async function enviarRevision(
   await guardarPiezas(aGuardar);
 
   if (revisadas.length > 0) {
+    await anotarHito(
+      donde.cliente.id,
+      `Se envió la revisión de ${donde.nombreDeLaCarpeta} · ${revisadas.length} ${
+        revisadas.length === 1 ? "pieza" : "piezas"
+      }.`
+    );
     await avisar({
       clase: "envio_revision",
       clienteId: donde.cliente.id,
@@ -480,7 +498,10 @@ export async function enviarRevision(
     });
   }
 
-  return { ok: true, piezas: { ...estados, ...aGuardar } };
+  // **Cuántas viajaron de verdad.** Sin este número la pantalla contestaba
+  // «Enviamos la revisión al equipo» pasara lo que pasara, incluso cuando el
+  // dominio no había cerrado ninguna vuelta y no se había avisado a nadie.
+  return { ok: true, cuantas: revisadas.length, piezas: { ...estados, ...aGuardar } };
 }
 
 // ---------------------------------------------------------------------------

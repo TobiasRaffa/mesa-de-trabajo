@@ -26,6 +26,10 @@ vi.mock("@/lib/almacen", () => {
 
   const coleccion = (nombre: string) => ({
     todo: async () => ({ ...colecciones(nombre) }),
+    losQueEmpiezanCon: async (prefijo: string) =>
+      Object.fromEntries(
+        Object.entries(colecciones(nombre)).filter(([id]) => id.startsWith(prefijo))
+      ),
     uno: async (id: string) => colecciones(nombre)[id],
     guardar: async (id: string, v: unknown) =>
       enFila(nombre, () => {
