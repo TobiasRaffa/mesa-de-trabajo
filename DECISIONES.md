@@ -624,11 +624,17 @@ va a pasar:
 
 | | Cuándo |
 |---|---|
-| `principal` | El camino que se propone. Lleno, con el acento. |
-| `aprobar` | El acto que cierra una pieza. Verde, porque es un final. |
-| `contorno` | Una acción real, pero no la propuesta. |
+| `principal` | El camino que se propone. **Lima macizo con tinta encima**: el color de la marca, reservado para lo que más importa. |
+| `aprobar` | El acto que cierra una pieza. La misma lima, porque aprobar **es** la acción principal del portal. |
+| `contorno` | Una acción real, pero no la propuesta. Borde negro, sin relleno. |
 | `fantasma` | Acciones de apoyo: ampliar, comparar, cerrar. |
 | `sutil` | Lo que existe pero no se quiere invitar. |
+
+Esta tabla decía que `principal` era «lleno, con el acento» —el violeta— y quedó
+vieja cuando la herramienta se vistió con la marca de Matter. Mientras estuvo
+así, seis pantallas escribieron a mano un botón violeta en vez de usar `Boton`,
+que es exactamente lo que pasa cuando la documentación y el código no coinciden:
+se le cree a la documentación.
 
 Y ocho iconos dibujados a mano, no una librería. Son ocho formas: traer una
 librería entera para eso es peso que el cliente paga en el teléfono. Comparten
@@ -1805,3 +1811,274 @@ lleva algo y de los días se sacó: no ayudaba a nadie a decidir nada.
 
 La campana del tablero se ve como una ventana chica de la aplicación —la misma
 banda, la misma cruz, los mismos renglones— y no como un menú de otro sistema.
+
+## 114. Los roles, y por dónde se bloquea cada cosa
+
+Hasta acá los roles existían y estaban bien pensados, pero **el control no
+llegaba a todas las puertas**. Esta es la separación completa, escrita en un
+lugar, porque estaba repartida entre cuatro archivos y una prueba.
+
+**Hay dos separaciones y son independientes.** El **rol** dice a qué *partes* de
+la aplicación entra alguien —el Tablero, Clientes, Conversaciones,
+Notificaciones, Facturas, Admin, Diagnóstico—. El **alcance** dice a *cuáles
+clientes* llega. Son dos preguntas distintas y hacen falta las dos: alguien
+puede entrar a Clientes y llevar una sola cuenta.
+
+El rol es un molde vivo: cambiar qué ve «Diseño» cambia lo que ven todas las
+diseñadoras, hoy. A eso se le suman las **sueltas**, secciones que se le dan a
+una persona en particular. Las sueltas suman y nunca restan: para quitarle algo
+a alguien se le cambia el rol, que es la decisión que de verdad se está tomando.
+
+### Las cuatro puertas
+
+Una misma sesión toca la aplicación por cuatro caminos distintos, y cada uno
+necesita su propio cerrojo. El agujero era siempre el mismo: el camino que
+nadie se acordó de cerrar.
+
+1. **Las pantallas.** Las cierra `src/proxy.ts`, que mira la dirección, le
+   pregunta a `seccionDeLaRuta` de qué sección es, y la compara con las de quien
+   entró. Una dirección que nadie clasificó da `null` y no entra nadie: se
+   cierra para todos en vez de abrirse para todos, que es la forma en la que
+   estas cosas fallan.
+
+2. **Las acciones de servidor.** No respetan la ruta: el `Next-Action` las
+   encuentra por su identificador, así que el POST llega igual desde cualquier
+   dirección que la persona pueda abrir —se comprobó que las acciones de
+   Clientes corren posteadas a `/gestion/facturas`—. Por eso cada acción
+   pregunta por su cuenta, con `puedoAlgunaDe([...])` o `puedoVer("admin")`, y
+   **como primera línea del cuerpo**: comprobar permisos después de haber usado
+   lo que protegen no es comprobarlos.
+
+3. **Las rutas de `/api`.** Es la que faltaba. El matcher del proxy nunca
+   incluyó `/api`, así que cualquier sesión de gestión valía lo mismo en las
+   cuatro rutas: alguien dado de alta para facturar se bajaba con
+   `GET /api/historial/<cliente>` el CSV completo de piezas, entregas,
+   aprobaciones y pedidos de cambio del cliente. Ahora cada ruta declara su
+   `PUERTA` —qué secciones de la agencia entran, y si entra el cliente del
+   portal— y se la pasa a `quienPideEn` o `quienPideDe`.
+
+   **Y la versión sin sección dejó de existir.** `quienPide` —que contesta
+   «quién sos» sin preguntar «te toca»— se volvió interna de `permisos.ts`. No
+   alcanza con acordarse de comprobar: mientras la llamada sin control estuvo
+   disponible, las cuatro rutas la usaron. Ahora la sección es un argumento, no
+   una segunda llamada que alguien tiene que escribir.
+
+4. **Los archivos de Drive.** Además de la sección, el camino decide: un archivo
+   que cuelga de «Facturas» pide la sección `facturas`; el resto pide `clientes`
+   o `tablero`. Sin eso, quien lleva Facturas se bajaba un boceto y quien lleva
+   Clientes se bajaba una factura — los dos tenían «alguna» de las secciones que
+   abren archivos, y el archivo no decía de cuál era.
+
+### El alcance se elige al dar de alta
+
+Se preguntaba solo al cambiarle los accesos a alguien que ya estaba; el alta
+ponía `"todos"` por omisión. O sea que **toda persona nueva nacía viendo la
+carpeta de todos los clientes**, y acotarla quedaba como un segundo paso que
+alguien tenía que acordarse de dar desde su fila. Para un rol angosto eso deja
+el alcance abierto justo donde la sección se acaba de cerrar. Ahora se elige
+junto con el rol, que es cuando se está pensando en qué va a hacer esa persona.
+
+### Lo que vigila que no se vuelva a abrir
+
+En `src/cimientos.test.ts`, y cada uno nació de un agujero real:
+
+- **Toda pantalla de gestión está clasificada** en alguna sección, y además
+  **cae dentro del matcher del proxy**. Una pantalla nueva en una dirección que
+  el matcher no cubre no se vería como un error de permisos: se vería como una
+  pantalla que anda, abierta para cualquiera.
+- **Toda acción arranca con su cerrojo.** Mira todos los `acciones.ts` bajo
+  `src/app` —no uno—, reconoce las dos formas de escribir una función
+  —`export async function` y `export const … = async`—, y exige que la llamada
+  sea la **primera sentencia**. Las tres cosas las dejaba pasar la versión
+  anterior, que buscaba el nombre en cualquier parte del archivo.
+- **Toda ruta de `/api` declara su `PUERTA`** y se la pasa a una de las dos
+  puertas, y **`quienPide` no vuelve a exportarse**.
+- **En la puerta no hay nada más que la puerta.** `/gestion/entrar` es la única
+  dirección que abre sin sesión, así que una acción puesta ahí queda al alcance
+  de cualquiera sin haber entrado. Sus cuatro acciones están nombradas; una
+  quinta hay que decidirla a propósito.
+
+El comportamiento —qué rol entra por cada ruta— se prueba aparte, en
+`src/lib/puertasDeApi.test.ts`, y ahí las puertas se leen de los archivos de las
+rutas para que las pruebas no midan una copia que se quedó vieja.
+
+## 115. La ficha sigue a la pieza, y lo recordado no miente
+
+Tres cosas que quedaban abiertas, y una idea común: **una optimización o una
+identidad que contestan distinto que la base son errores con otro nombre.**
+
+### La identidad de una pieza sobrevive al cambio de extensión
+
+La identidad es `carpeta::nombre.ext`, y el nombre sale de la vuelta **más
+baja** que hay en Drive. Una pieza con `stickers.pdf` y `V2 stickers.jpg` se
+llama `::stickers.pdf`; el día que alguien borra el PDF viejo pasa a llamarse
+`::stickers.jpg`, y con la identidad se perdía **todo**: estado, rondas,
+cambios e historia. La pieza renacía en curso, como si el trabajo empezara de
+nuevo, y ni siquiera quedaba anotado el reemplazo.
+
+No se cambió la regla de agrupar —dos formatos con el mismo nombre siguen
+siendo dos piezas a propósito, porque nadie puede decidir por el usuario cuál
+es cuál—. Lo que se arregló es que la ficha **se mude** cuando la pieza es
+demostrablemente la misma, y lo que lo demuestra es compartir un archivo de
+Drive, no parecerse de nombre: un archivo pertenece a una sola pieza dentro de
+una carpeta. Es la misma comprobación con la que ya se decidía si una pieza
+vuelve a empezar, usada para lo contrario: reconocerla.
+
+### `guardarVarios` cumple lo que promete
+
+El contrato dice que existe porque hay cambios que no tienen sentido a medias.
+En archivos es una escritura sola y se cumplía sola; en Supabase eran **dos
+pedidos HTTP**, y un corte en el medio dejaba las carpetas sin su plazo propio
+*y* el cliente sin el nuevo. Ahora lo hace una función de Postgres —`003`—, que
+corre entera o no corre.
+
+### Leer una vez por pedido, sin quedar atrasado
+
+Las tres preguntas que se hacen sobre una carpeta recorrían la colección de
+piezas entera, **por cada carpeta del árbol**: un tablero con cuarenta carpetas
+eran ochenta descargas de la misma tabla en un solo render. Lo mismo pasaba con
+los ajustes y los nombres del equipo, pedidos de a un documento adentro de un
+`map`, y con `misCarpetas`, que preguntaba carpeta por carpeta y cada pregunta
+recorría todos los clientes: hasta seiscientas llamadas encadenadas para
+validar un formulario.
+
+El precio de recordar es que quien escriba deje el recuerdo al día, y eso no
+puede depender de que alguien se acuerde. Por eso las piezas se escriben por un
+solo lugar —`escribir`, que guarda y anota— y hay un guardián que verifica que
+nadie lo esquive. La sesión hace lo mismo con `cache` de React: se resuelve una
+vez por pedido y se olvida después, que es lo que hace que quitarle el acceso a
+alguien valga **ahora**.
+
+### Y el diagnóstico contesta si la conexión anda, no qué hay adentro
+
+Se había llenado de cosas que no hacen falta para diagnosticar nada: el nombre y
+el correo de quien comentó cada archivo —gente real, clientes de la agencia— y
+el mensaje crudo del error de Google, que trae identificadores de carpeta y a
+veces la dirección del robot. Ahora dice si llegó, cuántos archivos hay y
+cuántos comentarios se leyeron. El detalle va a los registros del servidor, que
+es donde ya iba en las rutas de API y en el portal.
+
+## 116. Una fecha se escribe de una sola manera, y entrar es una sola pantalla
+
+### Cada hora que mostraba la aplicación estaba tres horas adelantada
+
+El formato de las fechas estaba copiado en **nueve** archivos —el árbol, el
+tablero, los chats, las facturas, el calendario, la conversación, el portal— y
+el precio no fue la repetición: fue que **ninguna de las copias fijaba la zona
+horaria**. Un `Intl.DateTimeFormat` sin zona usa la del servidor, y el servidor
+en internet corre en tiempo universal. Un mensaje escrito a las ocho y media de
+la noche decía 23:30.
+
+Desde una máquina de Buenos Aires —que es donde se desarrolla— no se nota
+nunca. Es el mismo cuidado que la aritmética de fechas ya tenía desde hacía
+rato, y que nunca se había aplicado del lado de mostrar.
+
+De paso salieron dos más: un día guardado —«2026-09-17»— se armaba a la
+medianoche del servidor, que en hora de Buenos Aires es el día anterior; y el
+portal escribía «14/3» donde gestión escribía «14 mar», así que el cliente y la
+agencia leían la misma fecha en dos notaciones.
+
+Ahora los cinco formatos viven en `src/dominio/tiempo.ts` y hay un guardián que
+no deja aparecer un sexto. El módulo que centralizaba esto ya decía que el
+formato «estaba copiado tres veces»; se volvió a copiar seis veces más, así que
+el comentario no alcanzaba.
+
+### Entrar dejó de ser dos pantallas
+
+Se preguntaba primero el correo, con un viaje al servidor, y recién después la
+contraseña. El argumento era bueno —quien entra por primera vez no tiene una
+contraseña que escribir, tiene que **elegir** una— y el precio estaba mal
+repartido: ese caso le pasa a cada persona **una vez en la vida**, y el paso de
+más lo pagaban las otras quinientas veces que entra. Dos pantallas, dos clics y
+una espera, todos los días. Y dos campos separados por un viaje al servidor son
+algo que ningún administrador de contraseñas sabe completar.
+
+Ahora se escriben los dos juntos y el servidor decide: si es la primera vez,
+contesta `primeraVez` y la misma pantalla se abre en el formulario de estreno
+con el correo ya puesto. No cuenta nada que no contara antes. Al errar, el
+cursor vuelve solo a la contraseña, que es el único campo que se vacía.
+
+### Y la fila del árbol dice menos
+
+Una fila podía decir `v3 · 7 días · se entregó el 17 sept · sale el 20 sept ·
+Nari`, más tres pastillas al lado del nombre. Con veinte archivos en pantalla
+eso son cien datos que nadie lee: **cuando todo grita, no se ve nada**.
+
+- **«7 días» y «vence el 20 sept» son la misma cuenta.** El plazo es con lo que
+  se calcula el vencimiento. Mientras la pieza está de nuestro lado importa qué
+  plazo le va a tocar al cliente; cuando ya es de él, importa la fecha. Nunca
+  los dos.
+- **«sin asignar» se dibujaba en cada fila sin responsable.** Lo que hay que
+  ver es quién lleva algo, no la ausencia repetida veinte veces.
+- **Las dos alertas explicaban en un `title`**, o sea solo si alguien dejaba el
+  mouse quieto encima: en el teléfono no aparece nunca. Aparecen poquísimas
+  veces —son anomalías—, así que ahora la explicación va en la fila, donde se
+  la necesita.
+
+## 117. Cada uno tiene su campana, y su bandeja
+
+`visto` era **un solo booleano por aviso**, para todo el equipo. Nari abría la
+bandeja a la mañana y a Tomás se le vaciaba la suya: los avisos quedaban dados
+por leídos para todos, así que él no volvía a enterarse de nada que hubiera
+pasado antes de que ella mirara. Un aviso puede ser para varios —quien lleva la
+carpeta y quien recibe todo—, así que «visto» es una respuesta **por persona**.
+
+Ahora el aviso lleva `vistoPor: string[]`, con los identificadores de quienes lo
+miraron, y `marcarVistos` agrega el propio en vez de poner `true`. Lo guardado
+antes del cambio se sigue leyendo: `visto: true` quiere decir «lo vio todo el
+mundo», porque tratarlo como sin leer le habría reventado la bandeja a todo el
+equipo el mismo día.
+
+`misAvisos()` es quien sabe quién está mirando, así que devuelve cada aviso con
+la pregunta ya contestada —`loVi`— y las tres pantallas que los dibujan no
+tienen que volver a preguntarlo.
+
+### Y el renglón dice lo que no se repite
+
+Con cincuenta avisos, cada renglón empezaba con el nombre del cliente —cosido
+adentro del texto guardado— y terminaba con «para Nari». Dos columnas de lo
+mismo, cincuenta veces, que el ojo tiene que saltear para llegar a lo que pasó.
+
+- El cliente se guarda como dato, no como prefijo del texto, y se dibuja solo
+  cuando la lista mezcla varios.
+- El «para …» aparece solo cuando el aviso **no** es tuyo, que es la única vez
+  que dice algo.
+- Lo que pide una decisión —pidió cambios, pidió una vuelta extra, escribió,
+  venció— se lee en el color de acento; lo que es para enterarse, en tinta.
+- La lista se corta por día, con la fecha una vez y la hora en cada renglón.
+
+## 118. Lo que se repite en una sesión es un aviso, no ocho
+
+Aprobar ocho piezas escribía ocho renglones y mandaba ocho correos; mandar la
+revisión de esas mismas ocho —un solo toque del cliente— mandaba uno. Revisar
+una carpeta es un rato de trabajo del cliente, no ocho novedades para nosotros.
+
+La racha que ya existía para los mensajes se extendió a `aprobo` y
+`pidio_cambios`, con dos condiciones más: la comparación incluye la **carpeta**
+—aprobar en «Banners» y en «Stories» son dos novedades y nombran carpetas
+distintas— y el aviso guarda **qué** piezas junta, no solo cuántas, porque lo
+que se hace después depende de cuáles son.
+
+## 119. Un identificador con forma es una consulta
+
+Los tramos viejos de una conversación se guardan con la clave
+`<cliente>::<n>`, y leerlos era traer la colección entera y filtrar en memoria.
+Con el chat abierto en «ver lo anterior», el sondeo de cada seis segundos
+bajaba años de conversación **de todos los clientes** para dibujar la de uno.
+
+El contrato del almacén ganó `losQueEmpiezanCon(prefijo)`. En archivos es el
+mismo filtro de antes; en Supabase es un `like` que usa el índice de la clave y
+manda solo lo que importa. Es la misma idea que `guardarVarios`: lo que el
+almacén puede hacer mejor que quien lo llama, va en el contrato.
+
+## 120. La aplicación anota los hitos, y nada más
+
+`Quien` tiene `"sistema"`, la pantalla lo dibuja distinto —centrado, en gris,
+sin burbuja— y esto mismo lo prometía desde hace tiempo: no había **una sola
+llamada** que escribiera uno. La rama existía para un caso que no ocurría.
+
+Se anotan los hitos **de a tanda**: la entrega y el envío de una revisión. Uno
+por pieza aprobada convertiría la conversación en un registro, que es lo
+contrario de lo que es. No cuentan como sin leer para nadie —el contador mira
+los mensajes del otro lado— y si no se puede anotar, no falla nada: lo que
+importaba ya se guardó.
