@@ -17,7 +17,7 @@ export default async function Clientes() {
   try {
     clientes = await panelDeClientes();
   } catch (error) {
-    return <ErrorDeDrive error={error} />;
+    return <ErrorDeDrive error={error} titulo="Clientes" />;
   }
 
   const equipo = await elEquipo();

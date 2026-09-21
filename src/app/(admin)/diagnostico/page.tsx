@@ -1,10 +1,21 @@
 // Pantalla de diagnóstico: prueba que toda la cadena funcione.
 // Netlify → variables de entorno → Google Drive → miniaturas.
-// Se borra cuando empiece la aplicación de verdad.
+//
+// **Contesta si la conexión anda, no qué hay adentro.** Decía «se borra cuando
+// empiece la aplicación de verdad», la aplicación empezó, y mientras tanto se
+// había llenado de cosas que no hacen falta para diagnosticar nada: el nombre
+// y el correo de quien comentó cada archivo, y el mensaje crudo del error de
+// Google. Lo primero es dato de un cliente real; lo segundo puede traer
+// identificadores de carpeta y la dirección del robot —es exactamente lo que
+// la pantalla del portal se niega a mostrar, por escrito—.
+//
+// Ahora dice si llegó, cuántos archivos hay y si los comentarios se leen. Para
+// saber **qué** dice un comentario está la ficha de la pieza, que es su lugar.
 
 import { dondeSeGuarda } from "@/lib/almacen";
 import { variablesFaltantes } from "@/lib/entorno";
 import { misClientes } from "@/admin/datos/clientes";
+import { urlDeMiniatura } from "@/lib/miniaturas";
 // Acá sí corresponde preguntarle a Drive directamente: esta pantalla existe
 // para mirar la conexión con Drive, no el estado del trabajo.
 // eslint-disable-next-line no-restricted-imports
@@ -70,7 +81,7 @@ export default async function Diagnostico() {
      * forma, la hoja va a dejar de aparecer **en silencio**. Esta lista es el
      * único lugar donde eso se ve.
      */
-    anclas: Array<{ quien: string; correo?: string; hoja?: number; ancla?: string }>;
+    anclas: Array<{ hoja?: number }>;
   } | null = null;
   // El primer archivo de verdad que se encuentre. La carpeta de un cliente
   // suele tener solo carpetas adentro, así que hay que bajar un escalón.
@@ -82,15 +93,11 @@ export default async function Diagnostico() {
       ok: r.ok,
       detalle: r.ok
         ? `${r.comentarios.length} ${r.comentarios.length === 1 ? "comentario" : "comentarios"}`
-        : r.motivo,
-      anclas: r.ok
-        ? r.comentarios.map((c) => ({
-            quien: c.quien,
-            correo: c.correo,
-            hoja: c.hoja,
-            ancla: c.ancla,
-          }))
-        : [],
+        : "Google no dejó leerlos. El motivo está en los registros del servidor.",
+      // **Solo la hoja.** El nombre y el correo de quien comentó no hacen
+      // falta para saber si Drive contesta, y son datos de gente real: ni
+      // siquiera se juntan.
+      anclas: r.ok ? r.comentarios.map((c) => ({ hoja: c.hoja })) : [],
     };
   }
 
@@ -152,9 +159,14 @@ export default async function Diagnostico() {
       {error && (
         <div className="mt-8 border-l-2 border-red-600 bg-red-50 p-5">
           <p className="font-semibold text-red-900">No llegó.</p>
-          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-sm text-red-800">
-            {error}
-          </pre>
+          {/* **El detalle va a los registros del servidor, no a la pantalla.**
+              El mensaje de Google trae identificadores de carpeta y a veces la
+              dirección de la cuenta de servicio. Es la misma regla que ya
+              seguían las rutas de API y la pantalla del portal. */}
+          <p className="mt-2 text-sm text-red-800">
+            El motivo quedó en los registros del servidor. Lo más común es que
+            falte compartirle la carpeta al robot, o que la llave esté vencida.
+          </p>
         </div>
       )}
 
@@ -195,22 +207,18 @@ export default async function Diagnostico() {
             la pantalla de la carpeta, junto a lo que el cliente marcó en el portal.
           </p>
 
+          {/* **Cuántos se leyeron y si traen hoja, sin nombrar a nadie.**
+              Se listaba uno por uno con el nombre y el correo de quien lo
+              escribió —gente real, clientes de la agencia— para diagnosticar
+              algo que se contesta con dos números. */}
           {comentarios.anclas.length > 0 && (
-            <ul className="mt-3 flex flex-col gap-1 font-mono text-xs text-emerald-900">
-              {comentarios.anclas.map((a, i) => (
-                <li key={i} className="break-all">
-                  <span className="font-semibold">{a.quien}</span>
-                  {" <"}
-                  {a.correo ?? "Google no da el mail"}
-                  {"> · hoja: "}
-                  <span className={a.hoja === undefined ? "text-red-700" : ""}>
-                    {a.hoja ?? "no se pudo leer"}
-                  </span>
-                  {" · anchor: "}
-                  {a.ancla ?? "(vacío)"}
-                </li>
-              ))}
-            </ul>
+            <p className="mt-3 font-mono text-xs text-emerald-900">
+              {comentarios.anclas.length}{" "}
+              {comentarios.anclas.length === 1 ? "comentario leído" : "comentarios leídos"}
+              {"; "}
+              {comentarios.anclas.filter((a) => a.hoja !== undefined).length} con la hoja
+              reconocida.
+            </p>
           )}
         </div>
       )}
@@ -235,9 +243,7 @@ export default async function Diagnostico() {
                     // El parámetro v invalida la caché si el archivo cambia.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={`/api/miniatura/${a.id}?px=400&v=${encodeURIComponent(
-                        a.modifiedTime ?? ""
-                      )}`}
+                      src={urlDeMiniatura(a.id, 400, a.modifiedTime)}
                       alt={a.name}
                       className="absolute inset-0 h-full w-full bg-slate-100 object-cover"
                     />

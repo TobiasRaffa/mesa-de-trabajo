@@ -17,7 +17,7 @@
 // Así ni hace falta el `stopPropagation`, ni importa quién esté apilado encima
 // de quién.
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 export function Fondo({
   onCerrar,
@@ -29,6 +29,20 @@ export function Fondo({
   className?: string;
   children: ReactNode;
 }) {
+  // **Traba el fondo mientras hay una ventana.** Lo hacía una sola de las seis
+  // —la imagen ampliada— y en las otras cinco la página de atrás corría con la
+  // rueda: se abría una pieza, se bajaba para leer lo que pidió el cliente, y
+  // lo que se movía era el tablero de atrás. Al cerrar, la pantalla estaba en
+  // otro lado. Acá es el único componente por el que pasan todas, así que deja
+  // de ser algo que cada ventana nueva tenga que acordarse.
+  useEffect(() => {
+    const antes = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = antes;
+    };
+  }, []);
+
   return (
     <div
       className={`fixed inset-0 bg-tinta/50 ${className}`}

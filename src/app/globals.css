@@ -50,7 +50,13 @@
   --color-hueco: #e7e4d6;
   --color-tinta: #121212;
   --color-tinta-suave: #3f3d37;
-  --color-apagado: #7f7b6e;
+  /* Un poco más oscuro que el gris de la paleta original, y por un motivo
+     medible: con #7f7b6e el texto secundario daba **3,7 de contraste** sobre
+     los tres fondos crema, y para texto de menos de 24px hacen falta 4,5. Es
+     el color de casi todo lo que no es un título —los resúmenes de cada fila,
+     «4 vueltas», «vence el 20 sept», los rótulos— o sea la mitad de lo que se
+     lee. A 4,58 cumple y el tono cálido queda igual. */
+  --color-apagado: #68655a;
   --color-linea: #d6d1c0;
   --color-linea-tenue: #e5e1d3;
 

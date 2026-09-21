@@ -45,7 +45,14 @@ export function Miniatura({
   className?: string;
   tono?: "claro" | "oscuro";
 }) {
-  const [fallo, setFallo] = useState(false);
+  // **El fallo es de esta imagen, no del componente.** Era un `true` que no
+  // volvía nunca: como React reusa el mismo componente cuando cambia la pieza
+  // que se mira —la ventana de un trabajo pasa de una a otra sin desmontarse—,
+  // un archivo sin vista previa dejaba el recuadro gris puesto para todas las
+  // piezas siguientes, aunque tuvieran miniatura. Guardando **cuál** falló, al
+  // cambiar la fuente vuelve a intentarse sola.
+  const [falloDe, setFalloDe] = useState<string | null>(null);
+  const fallo = falloDe === src;
 
   if (fallo) {
     return (
@@ -65,7 +72,7 @@ export function Miniatura({
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} className={className} onError={() => setFallo(true)} />
+    <img src={src} alt={alt} className={className} onError={() => setFalloDe(src)} />
   );
 }
 

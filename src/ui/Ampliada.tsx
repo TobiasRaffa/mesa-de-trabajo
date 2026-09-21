@@ -9,7 +9,6 @@
 // La imagen se muestra entera, nunca recortada: es una pieza de diseño y
 // cortarle un borde puede cambiar lo que se está juzgando.
 
-import { useEffect } from "react";
 import { IconoCerrar } from "@/ui/Icono";
 import { Miniatura } from "@/ui/Miniatura";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
@@ -30,15 +29,6 @@ export function Ampliada({ laminas, onCerrar }: Props) {
   // Comparte la pila con las demás ventanas: al abrirse queda arriba de la
   // pieza que se estaba revisando, y Escape cierra esta sola.
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
-
-  useEffect(() => {
-    // Que el fondo no se mueva mientras se mira la pieza.
-    const antes = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = antes;
-    };
-  }, []);
 
   const dos = laminas.length > 1;
 

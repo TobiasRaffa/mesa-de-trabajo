@@ -37,16 +37,19 @@ export function EncabezadoDeVentana({
             {rotulo}
           </p>
         )}
+        {/* **En el teléfono usa dos renglones.** Cortaba en uno con puntos
+            suspensivos y el nombre completo vivía en un `title`, que en un
+            teléfono no existe: «V2_banner_dia_del_padre_fin…» y nada más. */}
         <h2
           title={titulo}
-          className="truncate text-titulo font-extrabold leading-tight tracking-tight"
+          className="line-clamp-2 text-titulo font-extrabold leading-tight tracking-tight sm:truncate"
         >
           {titulo}
         </h2>
         {bajada && <p className="mt-0.5 truncate text-menudo text-white/70">{bajada}</p>}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-1.5">
         {controles}
         <ControlDeVentana onClick={onCerrar} aria-label="Cerrar" relleno>
           <IconoCerrar />
@@ -71,7 +74,12 @@ export function ControlDeVentana({
     <button
       type="button"
       {...resto}
-      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors disabled:opacity-35 ${
+      // **44 píxeles en el teléfono.** Medían 36, que es menos que la yema de
+      // un dedo, y en el portal hay tres de estos pegados al borde de la
+      // ventana: errarle a uno es tocar el de al lado, y los de al lado son
+      // «pieza anterior» y «cerrar». Con mouse 36 alcanza, así que en pantalla
+      // grande vuelven al tamaño de antes.
+      className={`grid h-11 w-11 shrink-0 place-items-center rounded-full transition-colors disabled:opacity-35 sm:h-9 sm:w-9 ${
         relleno
           ? "bg-white text-acento hover:bg-white/90"
           : "bg-white/15 text-white hover:bg-white/25"

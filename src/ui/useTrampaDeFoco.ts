@@ -51,7 +51,21 @@ export function useTrampaDeFoco<T extends HTMLElement>(alCerrar: () => void) {
     ficha.current = mia;
 
     const veniaDe = document.activeElement as HTMLElement | null;
-    (enfocablesDe(contenedor)[0] ?? contenedor).focus();
+
+    // **Qué se enfoca al abrir.** Era el primer enfocable, y el primer
+    // enfocable de una ventana es casi siempre la cruz de cerrar. Dos costos,
+    // los dos reales: abrir el chat dejaba el cursor en «Cerrar» en vez de en
+    // el campo donde se escribe —el `autoFocus` del campo no alcanza, porque
+    // esto corre después y se lo lleva— y con lector de pantalla lo primero
+    // que se oye al abrir una pieza es «Cerrar, botón», no de qué pieza se
+    // trata.
+    //
+    // Ahora manda lo que esté marcado con `data-enfocar`; si no hay nada
+    // marcado, el contenedor. El contenedor lleva `role="dialog"` y su nombre,
+    // así que enfocarlo es justo lo que hace que se anuncie qué se abrió, y
+    // desde ahí el Tab entra al contenido.
+    const elegido = contenedor.querySelector<HTMLElement>("[data-enfocar]");
+    (elegido ?? contenedor).focus();
 
     return () => {
       cerrar(mia);

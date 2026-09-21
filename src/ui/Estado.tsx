@@ -28,8 +28,37 @@ const PARA_EL_CLIENTE: Record<EstadoPieza, { texto: string; tono: Tono } | null>
   cancelada: { texto: "Cancelada", tono: "quieto" },
 };
 
-export function Estado({ estado }: { estado: EstadoPieza }) {
-  const info = PARA_EL_CLIENTE[estado];
+/**
+ * Las mismas piezas, contadas desde este lado del mostrador.
+ *
+ * **La agencia leía las palabras del cliente y se entendían al revés.** «Para
+ * revisar» del lado de la agencia parece trabajo propio pendiente, y es
+ * exactamente lo contrario: la pieza está con el cliente y no hay nada que
+ * hacer. Peor todavía en el tablero, donde la columna ya dice «A cargo del
+ * cliente» y la pastilla de al lado decía «PARA REVISAR».
+ *
+ * Son las palabras que el tablero ya usa en `CANCHAS`, para que las dos
+ * pantallas hablen igual.
+ */
+const PARA_LA_AGENCIA: Record<EstadoPieza, { texto: string; tono: Tono } | null> = {
+  en_curso: { texto: "Falta hacerlo", tono: "trabajando" },
+  entregada: { texto: "Esperando al cliente", tono: "espera" },
+  en_revision: { texto: "Esperando al cliente", tono: "espera" },
+  cambios_marcados: { texto: "Pidió cambios", tono: "trabajando" },
+  extra_pedida: { texto: "Pide una vuelta más", tono: "trabajando" },
+  final: { texto: "Aprobada", tono: "listo" },
+  cancelada: { texto: "Cancelada", tono: "quieto" },
+};
+
+export function Estado({
+  estado,
+  mirada = "cliente",
+}: {
+  estado: EstadoPieza;
+  /** Desde qué lado se lee. Las pantallas de gestión pasan `"agencia"`. */
+  mirada?: "agencia" | "cliente";
+}) {
+  const info = (mirada === "agencia" ? PARA_LA_AGENCIA : PARA_EL_CLIENTE)[estado];
   if (!info) return null;
 
   return (

@@ -2,19 +2,29 @@
 
 // La pantalla de entrada del equipo.
 //
-// **Primero el correo, después lo que corresponda.** Un solo formulario con
-// los dos campos parecía más simple y no alcanzaba: quien entra por primera
-// vez no tiene una contraseña que escribir, tiene que **elegir** una, y eso es
-// otra pantalla —con el campo repetido, para que un dedo de más no quede
-// guardado para siempre—. Preguntar el correo primero es lo que permite
-// mostrarle a cada uno la que le toca.
+// **El correo y la contraseña, juntos y en una sola pantalla.** Se preguntaban
+// en dos pasos: primero el correo, un viaje al servidor, y recién después la
+// contraseña. El argumento era bueno —quien entra por primera vez no tiene una
+// contraseña que escribir, tiene que **elegir** una, con el campo repetido— y
+// el precio estaba mal repartido: ese caso le pasa a cada persona **una sola
+// vez en la vida**, y el paso extra lo pagaban las otras quinientas veces que
+// entra. Dos pantallas, dos clics y una espera, todos los días.
 //
-// Preguntar por un correo no cuenta si existe: uno que no está cargado pide la
-// contraseña igual que uno cargado, y después no entra, con el mismo texto.
+// Además, dos campos separados por un viaje al servidor es algo que ningún
+// administrador de contraseñas sabe completar: hay que escribir el correo a
+// mano aunque esté guardado.
+//
+// Ahora se escriben los dos y el servidor decide: si es la primera vez,
+// contesta `primeraVez` y **esta misma pantalla** se abre en el formulario de
+// estreno, con el correo ya puesto. No cuenta nada que no contara antes: esa
+// respuesta sale solo para alguien que existe y todavía no eligió contraseña,
+// que es justo lo que contestaba el paso que se fue. Un correo desconocido
+// recibe el mismo «no es» que una contraseña equivocada.
 
-import { useActionState, useState } from "react";
-import { entrar, mirarCorreo, olvide } from "@/app/(admin)/gestion/entrar/acciones";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { entrar, olvide } from "@/app/(admin)/gestion/entrar/acciones";
 import { LARGO_MINIMO_DE_CLAVE } from "@/dominio/claves";
+import { Boton } from "@/ui/Boton";
 import { Marca } from "@/ui/Marca";
 
 const CAMPO =
@@ -24,13 +34,6 @@ const CAMPO =
 
 const ETIQUETA = "text-micro font-extrabold uppercase tracking-widest text-apagado";
 
-const BOTON =
-  "min-h-toque bg-acento px-5 text-normal font-bold tracking-tight " +
-  "text-white transition-colors hover:bg-acento-hover disabled:opacity-40";
-
-const AL_PASO =
-  "self-start text-menudo font-semibold text-apagado underline underline-offset-2 " +
-  "transition-colors hover:text-tinta disabled:opacity-40";
 
 export function Entrar({
   volver,
@@ -41,14 +44,6 @@ export function Entrar({
   /** Nadie del equipo tiene contraseña todavía: entra con la del equipo. */
   arrancando: boolean;
 }) {
-  const [vistazo, mirar, mirando] = useActionState(mirarCorreo, null);
-  const [pedido, pedir, pidiendo] = useActionState(olvide, null);
-
-  // Volver a escribir el correo. La respuesta anterior no se puede borrar
-  // —`useActionState` no se reinicia—, así que se la tapa hasta que llegue otra.
-  const [otroCorreo, setOtroCorreo] = useState(false);
-  const paso = !otroCorreo && vistazo?.ok ? vistazo : null;
-
   // **El arranque no puede tapar al primer alta.** Mientras nadie tenga
   // contraseña, esta pantalla arranca pidiendo la llave del equipo, que es lo
   // que hace falta el 99% de las veces que aparece: no hay nadie cargado. Pero
@@ -61,100 +56,69 @@ export function Entrar({
     return <Arranque volver={volver} alCorreo={() => setConMiCorreo(true)} />;
   }
 
-  return (
-    <Marco titulo={paso?.primeraVez ? "Primera vez" : "Entrar"}>
-      {!paso && (
-        <>
-          <p className="mt-3 text-normal text-tinta-suave">
-            Con tu correo. Lo que hagas queda firmado con tu nombre.
-          </p>
-
-          <form action={mirar} onSubmit={() => setOtroCorreo(false)} className="mt-8 flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5">
-              <span className={ETIQUETA}>Tu correo</span>
-              <input
-                name="correo"
-                type="email"
-                autoComplete="username"
-                autoFocus
-                required
-                defaultValue={vistazo?.ok ? vistazo.correo : ""}
-                className={CAMPO}
-              />
-            </label>
-
-            <button type="submit" disabled={mirando} className={BOTON}>
-              {mirando ? "…" : "Seguir"}
-            </button>
-
-            <Aviso de={vistazo?.ok === false ? vistazo.motivo : null} />
-          </form>
-        </>
-      )}
-
-      {paso && !paso.primeraVez && (
-        <ConContrasena
-          correo={paso.correo}
-          volver={volver}
-          alCambiarDeCorreo={() => setOtroCorreo(true)}
-          pedir={pedir}
-          pidiendo={pidiendo}
-          pedido={pedido}
-        />
-      )}
-
-      {paso?.primeraVez && (
-        <Estreno
-          correo={paso.correo}
-          volver={volver}
-          alCambiarDeCorreo={() => setOtroCorreo(true)}
-        />
-      )}
-    </Marco>
-  );
+  return <ConMiCorreo volver={volver} />;
 }
 
-/** Quien ya tiene contraseña: la escribe y entra. */
-function ConContrasena({
-  correo,
-  volver,
-  alCambiarDeCorreo,
-  pedir,
-  pidiendo,
-  pedido,
-}: {
-  correo: string;
-  volver: string;
-  alCambiarDeCorreo: () => void;
-  pedir: (formulario: FormData) => void;
-  pidiendo: boolean;
-  pedido: { ok: boolean; motivo: string } | null;
-}) {
+/** El camino de todos los días: correo, contraseña, entrar. */
+function ConMiCorreo({ volver }: { volver: string }) {
   const [estado, mandar, yendo] = useActionState(entrar, null);
+  const [pedido, pedir, pidiendo] = useActionState(olvide, null);
+
+  // Lo que se escribió, para no perderlo al pasar al estreno y para que
+  // «olvidé mi contraseña» sepa de quién habla sin pedirlo de nuevo.
+  const [correo, setCorreo] = useState("");
+
+  const primeraVez = Boolean(estado && !estado.ok && estado.primeraVez);
+
+  // **Al errar, el cursor vuelve solo a la contraseña.** Es el único campo que
+  // se vacía, y sin esto hay que ir a buscarlo con el mouse para escribir de
+  // nuevo lo mismo que se acaba de escribir mal: un viaje de ida y vuelta por
+  // la pantalla en el momento en que uno ya está molesto.
+  const laClave = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (estado && !estado.ok && !estado.primeraVez) laClave.current?.focus();
+  }, [estado]);
+
+  if (primeraVez) return <Estreno correo={correo} volver={volver} />;
 
   return (
-    <>
-      <Quien correo={correo} alCambiar={alCambiarDeCorreo} />
+    <Marco titulo="Entrar">
+      <p className="mt-3 text-normal text-tinta-suave">
+        Con tu correo. Lo que hagas queda firmado con tu nombre.
+      </p>
 
-      <form action={mandar} className="mt-6 flex flex-col gap-4">
+      <form action={mandar} className="mt-8 flex flex-col gap-4">
         <input type="hidden" name="volver" value={volver} />
-        <input type="hidden" name="correo" value={correo} />
+
+        <label className="flex flex-col gap-1.5">
+          <span className={ETIQUETA}>Tu correo</span>
+          <input
+            name="correo"
+            type="email"
+            autoComplete="username"
+            autoFocus
+            required
+            value={correo}
+            onChange={(e) => setCorreo(e.target.value)}
+            className={CAMPO}
+          />
+        </label>
 
         <label className="flex flex-col gap-1.5">
           <span className={ETIQUETA}>Tu contraseña</span>
           <input
+            ref={laClave}
             name="clave"
             type="password"
             autoComplete="current-password"
-            autoFocus
             required
             className={CAMPO}
           />
         </label>
 
-        <button type="submit" disabled={yendo} className={BOTON}>
+        <Boton type="submit" ancho disabled={yendo}>
           {yendo ? "Entrando…" : "Entrar"}
-        </button>
+        </Boton>
 
         <Aviso de={estado && !estado.ok ? estado.motivo : null} />
       </form>
@@ -170,30 +134,22 @@ function ConContrasena({
       ) : (
         <form action={pedir} className="mt-6 flex flex-col gap-2">
           <input type="hidden" name="correo" value={correo} />
-          <button type="submit" disabled={pidiendo} className={AL_PASO}>
+          <Boton variante="sutil" tamano="chico" type="submit" disabled={pidiendo} className="self-start">
             {pidiendo ? "…" : "Olvidé mi contraseña"}
-          </button>
+          </Boton>
           <Aviso de={pedido && !pedido.ok ? pedido.motivo : null} />
         </form>
       )}
-    </>
+    </Marco>
   );
 }
 
 /** Quien entra por primera vez: elige su contraseña y cómo se llama. */
-function Estreno({
-  correo,
-  volver,
-  alCambiarDeCorreo,
-}: {
-  correo: string;
-  volver: string;
-  alCambiarDeCorreo: () => void;
-}) {
+function Estreno({ correo, volver }: { correo: string; volver: string }) {
   const [estado, mandar, yendo] = useActionState(entrar, null);
 
   return (
-    <>
+    <Marco titulo="Primera vez">
       <p className="mt-3 text-normal text-tinta-suave">
         Elegí tu contraseña. No la sabe nadie más, ni quien te dio de alta: si
         alguna vez la perdés, se reinicia y elegís otra. Hace falta el{" "}
@@ -201,7 +157,9 @@ function Estreno({
         dio de alta.
       </p>
 
-      <Quien correo={correo} alCambiar={alCambiarDeCorreo} />
+      <p className="mt-6 border-t border-linea pt-4 font-bold tracking-tight">
+        {correo}
+      </p>
 
       <form action={mandar} className="mt-6 flex flex-col gap-4">
         <input type="hidden" name="volver" value={volver} />
@@ -262,13 +220,13 @@ function Estreno({
           />
         </label>
 
-        <button type="submit" disabled={yendo} className={BOTON}>
+        <Boton type="submit" ancho disabled={yendo}>
           {yendo ? "Entrando…" : "Guardarla y entrar"}
-        </button>
+        </Boton>
 
         <Aviso de={estado && !estado.ok ? estado.motivo : null} />
       </form>
-    </>
+    </Marco>
   );
 }
 
@@ -304,16 +262,22 @@ function Arranque({ volver, alCorreo }: { volver: string; alCorreo: () => void }
           />
         </label>
 
-        <button type="submit" disabled={yendo} className={BOTON}>
+        <Boton type="submit" ancho disabled={yendo}>
           {yendo ? "Entrando…" : "Entrar"}
-        </button>
+        </Boton>
 
         <Aviso de={estado && !estado.ok ? estado.motivo : null} />
       </form>
 
-      <button type="button" onClick={alCorreo} className={`${AL_PASO} mt-6`}>
+      {/* **A la vista, no en letra chica al pie.** Esta pantalla aparece
+          mientras nadie del equipo tenga contraseña, y en ese rato la persona
+          que acaban de dar de alta también llega acá: la suya es justo la que
+          viene a elegir. Para ella, el campo de arriba es el equivocado y este
+          es el camino, así que tiene que leerse como un camino y no como una
+          nota al pie. */}
+      <Boton variante="contorno" ancho className="mt-8" onClick={alCorreo}>
         Ya me dieron de alta: entrar con mi correo
-      </button>
+      </Boton>
     </Marco>
   );
 }
@@ -327,18 +291,6 @@ function Marco({ titulo, children }: { titulo: string; children: React.ReactNode
       </h1>
       {children}
     </main>
-  );
-}
-
-/** El correo con el que se sigue, y cómo cambiarlo sin recargar nada. */
-function Quien({ correo, alCambiar }: { correo: string; alCambiar: () => void }) {
-  return (
-    <p className="mt-6 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-linea pt-4">
-      <span className="min-w-0 truncate font-bold tracking-tight">{correo}</span>
-      <button type="button" onClick={alCambiar} className={AL_PASO}>
-        No soy yo
-      </button>
-    </p>
   );
 }
 
