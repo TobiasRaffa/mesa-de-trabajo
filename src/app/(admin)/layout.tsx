@@ -10,6 +10,7 @@
 // agencia. Que se parezcan no confunde, porque el cliente nunca ve esta.
 
 import { BarraLateral } from "@/admin/BarraLateral";
+import { misAvisos } from "@/admin/datos/clientes";
 import { miSesion } from "@/lib/sesion";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // navegador, y quién sos lo sabe la galleta del servidor.
   const sesion = await miSesion();
 
+  // Cuántas notificaciones sin leer, para que el número viva en la barra y se
+  // vea desde cualquier pantalla y no solo desde el tablero. Si Drive no
+  // contesta, la barra se dibuja igual sin número: no es lo que se vino a ver.
+  const sinLeer = sesion?.persona
+    ? await misAvisos()
+        .then((a) => a.filter((x) => !x.loVi).length)
+        .catch(() => 0)
+    : 0;
+
   return (
     // `min-h-screen` en el contenedor y no en la barra: así el fondo claro
     // llega abajo aunque la pantalla tenga poco contenido.
@@ -25,6 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <BarraLateral
         quien={sesion?.persona?.nombre ?? null}
         secciones={sesion?.secciones ?? []}
+        sinLeer={sinLeer}
       />
       {/* `min-w-0` para que una tabla o un nombre largo no empujen la columna
           y saquen la página de ancho. Ya pasó en el portal. */}

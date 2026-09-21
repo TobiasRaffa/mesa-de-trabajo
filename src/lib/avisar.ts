@@ -34,6 +34,33 @@ import { personaPorId, quienesRecibenTodo, type Persona } from "@/lib/equipo";
 import { cadenaHasta } from "@/lib/permisos";
 import { responsablesDe } from "@/lib/responsables";
 import { alcanzaA } from "@/dominio/roles";
+import { enCastellano } from "@/dominio/texto";
+
+/**
+ * Qué clases se juntan cuando pasan seguidas.
+ *
+ * Lo que el cliente hace de a una pieza pero en una sola sesión: revisar una
+ * carpeta de ocho es un rato de trabajo suyo, no ocho novedades para nosotros.
+ */
+const SE_ACUMULAN: ClaseDeAviso[] = ["escribio", "aprobo", "pidio_cambios"];
+
+/** «Aprobó 3 piezas en Banners: el A, el B y el C.» */
+function juntadas(
+  clase: ClaseDeAviso,
+  carpeta: string,
+  veces: number,
+  piezas: string[] | undefined
+): string {
+  const verbo = clase === "aprobo" ? "Aprobó" : "Pidió cambios en";
+  const cuantas = `${veces} ${veces === 1 ? "pieza" : "piezas"}`;
+  // Hasta cuatro nombres; más que eso, la lista deja de leerse y lo que
+  // importa es cuántas son y dónde están.
+  const lista =
+    piezas && piezas.length > 0 && piezas.length <= 4 ? `: ${enCastellano(piezas)}` : "";
+  return clase === "aprobo"
+    ? `${verbo} ${cuantas} en ${carpeta}${lista}.`
+    : `${verbo} ${cuantas} de ${carpeta}${lista}.`;
+}
 
 /** Cómo se cuenta cada cosa, en una línea. */
 function comoSeCuenta(clase: ClaseDeAviso, carpeta: string, detalle?: string): string {
@@ -83,20 +110,38 @@ export async function avisar(opciones: {
     // reescribe el aviso que ya está —cuántos van y la hora del último— y no
     // sale otro correo. Si alguien lo vio entre medio, no se suma: lo nuevo
     // vuelve a avisar, que es para lo que existe la bandeja.
-    if (clase === "escribio") {
-      const anterior = await avisoQueContinua({ clase, clienteId });
+    if (SE_ACUMULAN.includes(clase)) {
+      // Los mensajes van por cliente —la conversación no es de una carpeta—;
+      // lo que se decide pieza por pieza, por carpeta: aprobar en «Banners» y
+      // aprobar en «Stories» son dos novedades y nombran carpetas distintas.
+      const anterior = await avisoQueContinua({
+        clase,
+        clienteId,
+        carpetaId: clase === "escribio" ? undefined : carpetaId,
+      });
       if (anterior) {
         const veces = (anterior.veces ?? 1) + 1;
+        const piezas = detalle ? [...(anterior.piezas ?? []), detalle] : anterior.piezas;
         await actualizarAviso(anterior, {
           veces,
+          piezas,
           cuando: new Date().toISOString(),
-          texto: `${cliente}: Escribió ${veces} mensajes en la conversación.`,
+          texto:
+            clase === "escribio"
+              ? `Escribió ${veces} mensajes en la conversación.`
+              : juntadas(clase, carpeta, veces, piezas),
         });
         return;
       }
     }
 
-    const texto = `${cliente}: ${comoSeCuenta(clase, carpeta, detalle)}`;
+    // **Sin el nombre del cliente adentro.** Iba cosido al principio de cada
+    // texto, y la bandeja quedaba con cincuenta renglones que empezaban con la
+    // misma cadena: el ojo tiene que saltearla para llegar a lo que pasó. El
+    // cliente es un dato del aviso y se dibuja como tal —y cuando todos los
+    // avisos a la vista son del mismo cliente, no se dibuja—. En el correo, el
+    // asunto ya lo nombra.
+    const texto = comoSeCuenta(clase, carpeta, detalle);
 
     const quienes = await aQuienesLesToca(clienteId, carpetaId);
     const conCorreo = quienes.filter((p) => p.correo);
@@ -132,6 +177,7 @@ export async function avisar(opciones: {
       carpeta,
       carpetaId,
       texto,
+      piezas: detalle ? [detalle] : undefined,
       paraQuienes: quienes.map((p) => p.nombre),
       correo:
         estado.estado === "enviado"
@@ -141,7 +187,11 @@ export async function avisar(opciones: {
             : conCorreo.length > 0
               ? "fallo"
               : "sin_destinatario",
-      detalleDelCorreo: estado.estado === "fallo" ? estado.motivo : undefined,
+      // **Sin repetir el motivo que ya dice la etiqueta.** Con nadie a quien
+      // mandárselo, el renglón decía «sin asignar · Nadie asignado con
+      // correo.»: la misma frase dos veces, en el mismo renglón.
+      detalleDelCorreo:
+        estado.estado === "fallo" && conCorreo.length > 0 ? estado.motivo : undefined,
     });
   } catch {
     // Que fallar en avisar no tumbe lo que el cliente acaba de hacer.

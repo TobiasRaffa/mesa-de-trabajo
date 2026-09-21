@@ -52,7 +52,24 @@ export type Aviso = {
   /** Si salió por correo, y si no, por qué. */
   correo: "sin_configurar" | "enviado" | "fallo" | "sin_destinatario";
   detalleDelCorreo?: string;
-  /** Alguien de la agencia ya lo miró. */
+  /**
+   * Quiénes ya lo miraron, por id de persona.
+   *
+   * **Era un solo booleano para todo el equipo, y eso es una campana
+   * compartida.** Nari abría la bandeja a la mañana y a Tomás se le vaciaba la
+   * suya: los avisos quedaban marcados como vistos para todos, así que él no
+   * volvía a enterarse de nada que hubiera pasado antes de que ella mirara.
+   * Un aviso puede ser para varios —quien lleva la carpeta y quien recibe
+   * todo—, así que «visto» es una respuesta por persona, no por aviso.
+   */
+  vistoPor?: string[];
+  /**
+   * Cómo se guardaba antes, cuando era uno solo para todos.
+   *
+   * Se sigue leyendo como «lo vio todo el mundo»: el día del cambio, lo que ya
+   * estaba marcado no puede volver a aparecer como nuevo para nadie, que sería
+   * reventarle la bandeja a todos de una vez.
+   */
   visto: boolean;
   /**
    * Cuántas veces pasó lo mismo seguido, cuando el aviso junta varias.
@@ -61,7 +78,36 @@ export type Aviso = {
    * un aviso que dice «cuatro», no cuatro renglones iguales.
    */
   veces?: number;
+  /**
+   * Qué piezas junta, cuando junta varias de la misma carpeta.
+   *
+   * **Revisar una carpeta es una sesión, no ocho novedades.** Aprobar ocho
+   * piezas escribía ocho renglones y mandaba ocho correos, mientras que
+   * mandar la revisión de esas mismas ocho —que es un solo toque del
+   * cliente— mandaba uno. Se guardan los nombres y no solo la cuenta porque
+   * lo que se hace después depende de cuáles son.
+   */
+  piezas?: string[];
 };
+
+/**
+ * Un aviso, ya respondida la única pregunta que cambia de persona a persona.
+ *
+ * **`visto` no puede ser del aviso, tiene que ser de quien lo mira.** Era un
+ * solo booleano compartido: quien abriera la bandeja primero se la vaciaba al
+ * resto del equipo. Lo arma `misAvisos`, que es quien sabe quién está mirando.
+ */
+export type AvisoMio = Aviso & { loVi: boolean };
+
+/** Si esta persona ya lo miró. */
+export function loVio(aviso: Aviso, personaId: string | null): boolean {
+  if (aviso.visto) return true;
+  return personaId !== null && (aviso.vistoPor?.includes(personaId) ?? false);
+}
+
+/** Si no lo miró nadie todavía. */
+export const noLoVioNadie = (aviso: Aviso): boolean =>
+  !aviso.visto && (aviso.vistoPor?.length ?? 0) === 0;
 
 /** Cuántos se guardan. Más viejo que esto es historia, y esa vive en la pieza. */
 const TOPE = 500;
@@ -83,13 +129,14 @@ export async function losAvisos(): Promise<Aviso[]> {
 }
 
 export async function anotarAviso(
-  aviso: Omit<Aviso, "id" | "cuando" | "visto">
+  aviso: Omit<Aviso, "id" | "cuando" | "visto" | "vistoPor">
 ): Promise<Aviso> {
   const nuevo: Aviso = {
     ...aviso,
     id: randomUUID(),
     cuando: new Date().toISOString(),
     visto: false,
+    vistoPor: [],
   };
 
   const todos = await losAvisos();
@@ -118,18 +165,24 @@ export const VENTANA_DE_RACHA = 5 * 60 * 1000;
  * cuando lo que había era una persona escribiendo.
  *
  * Se suma al anterior cuando es de la misma clase, del mismo cliente, llegó
- * dentro de la ventana **y nadie lo vio todavía**. Visto, lo nuevo es nuevo:
- * si alguien miró la bandeja entre un mensaje y el otro, el segundo tiene que
- * volver a avisarle.
+ * dentro de la ventana **y no lo vio nadie todavía**. Visto por alguien, lo
+ * nuevo es nuevo: si alguien miró la bandeja entre un mensaje y el otro, el
+ * segundo tiene que volver a avisar.
  */
 export function continuaA(
-  anterior: Pick<Aviso, "clase" | "clienteId" | "cuando" | "visto">,
-  nuevo: { clase: ClaseDeAviso; clienteId: string },
+  anterior: Pick<Aviso, "clase" | "clienteId" | "cuando" | "visto" | "vistoPor"> & {
+    carpetaId?: string;
+  },
+  nuevo: { clase: ClaseDeAviso; clienteId: string; carpetaId?: string },
   ahora: Date,
   ventana = VENTANA_DE_RACHA
 ): boolean {
-  if (anterior.visto) return false;
+  if (!noLoVioNadie(anterior as Aviso)) return false;
   if (anterior.clase !== nuevo.clase || anterior.clienteId !== nuevo.clienteId) return false;
+  // **Y de la misma carpeta.** Sin esto, aprobar una pieza de «Banners» y otra
+  // de «Stories» dentro de los cinco minutos se juntaban en un aviso que
+  // nombraba una sola de las dos carpetas.
+  if (nuevo.carpetaId !== undefined && anterior.carpetaId !== nuevo.carpetaId) return false;
   const desde = new Date(anterior.cuando).getTime();
   if (Number.isNaN(desde)) return false;
   const pasaron = ahora.getTime() - desde;
@@ -143,7 +196,7 @@ export function continuaA(
  * son dos cosas distintas aunque vengan seguidas, y quien llama decide.
  */
 export async function avisoQueContinua(
-  nuevo: { clase: ClaseDeAviso; clienteId: string },
+  nuevo: { clase: ClaseDeAviso; clienteId: string; carpetaId?: string },
   ahora = new Date()
 ): Promise<Aviso | null> {
   const ultimo = (await losAvisos()).find(
@@ -155,26 +208,44 @@ export async function avisoQueContinua(
 /** Reescribe un aviso que ya está: el texto y la hora, que pasa a ser ahora. */
 export async function actualizarAviso(
   aviso: Aviso,
-  cambios: Partial<Pick<Aviso, "texto" | "cuando" | "veces">>
+  cambios: Partial<Pick<Aviso, "texto" | "cuando" | "veces" | "piezas">>
 ): Promise<Aviso> {
-  const nuevo = { ...aviso, ...cambios };
-  await almacen.guardar(aviso.id, nuevo);
-  return nuevo;
+  // Se parte de lo que hay guardado y no de la copia que trajo quien llama:
+  // entre que lo leyó y llega acá, otro pudo haberle subido la cuenta de veces
+  // o cambiado el texto, y escribir la copia vieja lo borraría.
+  const quedo = await almacen.cambiar(aviso.id, (habia) => ({
+    ...(habia ?? aviso),
+    ...cambios,
+  }));
+  return quedo ?? { ...aviso, ...cambios };
 }
 
 /**
- * Marca como vistos los avisos que se le digan.
+ * Marca como vistos, **para una persona**, los avisos que se le digan.
  *
  * **Recibe cuáles y no los marca todos**: quien lleva dos clientes de ocho no
  * puede, tocando «marcar leído», bajarle el contador a los otros seis —que ni
  * siquiera ve—. Quien llega a todos le pasa todos, y queda igual que antes.
+ *
+ * Y marca **solo para quien mira**: el mismo aviso le sigue apareciendo sin
+ * leer al resto del equipo, que es lo que quiere decir que a cada uno le
+ * avisen.
  */
-export async function marcarVistos(ids: string[]): Promise<void> {
-  if (ids.length === 0) return;
-  const cuales = new Set(ids);
-  const cambios: Record<string, Aviso> = {};
-  for (const aviso of await losAvisos()) {
-    if (!aviso.visto && cuales.has(aviso.id)) cambios[aviso.id] = { ...aviso, visto: true };
-  }
-  await almacen.guardarVarios(cambios);
+export async function marcarVistos(ids: string[], personaId: string): Promise<void> {
+  if (ids.length === 0 || !personaId) return;
+
+  // **Uno por uno y con `cambiar`, tocando solo la lista de quiénes lo
+  // vieron.** Antes se leían todos, se les pegaba la marca a la copia leída y
+  // se escribía el documento entero: si el cliente escribía justo entre la
+  // lectura y la escritura, el aviso volvía a su versión vieja **y** quedaba
+  // marcado como leído, así que nadie se enteraba de ese mensaje.
+  await Promise.all(
+    ids.map((id) =>
+      almacen.cambiar(id, (habia) => {
+        if (!habia) return habia;
+        const ya = habia.vistoPor ?? [];
+        return ya.includes(personaId) ? habia : { ...habia, vistoPor: [...ya, personaId] };
+      })
+    )
+  );
 }

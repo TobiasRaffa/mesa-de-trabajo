@@ -22,50 +22,67 @@ import { RenglonDeAviso } from "@/admin/RenglonDeAviso";
 import { BotonEnlace } from "@/ui/Boton";
 import { EncabezadoDeVentana } from "@/ui/EncabezadoDeVentana";
 import { IconoCampana } from "@/ui/Icono";
-import type { Aviso } from "@/lib/avisos";
+import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
+import type { AvisoMio } from "@/lib/avisos";
 
 /** Cuántas se muestran desplegadas. Para el resto está la pantalla entera. */
 const CUANTAS = 12;
 
-export function Campana({ avisos }: { avisos: Aviso[] }) {
+export function Campana({ avisos, yo }: { avisos: AvisoMio[]; yo?: string }) {
   const [abierta, setAbierta] = useState(false);
   // Cuáles estaban sin leer la primera vez que se abrió. `null` hasta entonces.
   const [eranNuevas, setEranNuevas] = useState<Set<string> | null>(null);
   const [, marcar] = useTransition();
   const caja = useRef<HTMLDivElement>(null);
 
-  const sinVer = avisos.filter((a) => !a.visto);
+  const sinVer = avisos.filter((a) => !a.loVi);
   // Una vez abierta, el número de la campana baja a cero aunque el servidor
   // todavía no haya vuelto con los avisos ya marcados.
-  const cuantasSinVer = eranNuevas ? 0 : sinVer.length;
-  const nuevas = eranNuevas?.size ?? 0;
-
+  //
+  // **Baja por lo que se vio, no por haber abierto la campana una vez.** Decía
+  // `eranNuevas ? 0 : sinVer.length`, y como esa marca pasa de `null` a un
+  // conjunto y nunca vuelve, el número quedaba en cero para siempre: abrir la
+  // campana a las nueve dejaba el resto del día sin globo, aunque entregaras,
+  // reabrieras y el cliente escribiera. Descontando las que ya se miraron, lo
+  // que llega después vuelve a contar.
+  const cuantasSinVer = sinVer.filter((a) => !eranNuevas?.has(a.id)).length;
   const ultimas = [...avisos]
     .sort((a, b) => new Date(b.cuando).getTime() - new Date(a.cuando).getTime())
     .slice(0, CUANTAS);
 
+  // **Las que se están señalando como nuevas, no cuántas se señalaron alguna
+  // vez.** Era el tamaño del conjunto entero, que solo crece: abriendo la
+  // campana tres veces en la mañana el rótulo decía «12 nuevas» sobre una lista
+  // donde ninguna estaba marcada. Contando las que de verdad llevan la marca
+  // **en esta lista**, el número dice lo mismo que se ve.
+  const nuevas = ultimas.filter((a) => eranNuevas?.has(a.id)).length;
+
+  // Con un solo cliente a la vista, su nombre en cada renglón es lo mismo
+  // repetido doce veces.
+  const variosClientes = new Set(ultimas.map((a) => a.clienteId)).size > 1;
+
   function abrir() {
     setAbierta(true);
-    if (eranNuevas) return;
-    setEranNuevas(new Set(sinVer.map((a) => a.id)));
-    if (sinVer.length > 0) marcar(() => marcarAvisosVistos());
+    // **Solo las que se están mostrando.** Marcaba todo lo que hubiera traído
+    // el servidor —hasta quinientos— aunque en pantalla entren doce: volver de
+    // un fin de semana con treinta avisos daba por leídos dieciocho que nadie
+    // vio nunca. Para el resto está la pantalla entera, que sí los dibuja.
+    const aMarcar = ultimas.filter((a) => !a.loVi && !eranNuevas?.has(a.id));
+    if (aMarcar.length === 0) return;
+
+    setEranNuevas(new Set([...(eranNuevas ?? []), ...aMarcar.map((a) => a.id)]));
+    marcar(() => marcarAvisosVistos(aMarcar.map((a) => a.id)));
   }
 
-  // Se cierra tocando afuera o con Escape, como cualquier desplegable.
+  // Se cierra tocando afuera, como cualquier desplegable. El Escape lo maneja
+  // la trampa de foco del panel, que es la que sabe si hay otra ventana encima.
   useEffect(() => {
     if (!abierta) return;
     const afuera = (e: MouseEvent) => {
       if (caja.current && !caja.current.contains(e.target as Node)) setAbierta(false);
     };
-    const tecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAbierta(false);
-    };
     document.addEventListener("mousedown", afuera);
-    document.addEventListener("keydown", tecla);
-    return () => {
-      document.removeEventListener("mousedown", afuera);
-      document.removeEventListener("keydown", tecla);
-    };
+    return () => document.removeEventListener("mousedown", afuera);
   }, [abierta]);
 
   const rotulo =
@@ -95,52 +112,104 @@ export function Campana({ avisos }: { avisos: Aviso[] }) {
       </button>
 
       {abierta && (
-        <div
-          role="dialog"
-          aria-label="Notificaciones"
-          className="absolute right-0 top-full z-30 mt-3 flex w-[min(32rem,calc(100vw-3rem))] flex-col
-                     overflow-hidden rounded-tarjeta bg-lienzo
-                     shadow-[0_24px_48px_-16px_rgba(18,18,18,0.45)]"
-        >
-          <EncabezadoDeVentana
-            titulo="Notificaciones"
-            rotulo={
-              nuevas > 0
-                ? `${nuevas} ${nuevas === 1 ? "nueva" : "nuevas"}`
-                : avisos.length > 0
-                  ? `Las últimas ${Math.min(avisos.length, CUANTAS)}`
-                  : undefined
-            }
-            onCerrar={() => setAbierta(false)}
-          />
-
-          {ultimas.length === 0 ? (
-            <p className="px-6 py-8 text-center text-normal text-apagado">Todavía no pasó nada.</p>
-          ) : (
-            <ul className="max-h-[55vh] overflow-y-auto">
-              {ultimas.map((aviso) => (
-                <RenglonDeAviso
-                  key={aviso.id}
-                  aviso={aviso}
-                  nueva={eranNuevas?.has(aviso.id) ?? false}
-                  alIr={() => setAbierta(false)}
-                />
-              ))}
-            </ul>
-          )}
-
-          <div className="border-t-2 border-tinta px-4 py-3">
-            <BotonEnlace
-              href="/gestion/notificaciones"
-              tamano="chico"
-              ancho
-              onClick={() => setAbierta(false)}
-            >
-              Ver todas las notificaciones
-            </BotonEnlace>
-          </div>
-        </div>
+        <Panel
+          ultimas={ultimas}
+          nuevas={nuevas}
+          cuantas={avisos.length}
+          sinLeerQueQuedan={cuantasSinVer}
+          eranNuevas={eranNuevas}
+          conCliente={variosClientes}
+          yo={yo}
+          onCerrar={() => setAbierta(false)}
+        />
       )}
+    </div>
+  );
+}
+
+/**
+ * Lo desplegado.
+ *
+ * **Es un componente aparte porque dice ser un diálogo.** Lo era de nombre
+ * —`role="dialog"`— y de nada más: el foco seguía en la página de atrás, el
+ * Tab se iba a los botones del tablero que el panel estaba tapando, y su
+ * Escape escuchaba por afuera de la pila de ventanas, así que con una ventana
+ * abierta encima las cerraba a las dos. La trampa de foco necesita que el
+ * elemento exista al montarse, y para eso tiene que ser su propio componente.
+ */
+function Panel({
+  ultimas,
+  nuevas,
+  cuantas,
+  sinLeerQueQuedan,
+  eranNuevas,
+  conCliente,
+  yo,
+  onCerrar,
+}: {
+  ultimas: AvisoMio[];
+  nuevas: number;
+  cuantas: number;
+  sinLeerQueQuedan: number;
+  eranNuevas: Set<string> | null;
+  conCliente: boolean;
+  yo?: string;
+  onCerrar: () => void;
+}) {
+  const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
+
+  return (
+    <div
+      ref={marco}
+      role="dialog"
+      aria-label="Notificaciones"
+      tabIndex={-1}
+      className="absolute right-0 top-full z-30 mt-3 flex w-[min(32rem,calc(100vw-3rem))] flex-col
+                 overflow-hidden rounded-tarjeta bg-lienzo
+                 shadow-[0_24px_48px_-16px_rgba(18,18,18,0.45)]"
+    >
+      <EncabezadoDeVentana
+        titulo="Notificaciones"
+        rotulo={
+          nuevas > 0
+            ? `${nuevas} ${nuevas === 1 ? "nueva" : "nuevas"}`
+            : cuantas > 0
+              ? `Las últimas ${Math.min(cuantas, CUANTAS)}`
+              : undefined
+        }
+        onCerrar={onCerrar}
+      />
+
+      {ultimas.length === 0 ? (
+        <p className="px-6 py-8 text-center text-normal text-apagado">Todavía no pasó nada.</p>
+      ) : (
+        <ul className="max-h-[55vh] overflow-y-auto">
+          {ultimas.map((aviso) => (
+            <RenglonDeAviso
+              key={aviso.id}
+              aviso={aviso}
+              nueva={eranNuevas?.has(aviso.id) ?? false}
+              conCliente={conCliente}
+              yo={yo}
+              alIr={onCerrar}
+            />
+          ))}
+        </ul>
+      )}
+
+      <div className="border-t-2 border-tinta px-4 py-3">
+        {/* **El botón dice cómo bajar el número.** Con más de doce sin leer, la
+            campana marca doce y el globo queda clavado en el resto: abrir de
+            nuevo no marca nada, porque los que faltan no entran en la lista.
+            Eso es a propósito —doce es lo que entra— pero no estaba escrito en
+            ningún lado, y un número que no se puede bajar es una alarma rota.
+            Ahora el pie nombra justo los que quedan. */}
+        <BotonEnlace href="/gestion/notificaciones" tamano="chico" ancho onClick={onCerrar}>
+          {sinLeerQueQuedan > 0
+            ? `Ver las otras ${sinLeerQueQuedan} sin leer`
+            : "Ver todas las notificaciones"}
+        </BotonEnlace>
+      </div>
     </div>
   );
 }

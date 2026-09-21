@@ -11,7 +11,8 @@
 //
 // **Abrir la pantalla las marca leídas.** Antes había que apretar «Marcar
 // como visto» a mano, que es pedirle a alguien que declare algo que la
-// aplicación ya sabe: si abriste la lista, las viste.
+// aplicación ya sabe: si abriste la lista, las viste. Y las marca **para
+// vos**: cada uno tiene su propia campana.
 //
 // Lo que estaba sin leer **al abrir la pantalla** queda arriba, separado y
 // marcado, aunque ya se haya dado por leído. Si no, abrir la bandeja las
@@ -22,19 +23,23 @@
 //
 // El título lo pone la pantalla, con el encabezado de todas: esto es la lista.
 
-import { useEffect, useState, useTransition } from "react";
+import { Fragment, useEffect, useState, useTransition } from "react";
 import { marcarAvisosVistos } from "@/app/(admin)/gestion/acciones";
 import { RenglonDeAviso } from "@/admin/RenglonDeAviso";
-import type { Aviso } from "@/lib/avisos";
+import { diaEnBuenosAires, enPalabrasElDiaLargo } from "@/dominio/tiempo";
+import type { AvisoMio } from "@/lib/avisos";
 
 export function Bandeja({
   avisos,
   correoConfigurado,
+  yo,
 }: {
-  avisos: Aviso[];
+  avisos: AvisoMio[];
   correoConfigurado: boolean;
+  /** Cómo te llamás: sirve para no decir «para vos» en cada renglón. */
+  yo?: string;
 }) {
-  const sinVer = avisos.filter((a) => !a.visto).length;
+  const sinVer = avisos.filter((a) => !a.loVi).length;
 
   // Cuáles eran nuevas cuando se abrió la pantalla.
   //
@@ -42,11 +47,15 @@ export function Bandeja({
   // función y no en un `useMemo`: no depende de nada que pueda cambiar, y es
   // justamente lo que permite que sigan marcadas después de darlas por leídas.
   const [eranNuevas] = useState(
-    () => new Set(avisos.filter((a) => !a.visto).map((a) => a.id))
+    () => new Set(avisos.filter((a) => !a.loVi).map((a) => a.id))
   );
 
   const nuevas = avisos.filter((a) => eranNuevas.has(a.id));
   const viejas = avisos.filter((a) => !eranNuevas.has(a.id));
+
+  // Con un solo cliente a la vista, su nombre en cada renglón es una columna
+  // entera diciendo lo mismo cincuenta veces.
+  const variosClientes = new Set(avisos.map((a) => a.clienteId)).size > 1;
 
   const [, marcar] = useTransition();
   useEffect(() => {
@@ -69,12 +78,25 @@ export function Bandeja({
               renglón por renglón para encontrar cuáles eran, que es
               justamente lo que se vino a hacer al abrir. */}
           {nuevas.length > 0 && (
-            <Grupo titulo={`Nuevas · ${nuevas.length}`} avisos={nuevas} nuevas />
+            <Grupo
+              titulo={`Nuevas · ${nuevas.length}`}
+              avisos={nuevas}
+              nuevas
+              yo={yo}
+              conCliente={variosClientes}
+            />
           )}
           {viejas.length > 0 && (
             <Grupo
-              titulo={nuevas.length > 0 ? "Ya leídas" : "Todo lo anotado"}
+              titulo="Ya leídas"
               avisos={viejas}
+              yo={yo}
+              conCliente={variosClientes}
+              // **Cortadas por día.** Cincuenta renglones seguidos, cada uno
+              // repitiendo «17 sept», y el salto de un día a otro no se veía:
+              // había que comparar dos fechas menudas para darse cuenta. El
+              // grupo de nuevas no se corta: suele ser de hoy y de un rato.
+              porDia
             />
           )}
         </>
@@ -94,10 +116,16 @@ function Grupo({
   titulo,
   avisos,
   nuevas = false,
+  yo,
+  conCliente,
+  porDia = false,
 }: {
   titulo: string;
-  avisos: Aviso[];
+  avisos: AvisoMio[];
   nuevas?: boolean;
+  yo?: string;
+  conCliente?: boolean;
+  porDia?: boolean;
 }) {
   return (
     <div className="mt-8">
@@ -105,9 +133,28 @@ function Grupo({
         {titulo}
       </h3>
       <ul className="mt-2 border-t border-linea">
-        {avisos.map((aviso) => (
-          <RenglonDeAviso key={aviso.id} aviso={aviso} nueva={nuevas} />
-        ))}
+        {avisos.map((aviso, i) => {
+          const dia = diaEnBuenosAires(new Date(aviso.cuando));
+          const anterior = i > 0 ? diaEnBuenosAires(new Date(avisos[i - 1].cuando)) : null;
+          const cambiaElDia = porDia && dia !== anterior;
+
+          return (
+            <Fragment key={aviso.id}>
+              {cambiaElDia && (
+                <li className="border-b border-linea bg-hueco/60 px-4 py-1.5 font-mono text-micro font-bold uppercase tracking-widest text-apagado">
+                  {enPalabrasElDiaLargo(aviso.cuando)}
+                </li>
+              )}
+              <RenglonDeAviso
+                aviso={aviso}
+                nueva={nuevas}
+                yo={yo}
+                conCliente={conCliente}
+                soloLaHora={porDia}
+              />
+            </Fragment>
+          );
+        })}
       </ul>
     </div>
   );

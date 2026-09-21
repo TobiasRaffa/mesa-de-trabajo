@@ -25,10 +25,10 @@ import {
   todosLosClientes,
   type Cliente,
 } from "@/lib/clientes";
-import { clienteDeCarpeta, idsDeCarpetasReales } from "@/lib/carpetas";
+import { carpetasConSuCliente, clienteDeCarpeta } from "@/lib/carpetas";
 import { cadenaHasta, cuelgaDeAlguna } from "@/lib/permisos";
-import { miAlcance } from "@/lib/sesion";
-import { losAvisos, type Aviso } from "@/lib/avisos";
+import { miAlcance, quienSoy } from "@/lib/sesion";
+import { losAvisos, loVio, type AvisoMio } from "@/lib/avisos";
 import { alcanzaA, recortaA } from "@/dominio/roles";
 
 export type { Cliente };
@@ -92,9 +92,11 @@ export const esCarpetaMia = async (carpetaId: string): Promise<boolean> =>
  * de Cafe Otoño» le cuenta a quien lo lee exactamente lo que el alcance viene a
  * no mostrarle, y encima le infla el contador con cosas que no puede abrir.
  */
-export async function misAvisos(): Promise<Aviso[]> {
-  const alcance = await miAlcance();
-  return (await losAvisos()).filter((a) => alcanzaA(alcance, a.clienteId));
+export async function misAvisos(): Promise<AvisoMio[]> {
+  const [alcance, yo] = await Promise.all([miAlcance(), quienSoy()]);
+  return (await losAvisos())
+    .filter((a) => alcanzaA(alcance, a.clienteId))
+    .map((a) => ({ ...a, loVi: loVio(a, yo?.id ?? null) }));
 }
 
 /**
@@ -105,12 +107,17 @@ export async function misAvisos(): Promise<Aviso[]> {
  */
 export async function misCarpetas(): Promise<Set<string>> {
   const alcance = await miAlcance();
-  const todas = await idsDeCarpetasReales();
-  if (alcance === "todos") return todas;
+  const todas = await carpetasConSuCliente();
+  if (alcance === "todos") return new Set(todas.keys());
 
+  // **De una sola pasada sobre el mapa.** Preguntaba `esCarpetaMia` carpeta por
+  // carpeta, en serie, y cada una de esas preguntas recorría a su vez todos los
+  // clientes pidiéndole subcarpetas a Drive: con diez clientes y sesenta
+  // carpetas eran hasta seiscientas llamadas encadenadas para validar un
+  // formulario.
   const mias = new Set<string>();
-  for (const id of todas) {
-    if (await esCarpetaMia(id)) mias.add(id);
+  for (const [id, cliente] of todas) {
+    if (alcanzaA(alcance, cliente.id)) mias.add(id);
   }
   return mias;
 }

@@ -10,35 +10,28 @@
 
 import { misAvisos } from "@/admin/datos/clientes";
 import { correoConfigurado } from "@/lib/correo";
+import { quienSoy } from "@/lib/sesion";
 import { Bandeja } from "@/admin/Bandeja";
 import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
 
 export const dynamic = "force-dynamic";
 
 export default async function Notificaciones() {
-  const avisos = await misAvisos();
-  const sinVer = avisos.filter((a) => !a.visto).length;
+  const [avisos, yo] = await Promise.all([misAvisos(), quienSoy()]);
 
   return (
     <main className={PANTALLA}>
-      <EncabezadoDePagina
-        titulo="Notificaciones"
-        bajada="Todo lo que hizo el cliente queda acá, haya salido por correo o no."
-        alLado={
-          sinVer > 0 ? (
-            <span className="rounded-full bg-lima px-3 py-1 font-mono text-micro font-bold uppercase tracking-wider text-tinta">
-              {sinVer} {sinVer === 1 ? "nueva" : "nuevas"}
-            </span>
-          ) : (
-            avisos.length > 0 && (
-              <span className="font-mono text-micro uppercase tracking-wider text-apagado">
-                {avisos.length} anotadas
-              </span>
-            )
-          )
-        }
+      {/* **Sin bajada y sin pastilla.** La bajada repetía lo que ya dice el
+          título, y la pastilla decía el mismo número que el rótulo del grupo
+          de abajo —«3 nuevas» arriba, «Nuevas · 3» pegado a las nuevas— con
+          tres palabras distintas para lo mismo. Al marcarlas leídas la de
+          arriba bajaba a cero y terminaba contradiciendo a la lista. */}
+      <EncabezadoDePagina titulo="Notificaciones" />
+      <Bandeja
+        avisos={avisos}
+        correoConfigurado={correoConfigurado()}
+        yo={yo?.nombre}
       />
-      <Bandeja avisos={avisos} correoConfigurado={correoConfigurado()} />
     </main>
   );
 }

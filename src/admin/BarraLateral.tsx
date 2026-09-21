@@ -18,8 +18,8 @@
 // dirección se escribe a mano: quien protege es `proxy.ts`. Esto es para no
 // ofrecerle a alguien una puerta que le va a dar en la cara.
 
-import Link from "next/link";
-import { Marca } from "@/ui/Marca";
+import Link, { useLinkStatus } from "next/link";
+import { Logo, Marca } from "@/ui/Marca";
 import { usePathname } from "next/navigation";
 import { salir } from "@/app/(admin)/gestion/entrar/acciones";
 import {
@@ -40,20 +40,31 @@ const ARRIBA: readonly Seccion[] = ["tablero", "clientes", "conversaciones", "no
  * «Clientes» y no lo valen. Abajo del todo están donde se las busca cuando se
  * las busca.
  *
- * El diagnóstico no está en ninguna de las dos listas: cuando Drive falla, cada
- * pantalla lo dice donde pasa. La ruta sigue existiendo para cuando haga falta
- * mirar la conexión.
+ * **El diagnóstico está acá.** No estaba en ninguna lista: existía como
+ * dirección y había que sabérsela de memoria, con lo cual la pantalla que
+ * contesta «¿anda Drive?» era la más difícil de encontrar justo el día que
+ * Drive no anda. La barra ya filtra por sección, así que solo la ve quien la
+ * tiene.
  */
-const ABAJO: readonly Seccion[] = ["facturas", "admin"];
+const ABAJO: readonly Seccion[] = ["facturas", "admin", "diagnostico"];
 
 export function BarraLateral({
   quien,
   secciones,
+  sinLeer = 0,
 }: {
   /** Quién entró. `null` con la llave del equipo, que no es de nadie. */
   quien: string | null;
   /** Qué partes le tocan. Lo que no está acá no se dibuja. */
   secciones: readonly Seccion[];
+  /**
+   * Cuántas notificaciones sin leer tiene quien mira.
+   *
+   * **Vivía solo en el tablero**, adentro de la campana: desde Clientes, desde
+   * Conversaciones o desde la ficha de un cliente no había una sola señal de
+   * que hubiera llegado algo, y enterarse costaba ir al tablero a propósito.
+   */
+  sinLeer?: number;
 }) {
   const ruta = usePathname();
 
@@ -67,44 +78,85 @@ export function BarraLateral({
   const actual = seccionDeLaRuta(ruta);
 
   return (
+    // **En el teléfono ocupa lo que necesita.** Con `p-6`, `gap-6` y la marca
+    // entera arriba, la barra se comía casi un tercio del alto antes de llegar
+    // al trabajo: en una pantalla de 640 de alto quedaban 430 para la lista.
     <aside
-      className="flex w-full flex-col gap-6 bg-tinta p-6 text-lienzo
-                 lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:shrink-0 lg:overflow-y-auto"
+      className="flex w-full flex-col gap-2 bg-tinta p-2 text-lienzo
+                 lg:sticky lg:top-0 lg:h-screen lg:w-64 lg:shrink-0 lg:gap-6 lg:overflow-y-auto lg:p-6"
     >
-      <Link
-        href={RUTA_DE[arriba[0] ?? abajo[0] ?? "clientes"]}
-        className="transition-opacity hover:opacity-80"
-      >
-        <Marca tono="sobre_oscuro" />
-      </Link>
+      {/* En angosto el logo comparte renglón con quién entró y «Salir», que
+          es todo lo que no son secciones: tres bloques apilados costaban un
+          tercio del alto antes de llegar al trabajo. */}
+      <div className="flex items-center gap-3 lg:block">
+        <Link
+          href={RUTA_DE[arriba[0] ?? abajo[0] ?? "clientes"]}
+          className="shrink-0 transition-opacity hover:opacity-80"
+        >
+          {/* Solo el logo: el nombre y la bajada dicen de quién es la
+              herramienta, y eso se lee una vez. */}
+          <Logo className="h-8 w-8 lg:hidden" />
+          <span className="hidden lg:block">
+            <Marca tono="sobre_oscuro" />
+          </span>
+        </Link>
+        <Salir quien={quien} className="ml-auto flex items-center gap-2 lg:hidden" />
+      </div>
 
-      {arriba.length > 0 && <Secciones cuales={arriba} actual={actual} etiqueta="Secciones" />}
+      {/* **Todas juntas en angosto.** Separar «Administración» en su propio
+          bloque con línea y márgenes es correcto en una columna alta; en una
+          barra horizontal son dos renglones más de alto para siete etiquetas
+          cortas que entran en dos. */}
+      <div className="lg:hidden">
+        <Secciones
+          cuales={[...arriba, ...abajo]}
+          actual={actual}
+          etiqueta="Secciones"
+          sinLeer={sinLeer}
+        />
+      </div>
 
-      {/* `mt-auto` lo empuja al pie de la columna en pantalla grande. En el
-          teléfono la barra es una fila y sigue a lo anterior, con una línea que
-          lo separa para que se lea como otro grupo. */}
-      <div className="mt-2 border-t border-lienzo/15 pt-2 lg:mt-auto lg:pt-4">
+      <div className="hidden lg:block">
+        {arriba.length > 0 && (
+          <Secciones cuales={arriba} actual={actual} etiqueta="Secciones" sinLeer={sinLeer} />
+        )}
+      </div>
+
+      {/* `mt-auto` lo empuja al pie de la columna en pantalla grande. */}
+      <div className="hidden border-t border-lienzo/15 lg:mt-auto lg:block lg:pt-4">
         {abajo.length > 0 && (
           <Secciones cuales={abajo} actual={actual} etiqueta="Administración" />
         )}
-
-        {/* **Quién entró, a la vista.** Lo que se hace queda firmado con ese
-            nombre: si la máquina quedó con la sesión de otra, hay que poder
-            darse cuenta antes de entregarle algo a un cliente en su nombre. */}
-        <form action={salir} className="mt-4 flex items-center gap-2 border-t border-lienzo/15 pt-4">
-          <span className="min-w-0 flex-1 truncate text-micro text-lienzo/45">
-            {quien ?? "El equipo"}
-          </span>
-          <button
-            type="submit"
-            className="shrink-0 font-mono text-micro font-bold uppercase tracking-widest
-                       text-lienzo/45 transition-colors hover:text-lienzo"
-          >
-            Salir
-          </button>
-        </form>
+        <Salir
+          quien={quien}
+          className="mt-4 flex items-center gap-2 border-t border-lienzo/15 pt-4"
+        />
       </div>
     </aside>
+  );
+}
+
+/**
+ * Quién entró, y cómo salir.
+ *
+ * **El nombre a la vista.** Lo que se hace queda firmado con él: si la máquina
+ * quedó con la sesión de otra, hay que poder darse cuenta antes de entregarle
+ * algo a un cliente en su nombre.
+ */
+function Salir({ quien, className }: { quien: string | null; className: string }) {
+  return (
+    <form action={salir} className={className}>
+      <span className="min-w-0 flex-1 truncate text-micro text-lienzo/45">
+        {quien ?? "El equipo"}
+      </span>
+      <button
+        type="submit"
+        className="shrink-0 font-mono text-micro font-bold uppercase tracking-widest
+                   text-lienzo/45 transition-colors hover:text-lienzo"
+      >
+        Salir
+      </button>
+    </form>
   );
 }
 
@@ -112,6 +164,7 @@ function Secciones({
   cuales,
   actual,
   etiqueta,
+  sinLeer = 0,
 }: {
   cuales: readonly Seccion[];
   /**
@@ -123,10 +176,15 @@ function Secciones({
    */
   actual: Seccion | null;
   etiqueta: string;
+  sinLeer?: number;
 }) {
   return (
     <nav aria-label={etiqueta}>
-      <ul className="flex gap-2 overflow-x-auto lg:flex-col lg:gap-0 lg:overflow-visible">
+      {/* **Se acomoda en dos renglones en vez de correrse de costado.** Con
+          `overflow-x-auto`, la última etiqueta quedaba cortada por la mitad
+          —«Notificacion…»— y había que arrastrar una fila para descubrir que
+          había algo más. Cuatro palabras cortas entran en dos renglones. */}
+      <ul className="flex flex-wrap gap-2 lg:flex-col lg:flex-nowrap lg:gap-0">
         {cuales.map((seccion) => (
           <li key={seccion} className="shrink-0 lg:shrink">
             <Link
@@ -136,19 +194,43 @@ function Secciones({
               // lado por donde corre la lista —abajo cuando es una fila, a
               // la izquierda cuando es una columna—; puesto al costado en
               // una fila horizontal parece que separa, no que señala.
-              className={`flex min-h-toque items-center whitespace-nowrap border-b-4 px-3
-                          text-normal font-bold tracking-tight transition-colors
-                          lg:border-b-0 lg:border-l-4 ${
+              className={`flex min-h-toque items-center whitespace-nowrap border-b-4 px-2
+                          text-menudo font-bold tracking-tight transition-colors
+                          lg:border-b-0 lg:border-l-4 lg:px-3 lg:text-normal ${
                             seccion === actual
                               ? "border-lienzo bg-lienzo/10 text-lienzo"
                               : "border-transparent text-lienzo/70 hover:bg-lienzo/5 hover:text-lienzo"
                           }`}
             >
               {NOMBRE_DE_SECCION[seccion]}
+              {seccion === "notificaciones" && sinLeer > 0 && (
+                <span className="cifras ml-2 rounded-full bg-lima px-1.5 text-micro font-extrabold leading-5 text-tinta">
+                  {sinLeer}
+                </span>
+              )}
+              <Yendo />
             </Link>
           </li>
         ))}
       </ul>
     </nav>
+  );
+}
+
+/**
+ * Tres puntitos mientras la pantalla nueva se trae.
+ *
+ * **Contesta la pregunta «¿lo toqué?».** Todas las pantallas de gestión leen
+ * de Drive, así que entre el toque y el cambio pasan segundos en los que no
+ * pasaba absolutamente nada: la pantalla anterior seguía entera y el renglón
+ * tocado sin marcar. Lo primero que hace cualquiera es tocar de nuevo.
+ */
+function Yendo() {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <span aria-hidden="true" className="ml-2 animate-pulse text-micro font-extrabold">
+      ···
+    </span>
   );
 }
