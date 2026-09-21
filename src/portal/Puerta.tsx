@@ -40,8 +40,15 @@ export function Puerta({ token }: { token: string }) {
                        font-bold tracking-tight transition-colors placeholder:font-normal
                        placeholder:text-apagado focus:border-acento focus:outline-none
                        focus:ring-4 focus:ring-acento-tenue"
-            placeholder="café otoño"
           />
+
+          {/* **Qué es la clave, no un ejemplo de clave.** El ejemplo era
+              «café otoño», que es el nombre de un cliente real de la agencia:
+              cualquier otro cliente que abría su puerta lo leía. Y un
+              placeholder con forma de clave se confunde con la clave. */}
+          <p className="text-menudo text-tinta-suave">
+            Es la palabra que te pasó el equipo junto con este link.
+          </p>
 
           {estado && !estado.ok && (
             <p

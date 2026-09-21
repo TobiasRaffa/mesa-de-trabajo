@@ -16,6 +16,7 @@ import { portalDelCliente } from "@/portal/datos/cliente";
 import { anotarVisita } from "@/lib/visitas";
 import { Portal } from "@/portal/Portal";
 import { Puerta } from "@/portal/Puerta";
+import { Marca } from "@/ui/Marca";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,11 @@ export default async function Entrega({ params }: PageProps<"/t/[token]">) {
     return (
       <div className="flex min-h-screen items-center justify-center p-8">
         <div className="max-w-md">
+          {/* **Con la marca.** Estas dos pantallas salían peladas: un título
+              gris en el medio de una página en blanco. Quien abre un link y
+              encuentra eso no sabe si le erró a la dirección o si el sitio de
+              la agencia se rompió. */}
+          <Marca className="mb-8" />
           <h1 className="text-titulo font-extrabold tracking-tight">
             Este link no está disponible
           </h1>
@@ -65,6 +71,7 @@ export default async function Entrega({ params }: PageProps<"/t/[token]">) {
     return (
       <div className="flex min-h-screen items-center justify-center p-8">
         <div className="max-w-lg">
+          <Marca className="mb-8" />
           <h1 className="text-titulo font-extrabold tracking-tight">
             No pudimos abrir la carpeta
           </h1>

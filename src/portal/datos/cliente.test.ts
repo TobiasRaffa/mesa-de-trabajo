@@ -465,3 +465,88 @@ describe("el cliente ve lo entregado y nada más", () => {
     expect(await portalDelCliente(RAIZ).then((p) => p.carpetas[0].piezas)).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe("qué campos de la pieza salen al navegador", () => {
+  /**
+   * **`Portal` es una pantalla del navegador**: todo lo que llega en `datos`
+   * viaja en el HTML que sirve el link público, se dibuje o no. Lo guardado se
+   * copiaba entero con un `...guardado`, y adentro venía `historia` —que lleva
+   * el nombre propio de quien del equipo entregó, reabrió o habilitó cada
+   * cosa— y `detalle`, que guarda el motivo crudo de un error de Drive. Nada de
+   * eso se dibujaba en ninguna parte: viajaba y se quedaba ahí, legible con
+   * «ver código fuente».
+   *
+   * Esta prueba es la que hace que agregarle un campo a lo guardado no lo
+   * publique solo.
+   */
+  const PERMITIDOS = [
+    "estado",
+    "ronda",
+    "rondasExtra",
+    "cambios",
+    "enviada",
+    "id",
+    "nombre",
+    "driveFileId",
+    "esPdf",
+    "modificado",
+    "enlaceDrive",
+    "versiones",
+    "publicaEl",
+    "vence",
+  ];
+
+  it("ninguna pieza lleva la historia interna ni nada que no esté en la lista", async () => {
+    driveCon({ [RAIZ]: [{ id: "trab", name: "Trabajo" }] }, { trab: ["pieza.jpg"] });
+
+    // Lo guardado trae de todo, como en producción.
+    vi.mocked(estadosDe).mockImplementation(async (carpeta, piezas) =>
+      Object.fromEntries(
+        piezas.map(({ id }) => [
+          id,
+          {
+            carpetaId: carpeta,
+            estado: "entregada" as const,
+            ronda: 0,
+            rondasExtra: 0,
+            cambios: [],
+            enviada: false,
+            mudada: false,
+            comentariosCopiados: ["comentario-de-drive"],
+            archivoMudado: "id-en-entregas-finales",
+            archivos: ["id-de-drive"],
+            versionEntregada: 1,
+            entregadaEl: "2026-09-01T10:00:00Z",
+            historia: [
+              {
+                id: "h1",
+                que: "entregada" as const,
+                cuando: "2026-09-01T10:00:00Z",
+                quien: "Nombre Propio De Alguien Del Equipo",
+                detalle: "no_se_pudo_devolver: el motivo crudo de Drive",
+              },
+            ],
+          } satisfies EstadoDePieza,
+        ])
+      )
+    );
+
+    const portal = await portalDelCliente(RAIZ);
+    const pieza = portal.carpetas[0].piezas[0];
+
+    const decomas = Object.keys(pieza).filter((c) => !PERMITIDOS.includes(c));
+    expect(
+      decomas,
+      "Todo lo que esté acá adentro viaja en el HTML público. Si hace falta un " +
+        "campo nuevo, se agrega a la lista a propósito y no de arriba."
+    ).toEqual([]);
+
+    // Y los tres que más duelen, nombrados, para que se lea qué se cuida.
+    const comoTexto = JSON.stringify(portal);
+    expect(comoTexto).not.toContain("Nombre Propio De Alguien Del Equipo");
+    expect(comoTexto).not.toContain("no_se_pudo_devolver");
+    expect(comoTexto).not.toContain("comentario-de-drive");
+  });
+});

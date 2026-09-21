@@ -18,7 +18,7 @@
 // cuántas quedan, qué se puede enviar. Dos copias del mismo número es la forma
 // segura de que un día no coincidan.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Evento, Pieza } from "@/dominio/pieza";
 import { Ampliada, type Lamina } from "@/ui/Ampliada";
 import { Boton, BotonEnlace } from "@/ui/Boton";
@@ -28,6 +28,7 @@ import {
   IconoDrive,
   IconoEditar,
   IconoEnviar,
+  IconoFlecha,
 } from "@/ui/Icono";
 import { Conversacion } from "@/ui/Conversacion";
 import type { Mensaje } from "@/lib/conversaciones";
@@ -40,12 +41,13 @@ import {
 } from "@/portal/acciones";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import { Ventana } from "@/ui/Ventana";
-import { fechaCorta, plazoEnPalabras, situacionDelPlazo } from "@/lib/fechas";
+import { plazoEnPalabras, situacionDelPlazo } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import { Miniatura } from "@/ui/Miniatura";
 import { Marca, NOMBRE_DE_LA_AGENCIA } from "@/ui/Marca";
 import type { CarpetaDeTrabajo, PortalDeCliente } from "@/portal/datos/cliente";
 import { RevisarPieza, type PiezaAbierta } from "@/portal/RevisarPieza";
+import { enPalabrasElDiaDe, enPalabrasElMes } from "@/dominio/tiempo";
 
 type EnPantalla = PiezaAbierta;
 
@@ -54,6 +56,16 @@ const claveDeLeido = (clienteId: string) => `mesa-de-trabajo:leido:${clienteId}`
 
 /** Dónde recuerda este navegador con qué nombre se aprueba. */
 const claveDeFirma = (clienteId: string) => `mesa-de-trabajo:firma:${clienteId}`;
+
+/** Con qué nombre viene aprobando, o `null` si este navegador no lo sabe. */
+function firmaDe(clienteId: string): string | null {
+  try {
+    return localStorage.getItem(claveDeFirma(clienteId));
+  } catch {
+    // Sin almacenamiento —modo privado, permisos— se pregunta cada vez.
+    return null;
+  }
+}
 
 /** Un identificador para un cambio recién escrito. */
 function nuevoId(): string {
@@ -73,7 +85,15 @@ export function Portal({ datos }: { datos: PortalDeCliente }) {
     return (
       <div className="flex min-h-screen items-center justify-center p-8">
         <div className="max-w-md">
-          <h1 className="text-titulo font-extrabold tracking-tight">
+          {/* **Con la marca y con su nombre.** Esta pantalla salía pelada: un
+              título gris en el medio de una página en blanco, sin decir de
+              quién es la herramienta ni a quién le está hablando. Quien entra
+              por un link y encuentra eso no sabe si le erró a la dirección. */}
+          <Marca className="mb-8" />
+          <p className="font-mono text-micro font-bold uppercase tracking-widest text-apagado">
+            {datos.cliente.nombre}
+          </p>
+          <h1 className="mt-2 text-titulo font-extrabold tracking-tight">
             Todavía no hay nada para revisar
           </h1>
           {/*
@@ -86,6 +106,13 @@ export function Portal({ datos }: { datos: PortalDeCliente }) {
           */}
           <p className="mt-3 text-normal text-tinta-suave">
             Cuando la agencia te entregue algo, aparece acá.
+          </p>
+          {/* Sin carpetas no hay conversación que abrir —el hilo cuelga de
+              una carpeta— así que lo único honesto es decir por dónde
+              preguntar. */}
+          <p className="mt-6 text-menudo text-apagado">
+            Si esperabas ver algo acá, escribile al equipo por donde le
+            escribís siempre.
           </p>
         </div>
       </div>
@@ -158,6 +185,18 @@ function Revision({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firma]);
   const [abierta, setAbierta] = useState<string | null>(null);
+  /**
+   * Con qué nombre viene aprobando, según este navegador.
+   *
+   * Se lee al abrir una pieza y no al dibujar la pantalla: `localStorage` no
+   * existe en el servidor, y esta pantalla se dibuja primero allá.
+   */
+  const [firmaGuardada, setFirmaGuardada] = useState<string | null>(null);
+
+  function abrirPieza(id: string) {
+    setFirmaGuardada(firmaDe(datos.cliente.id));
+    setAbierta(id);
+  }
   const [ampliada, setAmpliada] = useState<Lamina[] | null>(null);
   const [confirmando, setConfirmando] = useState<null | { soloEsta?: string }>(null);
   /** Qué pieza está por aprobarse: se pregunta quién aprueba antes de hacerlo. */
@@ -305,14 +344,19 @@ function Revision({
    * **No hay respuesta automática, ni la va a haber.** La aplicación anota lo
    * que se dijo; contestar es de una persona.
    */
-  async function enviarMensaje(texto: string) {
+  async function enviarMensaje(texto: string): Promise<boolean> {
     setEnviandoMensaje(true);
     try {
       const r = await escribirComoCliente(carpeta.id, texto);
-      if (r.ok) setMensajes(r.mensajes);
-      else setRechazo(r.motivo);
+      if (r.ok) {
+        setMensajes(r.mensajes);
+        return true;
+      }
+      setRechazo(r.motivo);
+      return false;
     } catch {
       setRechazo("No pudimos mandar el mensaje. Probá de nuevo.");
+      return false;
     } finally {
       setEnviandoMensaje(false);
     }
@@ -383,8 +427,14 @@ function Revision({
         );
         setAbierta(null);
         setRechazo(null);
+        // Lo que se dice es lo que pasó. Un «ya está» sobre algo que no salió
+        // deja al cliente esperando una respuesta que nadie le debe.
         setAviso(
-          soloEsta ? "Enviamos esa pieza al equipo." : "Enviamos la revisión al equipo."
+          r.cuantas === 0
+            ? "No había nada para enviar."
+            : soloEsta
+              ? "Enviamos esa pieza al equipo."
+              : "Enviamos la revisión al equipo."
         );
       } else {
         setRechazo(r.motivo);
@@ -400,11 +450,47 @@ function Revision({
   const sinDecidir = piezas.filter(
     (p) => !p.enviada && (p.estado === "entregada" || p.estado === "en_revision")
   );
+  /**
+   * Lo que de verdad viaja al equipo: lo que tiene cambios escritos sin mandar.
+   *
+   * **Estaban también las aprobadas, y aprobar es inmediato.** Una pieza que el
+   * cliente aprobó queda `final` y con `enviada` en falso —nunca formó parte de
+   * una revisión— así que contaba acá, y el efecto era el peor posible: con
+   * todo aprobado, el cartel de la barra decía «Nada pendiente de tu lado» y
+   * justo abajo el botón principal seguía verde y encendido; el cliente lo
+   * tocaba, el cartel de confirmación le listaba la pieza **aprobada** como si
+   * fuera a viajar, y al confirmar la aplicación contestaba «Enviamos la
+   * revisión al equipo» sin haber mandado nada ni avisado a nadie.
+   *
+   * O sea: el cliente se quedaba esperando una respuesta a algo que nunca
+   * salió, y del otro lado nadie se enteraba de que había alguien esperando.
+   */
   const paraEnviar = piezas.filter(
-    (p) => !p.enviada && (p.estado === "final" || p.estado === "cambios_marcados")
+    // **Y con algo escrito.** Una pieza puede quedar en `cambios_marcados` con
+    // la lista vacía —se escribe un cambio y se borra—, y desde la barra se
+    // podía mandar igual: al equipo le llegaba «pidió cambios» sin un solo
+    // cambio, y al cliente se le gastaba una vuelta de las incluidas.
+    (p) => !p.enviada && p.estado === "cambios_marcados" && p.cambios.length > 0
   );
   const aprobadas = piezas.filter((p) => p.estado === "final");
   const conFecha = piezas.filter((p) => p.publicaEl);
+
+  /**
+   * Cuántas piezas de una carpeta esperan al cliente.
+   *
+   * Es la misma pregunta que contesta `enTuCancha` para la carpeta abierta,
+   * pero para cualquiera de la lista: la barra necesita saberlo de todas sin
+   * abrirlas.
+   */
+  function pendientesDe(c: CarpetaDeTrabajo): number {
+    return c.piezas.filter(
+      (p) =>
+        !p.enviada &&
+        (p.estado === "entregada" ||
+          p.estado === "en_revision" ||
+          p.estado === "cambios_marcados")
+    ).length;
+  }
 
   // **En qué cancha está cada pieza, dicho con todas las letras.** La
   // pregunta que el cliente se hace al entrar es «¿tengo que hacer algo?», y
@@ -454,7 +540,12 @@ function Revision({
     },
   ];
 
-  const resueltas = piezas.length - sinDecidir.length;
+  // **Resuelta es lo que ya no espera nada suyo.** Se contaba como resuelta
+  // toda pieza que no estuviera «entregada» ni «en revisión», así que una con
+  // cambios marcados sin enviar —que sí espera al cliente, es justo lo que
+  // tiene que mandar— sumaba al avance: la barra decía «8 de 8 resueltas»
+  // arriba de un cartel que decía «3 piezas esperan tu decisión».
+  const resueltas = piezas.length - enTuCancha.length;
   const avance = piezas.length === 0 ? 0 : Math.round((resueltas / piezas.length) * 100);
 
   const enCalendario = (p: EnPantalla): PiezaEnCalendario => ({
@@ -474,39 +565,93 @@ function Revision({
   // El calendario existe solo si la agencia marcó esta carpeta como calendario.
   // Si no la marcó, hay lista y nada más.
   const hayCalendario = carpeta.vista === "calendario" && conFecha.length > 0;
-  const nombreDelMes = hayCalendario
-    ? new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(
-        conFecha[0].publicaEl!
-      )
-    : "";
+
+  /**
+   * En qué mes arranca el calendario.
+   *
+   * **El más temprano, no el que Drive devolvió primero.** Se tomaba
+   * `conFecha[0]`, o sea el orden de la carpeta: con una pieza de noviembre
+   * antes que las de septiembre, el cliente abría su link y veía noviembre
+   * vacío, y lo que tenía que mirar parecía no existir.
+   */
+  const primerMes = useMemo(() => {
+    if (conFecha.length === 0) return new Date();
+    return new Date(Math.min(...conFecha.map((p) => p.publicaEl!.getTime())));
+  }, [conFecha]);
+
+  // **Y se puede cambiar de mes.** El mes era una constante: una campaña que
+  // cruza de septiembre a octubre tenía la mitad de las piezas en una pantalla
+  // a la que no se llegaba desde ningún lado.
+  const [mesVisible, setMesVisible] = useState<Date | null>(null);
+  const mes = mesVisible ?? primerMes;
+  const nombreDelMes = hayCalendario ? enPalabrasElMes(mes) : "";
+
+  const moverMes = (paso: -1 | 1) =>
+    setMesVisible(new Date(mes.getFullYear(), mes.getMonth() + paso, 1, 12));
+
+  /** Piezas fechadas fuera del mes que se está mirando. */
+  const enOtrosMeses = conFecha.filter(
+    (p) =>
+      p.publicaEl!.getFullYear() !== mes.getFullYear() ||
+      p.publicaEl!.getMonth() !== mes.getMonth()
+  );
 
   const abiertaIndice = piezas.findIndex((p) => p.id === abierta);
   const piezaAbierta = abiertaIndice >= 0 ? piezas[abiertaIndice] : null;
 
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
+    /*
+      **En el teléfono, el trabajo va primero.**
 
-      {/* ==================== Todo lo que no es el trabajo ================= */}
+      La barra oscura era lo primero de la página y medía más de una pantalla
+      entera: el logo, el nombre del cliente en tipografía grande, un botón a
+      Drive, la lista de carpetas, el cartel de estado y tres botones. El
+      cliente abría el link que le mandaron y **no veía ni una pieza** hasta
+      pasar pantalla y media de adornos —justo lo único que vino a mirar—.
+
+      Ahora son tres bloques que se ordenan distinto según el ancho:
+
+        1. Quién y dónde: arriba en las dos.
+        2. El trabajo: en el teléfono, apenas abajo del encabezado.
+        3. Las acciones: en el teléfono, **pegadas abajo**, al alcance del
+           pulgar y sin empujar nada; en pantalla grande, al pie de la columna,
+           como estaban.
+
+      En pantalla grande es una grilla de dos columnas y dos filas: los bloques
+      1 y 3 se apilan en la izquierda y el trabajo ocupa la derecha entera. Se
+      ve igual que antes.
+    */
+    <div
+      className="flex min-h-screen flex-col
+                 lg:grid lg:grid-cols-[20rem_1fr] lg:grid-rows-[1fr_auto] lg:items-stretch"
+    >
+
+      {/* ================== 1. Quién sos y dónde estás parado ============== */}
       <aside
-        className="flex w-full flex-col gap-6 bg-tinta p-6 text-lienzo
-                   lg:sticky lg:top-0 lg:h-screen lg:w-80 lg:shrink-0 lg:overflow-y-auto"
+        className="order-1 flex w-full flex-col gap-4 bg-tinta px-6 pb-4 pt-6 text-lienzo
+                   lg:col-start-1 lg:row-start-1 lg:gap-6 lg:overflow-y-auto lg:p-6"
       >
         <Marca tono="sobre_oscuro" />
 
         <div>
-          <h1 className="text-grande font-extrabold leading-none tracking-tighter">
+          {/* Más chico en el teléfono: el nombre de un cliente largo se comía
+              dos renglones de tipografía enorme antes de llegar al trabajo. */}
+          <h1 className="text-titulo font-extrabold leading-none tracking-tighter lg:text-grande">
             {datos.cliente.nombre}
           </h1>
-          {/* Debajo del nombre, la puerta a la carpeta entera del cliente en
-              Drive. Ocupa el lugar donde antes había un rótulo que no servía
-              para nada. */}
+          {/* La puerta a la carpeta entera del cliente en Drive. **En el
+              teléfono no va**: la misma puerta está veinte píxeles más abajo,
+              al lado del nombre de la carpeta, con el mismo texto. Dos botones
+              iguales que llevan a lugares distintos confunden más de lo que
+              ayudan, y acá el espacio se paga caro. */}
           {datos.cliente.enlaceDrive && (
             <a
               href={datos.cliente.enlaceDrive}
               target="_blank"
               rel="noreferrer noopener"
-              className="mt-3 inline-flex min-h-toque items-center gap-2 rounded-full border-2 border-lienzo/35 px-5
-                         text-menudo font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
+              className="mt-3 hidden min-h-toque items-center gap-2 rounded-full border-2 border-lienzo/35 px-5
+                         text-menudo font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10
+                         lg:inline-flex"
             >
               <IconoDrive />
               Ver carpeta en Drive
@@ -524,8 +669,17 @@ function Revision({
           nombre del cliente, no el del trabajo—, y cuando apareciera la segunda
           carpeta le cambiaba la pantalla de lugar.
         */}
+        {/* **Con una sola carpeta, en el teléfono no se dibuja.** El argumento
+            para mostrarla siempre era bueno en pantalla grande —saber en cuál
+            estás parado— pero en el teléfono el nombre de la carpeta es el
+            título grande que viene justo abajo: la lista de un renglón repite
+            lo mismo y empuja el trabajo fuera de la primera pantalla. Con dos
+            o más sí hace falta, porque ahí hay algo que elegir. */}
         {datos.carpetas.length > 0 && (
-          <nav aria-label="Carpetas">
+          <nav
+            aria-label="Carpetas"
+            className={datos.carpetas.length === 1 ? "hidden lg:block" : undefined}
+          >
             <p className="font-mono text-micro font-bold uppercase tracking-widest text-lienzo/45">
               Carpetas
             </p>
@@ -551,13 +705,21 @@ function Revision({
                                   }`}
                     >
                       <span className="min-w-0 truncate">{c.nombre}</span>
-                      <span
-                        className={`shrink-0 text-micro font-extrabold ${
-                          actual ? "text-tinta/50" : "text-lienzo/40"
-                        }`}
-                      >
-                        {c.piezas.length}
-                      </span>
+                      {/* **Cuántas esperan al cliente, no cuántas hay.** Era el
+                          total, así que una carpeta con todo aprobado seguía
+                          mostrando «8» al lado del nombre: el número más
+                          parecido a una notificación de la pantalla contaba
+                          cosas que no hay que hacer. Sin nada pendiente, va sin
+                          número. */}
+                      {pendientesDe(c) > 0 && (
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 font-mono text-micro font-extrabold ${
+                            actual ? "bg-tinta text-lienzo" : "bg-lima text-tinta"
+                          }`}
+                        >
+                          {pendientesDe(c)}
+                        </span>
+                      )}
                     </button>
                   </li>
                 );
@@ -566,13 +728,29 @@ function Revision({
           </nav>
         )}
 
-        {/* Los botones van al fondo: son el final del recorrido, no el
-            principio. `mt-auto` los empuja hasta abajo de la columna. */}
-        <div className="mt-auto flex flex-col gap-2">
+      </aside>
+
+      {/* ==================== 3. Lo que se puede hacer ===================== */}
+      {/*
+        Al pie de la columna en pantalla grande —son el final del recorrido, no
+        el principio— y **pegadas abajo en el teléfono**, que es donde está el
+        pulgar y donde no le roban lugar a lo que hay que mirar.
+      */}
+      <div
+        className="order-3 sticky bottom-0 z-10 flex flex-col gap-2 border-t border-lienzo/15
+                   bg-tinta px-6 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 text-lienzo
+                   lg:static lg:col-start-1 lg:row-start-2 lg:border-t-0 lg:p-6 lg:pt-0"
+      >
           {/* Cuántas esperan al cliente, en el color de la marca. Es la
-              respuesta a lo primero que se pregunta al entrar. */}
+              respuesta a lo primero que se pregunta al entrar.
+
+              **En el teléfono va arriba, con el trabajo.** Esta barra está
+              pegada abajo, donde está el pulgar, y ahí solo tiene que haber
+              lo que se puede hacer: el cartel es información, no una acción, y
+              entre él y los tres botones se comían casi un tercio de la
+              pantalla antes de mostrar una sola pieza. */}
           <p
-            className={`mb-2 rounded-campo px-4 py-3 ${
+            className={`mb-2 hidden rounded-campo px-4 py-3 lg:block ${
               enTuCancha.length > 0 ? "bg-lima text-tinta" : "bg-lienzo/10 text-lienzo/70"
             }`}
           >
@@ -591,24 +769,40 @@ function Revision({
               <span className="text-menudo font-semibold">Nada pendiente de tu lado.</span>
             )}
           </p>
+        {/* **Aparece cuando hay algo para mandar, y si no, no está.** Estaba
+            siempre, apagado: el elemento más grande y más verde de la pantalla,
+            inservible, justo debajo de un cartel que dice «Nada pendiente de tu
+            lado». Un botón principal que no se puede apretar no es una ayuda,
+            es una pregunta sin respuesta —«¿me falta algo?»— y encima corre
+            hacia abajo lo que sí hay que mirar. */}
+        {paraEnviar.length > 0 && (
           <Boton
             variante="principal"
             ancho
             onClick={() => setConfirmando({})}
-            disabled={paraEnviar.length === 0 || ocupada !== null}
+            disabled={ocupada !== null}
           >
             <IconoEnviar />
             Enviar revisión
           </Boton>
+        )}
 
+          {/* Los dos de apoyo, en un renglón compacto abajo: en la columna de
+              pantalla grande siguen uno debajo del otro. */}
+          <div className="flex gap-2 lg:flex-col">
           <button
             type="button"
             onClick={abrirElChat}
-            className="inline-flex min-h-toque items-center justify-center gap-2 rounded-full border-2 border-lienzo/35 px-5
-                       text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10"
+            className="inline-flex min-h-toque min-w-0 flex-1 items-center justify-center gap-2 rounded-full border-2
+                       border-lienzo/35 px-4 text-normal font-bold tracking-tight text-lienzo
+                       transition-colors hover:bg-lienzo/10 lg:px-5"
           >
             <IconoEditar />
-            Hablar con el equipo
+            {/* En el teléfono, la palabra sola: dos botones de apoyo en un
+                renglón de 375 píxeles no entran con la frase entera. */}
+            <span className="truncate">
+              Hablar<span className="hidden sm:inline"> con el equipo</span>
+            </span>
             {/* Lo que falta leer, no cuántos hay. Un número que dice «14» para
                 siempre no dice nada; el que importa baja a cero al abrir. */}
             {sinLeer > 0 && (
@@ -622,28 +816,35 @@ function Revision({
               botón gris sin explicación se lee como una falla de la página: el
               cliente prueba, no pasa nada, y no tiene forma de saber si le
               falta hacer algo o si está roto. */}
-          <button
-            type="button"
-            onClick={() => setDescargas(true)}
-            disabled={aprobadas.length === 0}
-            title={
-              aprobadas.length === 0
-                ? "Se habilita cuando apruebes algo: se descarga lo aprobado."
-                : undefined
-            }
-            className="inline-flex min-h-toque items-center justify-center gap-2 rounded-full border-2 border-lienzo/35 px-5
-                       text-normal font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10
-                       disabled:opacity-35"
-          >
-            <IconoDescargar />
-            Descargar archivos
-          </button>
-        </div>
-
-      </aside>
+          {/* **No está hasta que hay algo para descargar.** Estaba siempre,
+              apagado, con el motivo escondido en un `title` que en el teléfono
+              no existe: el cliente tocaba, no pasaba nada, y no tenía forma de
+              saber si le faltaba hacer algo o si la página estaba rota. Es el
+              mismo razonamiento que ya se había aplicado seis líneas más
+              arriba con «Enviar revisión». */}
+          {aprobadas.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setDescargas(true)}
+              className="inline-flex min-h-toque min-w-0 flex-1 items-center justify-center gap-2 rounded-full border-2
+                         border-lienzo/35 px-4 text-normal font-bold tracking-tight text-lienzo
+                         transition-colors hover:bg-lienzo/10 lg:px-5"
+            >
+              <IconoDescargar />
+              <span className="truncate">
+                Descargar<span className="hidden sm:inline"> lo aprobado</span>
+              </span>
+            </button>
+          )}
+          </div>
+      </div>
 
       {/* ============================ El trabajo ========================== */}
-      <main className="min-w-0 flex-1 px-5 py-8 sm:px-8">
+      {/* ========================= 2. El trabajo ========================== */}
+      <main
+        className="order-2 min-w-0 flex-1 px-5 py-8 sm:px-8
+                   lg:col-start-2 lg:row-span-2 lg:row-start-1"
+      >
         {aviso && (
           <p className="mb-5 border-l-4 border-acento bg-acento-tenue px-5 py-4 text-normal font-semibold text-acento">
             {aviso}
@@ -652,6 +853,21 @@ function Revision({
         {rechazo && (
           <p className="mb-5 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal font-semibold text-espera">
             {rechazo}
+          </p>
+        )}
+
+        {/* Lo que espera al cliente, arriba de lo que tiene que mirar. En
+            pantalla grande vive en la columna de la izquierda. */}
+        {enTuCancha.length > 0 && (
+          <p className="mb-5 rounded-campo bg-lima px-4 py-3 text-tinta lg:hidden">
+            <span className="cifras text-titulo font-extrabold leading-none">
+              {enTuCancha.length}
+            </span>{" "}
+            <span className="text-menudo font-bold">
+              {enTuCancha.length === 1
+                ? "pieza espera tu decisión"
+                : "piezas esperan tu decisión"}
+            </span>
           </p>
         )}
 
@@ -666,7 +882,10 @@ function Revision({
             adentro, igual que en las pantallas de gestión. */}
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-b-2 border-tinta pb-6">
           <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
-            <h2 className="min-w-0 text-grande font-extrabold leading-none tracking-tighter">
+            {/* Más chico en el teléfono, por la misma razón que el nombre del
+                cliente: cada renglón de tipografía enorme acá abajo es una
+                pieza menos que se ve al abrir el link. */}
+            <h2 className="min-w-0 text-titulo font-extrabold leading-none tracking-tighter lg:text-grande">
               {carpeta.nombre}
             </h2>
             {carpeta.enlaceDrive && (
@@ -729,21 +948,49 @@ function Revision({
             </div>
 
             {vista !== "lista" && (
-              <p className="text-titulo font-extrabold capitalize tracking-tight">
-                {nombreDelMes}
-              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => moverMes(-1)}
+                  aria-label="Mes anterior"
+                  className="grid h-11 w-11 place-items-center rounded-full border-2 border-tinta text-tinta transition-colors hover:bg-hueco"
+                >
+                  <IconoFlecha className="rotate-180" />
+                </button>
+                <p className="min-w-44 text-center text-titulo font-extrabold capitalize tracking-tight">
+                  {nombreDelMes}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => moverMes(1)}
+                  aria-label="Mes siguiente"
+                  className="grid h-11 w-11 place-items-center rounded-full border-2 border-tinta text-tinta transition-colors hover:bg-hueco"
+                >
+                  <IconoFlecha />
+                </button>
+              </div>
             )}
           </div>
         )}
 
         <div className="mt-5">
           {hayCalendario && vista !== "lista" ? (
-            <Calendario
-              modo={vista}
-              mes={conFecha[0].publicaEl!}
-              piezas={conFecha.map(enCalendario)}
-              onAbrir={setAbierta}
-            />
+            <>
+              <Calendario
+                modo={vista}
+                mes={mes}
+                piezas={conFecha.map(enCalendario)}
+                onAbrir={abrirPieza}
+              />
+              {enOtrosMeses.length > 0 && (
+                <p className="mt-3 text-menudo text-apagado">
+                  {enOtrosMeses.length === 1
+                    ? "Hay 1 pieza"
+                    : `Hay ${enOtrosMeses.length} piezas`}{" "}
+                  en otros meses.
+                </p>
+              )}
+            </>
           ) : (
             <div className="flex flex-col gap-8">
               {grupos.map(
@@ -768,7 +1015,7 @@ function Revision({
                       resuelve el conflicto como quiere. */}
                   <button
                     type="button"
-                    onClick={() => setAbierta(pieza.id)}
+                    onClick={() => abrirPieza(pieza.id)}
                     className="flex min-w-0 flex-1 items-center gap-4 py-4 text-left transition-colors hover:bg-hueco/60"
                   >
                     <span className="relative h-16 w-16 shrink-0 overflow-hidden rounded-campo bg-tinta">
@@ -795,14 +1042,13 @@ function Revision({
                           aprobada={pieza.estado === "final"}
                           compacto
                         />
-                        {pieza.versiones.length > 1 && (
-                          <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
-                            {pieza.versiones.length} vueltas
-                          </span>
-                        )}
+                        {/* Decía «V2» en la pastilla y «2 vueltas» al lado: el
+                            mismo dato en dos vocabularios, en el mismo
+                            renglón. Lo que aporta —que hubo versiones
+                            anteriores— ya lo dice el número de la pastilla. */}
                         {pieza.publicaEl && (
                           <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
-                            sale el {fechaCorta(pieza.publicaEl)}
+                            sale el {enPalabrasElDiaDe(pieza.publicaEl)}
                           </span>
                         )}
                         {pieza.enviada && (
@@ -869,6 +1115,12 @@ function Revision({
       {/* ============================ Ventanas =========================== */}
       {piezaAbierta && (
         <RevisarPieza
+          // **La ventana se rehace entera al cambiar de pieza.** Sin esto
+          // quedaba montada la misma, con el cambio a medio escribir adentro:
+          // el cliente escribía un pedido en la pieza A, tocaba «siguiente» y
+          // «guardar», y el texto se guardaba en la B. También arrastraba el
+          // comparador abierto sobre una pieza que ya no era la que se miraba.
+          key={piezaAbierta.id}
           pieza={piezaAbierta}
           posicion={{ actual: abiertaIndice + 1, total: piezas.length }}
           onIr={(paso) => {
@@ -876,8 +1128,15 @@ function Revision({
             setAbierta(piezas[siguiente].id);
           }}
           onCerrar={() => setAbierta(null)}
+          // **La firma se pregunta una vez por navegador.** Si ya está
+          // guardada, `RevisarPieza` la manda en el evento y se aprueba de
+          // una: la segunda ventana venía con el nombre ya puesto y un botón
+          // «Sí, aprobar», o sea una pregunta contestada de antemano que hay
+          // que volver a contestar por cada pieza.
+          firma={firmaGuardada}
+          onCambiarFirma={() => setAprobando(piezaAbierta.id)}
           onEvento={(evento) =>
-            evento.tipo === "aprobar"
+            evento.tipo === "aprobar" && evento.por === "cliente" && firmaGuardada === null
               ? setAprobando(piezaAbierta.id)
               : mover(piezaAbierta.id, evento)
           }
@@ -912,6 +1171,7 @@ function Revision({
           onAprobar={(nombre) => {
             const id = aprobando;
             setAprobando(null);
+            setFirmaGuardada(nombre);
             mover(id, { tipo: "aprobar", por: nombre });
           }}
         />
@@ -1047,11 +1307,41 @@ function Descargas({
   piezas: Array<{ id: string; nombre: string; driveFileId: string }>;
   onCerrar: () => void;
 }) {
+  /**
+   * Bajarlos todos, uno atrás de otro.
+   *
+   * **Con doce aprobadas eran doce viajes.** Cada una con su botón, y el
+   * archivo cae donde el navegador baja las cosas: no hay nada que elegir por
+   * archivo, así que la lista era doce veces el mismo gesto. Un zip necesita
+   * una ruta que lo arme —trabajo aparte—; disparar las descargas en serie
+   * desde acá no necesita nada y resuelve el caso.
+   */
+  function bajarTodo() {
+    piezas.forEach((pieza, i) => {
+      setTimeout(() => {
+        const a = document.createElement("a");
+        a.href = `/api/archivo/${pieza.driveFileId}`;
+        a.download = "";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }, i * 300);
+    });
+  }
+
   return (
     <Ventana
       capa="z-50"
       titulo="Descargar archivos"
       onCerrar={onCerrar}
+      pie={
+        piezas.length > 1 ? (
+          <Boton ancho onClick={bajarTodo}>
+            <IconoDescargar />
+            Descargar {piezas.length === 1 ? "el archivo" : `los ${piezas.length}`}
+          </Boton>
+        ) : undefined
+      }
     >
       <ul className="flex flex-col divide-y divide-linea">
         {piezas.map((pieza) => (
@@ -1124,7 +1414,14 @@ function Confirmacion({
       <div className="flex flex-col gap-7">
         {aprobadas.length > 0 && (
           <section>
-            <h3 className="text-micro font-extrabold uppercase tracking-widest text-listo">
+            {/* **El lima va de fondo, nunca de letra.** Es lo que dice la
+                propia paleta —«siempre con tinta encima, nunca con blanco»— y
+                acá estaba escrito como color de texto sobre el blanco del
+                cartel: 1,16 de contraste, o sea ilegible. Y es un cartel que ve
+                el cliente, justo cuando está por mandarle la revisión al
+                equipo. El hermano de al lado, «Con cambios», usa el violeta,
+                que sobre blanco sí se lee. */}
+            <h3 className="text-micro font-extrabold uppercase tracking-widest text-tinta-suave">
               Aprobadas · {aprobadas.length}
             </h3>
             <ul className="mt-3 flex flex-col gap-1.5">

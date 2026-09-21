@@ -43,7 +43,32 @@ export type VersionDePieza = {
   enlaceDrive?: string;
 };
 
-export type PiezaDeCarpeta = EstadoDePieza & {
+/**
+ * Una pieza, **como la ve el cliente**.
+ *
+ * **Los campos se eligen uno por uno, y no es manía de orden.** Era
+ * `EstadoDePieza & {...}`, y lo guardado se copiaba entero con un `...guardado`:
+ * adentro venía `historia`, que lleva el **nombre propio** de quien del equipo
+ * entregó, reabrió o habilitó cada cosa, y `detalle`, que guarda el motivo
+ * crudo de un error de Drive. `Portal` es una pantalla del navegador, así que
+ * todo lo que entra acá viaja en el HTML que se sirve por el link público,
+ * dibujado o no —y esto no se dibujaba en ninguna parte—. La pantalla del
+ * token ya se negaba a mostrarle esos textos al cliente por este mismo motivo.
+ *
+ * Elegidos a mano, agregarle un campo a lo guardado no lo publica solo. Hay una
+ * prueba que lo verifica, porque esta es la clase de cosa que vuelve sola.
+ */
+export type PiezaDeCarpeta = {
+  /** En qué anda: es lo que decide qué puede hacer el cliente con ella. */
+  estado: EstadoDePieza["estado"];
+  /** En qué vuelta va. */
+  ronda: number;
+  /** Rondas habilitadas por encima de las incluidas. */
+  rondasExtra: number;
+  /** Lo que pidió cambiar en esta vuelta. */
+  cambios: EstadoDePieza["cambios"];
+  /** Si ya mandó la revisión: lo escrito queda firme. */
+  enviada: boolean;
   id: string;
   nombre: string;
   driveFileId: string;
@@ -273,8 +298,17 @@ export async function portalDelCliente(
       //     pantalla. La carpeta de trabajo muestra lo que falta.
       //
       // En «Entregas finales» no se filtra nada: lo que está ahí, está.
+      //   - **Pero lo que ya se entregó alguna vez sí se muestra**, aunque
+      //     haya vuelto a `en_curso`. Una pieza que el cliente devolvió con
+      //     cambios queda ahí mientras el equipo la rehace, y con el filtro
+      //     puesto desaparecía del portal al recargar: el cliente mandaba ocho
+      //     pedidos de cambio y la pantalla se le vaciaba, sin una palabra. El
+      //     grupo «Con el equipo» existe exactamente para eso, con su texto ya
+      //     escrito: «Ya las tiene la agencia. No hay nada que hacer de tu
+      //     lado.»
       const seMuestra = (p: EstadoDePieza) =>
-        entregas || (p.estado !== "en_curso" && !p.mudada);
+        entregas ||
+        ((p.estado !== "en_curso" || p.entregadaEl !== undefined) && !p.mudada);
 
       const aLaVista = agrupadas
         .map((pieza, i) => ({ pieza, suya: identidades[i] }))
@@ -309,7 +343,9 @@ export async function portalDelCliente(
           const guardado = estados[suya];
 
           return {
-            ...guardado,
+            estado: guardado.estado,
+            rondasExtra: guardado.rondasExtra,
+            enviada: guardado.enviada,
             // **Una pieza aprobada no tiene cambios a medio escribir.** Aprobar
             // los borra, pero hay piezas guardadas de antes de que lo hiciera,
             // y el portal mostraba «Aprobada, sale tal cual» con una lista de

@@ -39,11 +39,11 @@ import {
   IconoMas,
 } from "@/ui/Icono";
 import { useTrampaDeFoco } from "@/ui/useTrampaDeFoco";
-import { fechaCorta } from "@/lib/fechas";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 import { Miniatura } from "@/ui/Miniatura";
 import type { VersionDePieza } from "@/portal/datos/cliente";
 import type { Cambio } from "@/lib/piezas";
+import { enPalabrasElDiaDe } from "@/dominio/tiempo";
 
 // El tipo vive en `lib/piezas` porque también lo usa el servidor: es lo que se
 // guarda, no solo lo que se dibuja.
@@ -80,6 +80,18 @@ type Props = {
   onAmpliar: (laminas: Lamina[]) => void;
   /** Lo que contestó el servidor cuando dijo que no. Se muestra acá adentro. */
   rechazo?: string | null;
+  /**
+   * Con qué nombre viene aprobando, si este navegador ya lo sabe.
+   *
+   * **Aprobar pedía dos ventanas siempre.** La primera vez tiene sentido: una
+   * aprobación es una decisión con nombre y hay que preguntarlo. De la segunda
+   * en adelante, la ventana venía con el nombre ya puesto y un botón «Sí,
+   * aprobar»: una pregunta que ya está contestada, y que hay que volver a
+   * contestar por cada pieza. `null` es «todavía no lo sabemos».
+   */
+  firma?: string | null;
+  /** Abrir la ventana para cambiar con qué nombre se aprueba. */
+  onCambiarFirma?: () => void;
 };
 
 export function RevisarPieza({
@@ -94,6 +106,8 @@ export function RevisarPieza({
   onEnviarEsta,
   onAmpliar,
   rechazo,
+  firma = null,
+  onCambiarFirma,
 }: Props) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
   const [comparando, setComparando] = useState(false);
@@ -126,7 +140,7 @@ export function RevisarPieza({
     return {
       numero: v.numero,
       src: urlDeMiniatura(v.driveFileId, 1200, v.modificado),
-      pie: `Entregada el ${fechaCorta(v.entregadaEl)}`,
+      pie: `Entregada el ${enPalabrasElDiaDe(v.entregadaEl)}`,
     };
   };
 
@@ -172,7 +186,7 @@ export function RevisarPieza({
         role="dialog"
         aria-modal="true"
         aria-label={pieza.nombre}
-        className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[94vh] sm:max-w-6xl sm:rounded-tarjeta"
+        className="flex w-full flex-col overflow-hidden bg-papel sm:max-h-[88vh] sm:max-w-6xl sm:rounded-tarjeta"
       >
         {/* La banda de color dice de quién es la pieza, cómo se llama y en qué
             anda, sin que haya que buscarlo. */}
@@ -180,7 +194,7 @@ export function RevisarPieza({
           rotulo={
             <>
               Pieza {posicion.actual} de {posicion.total}
-              {pieza.publicaEl && ` · sale el ${fechaCorta(pieza.publicaEl)}`}
+              {pieza.publicaEl && ` · sale el ${enPalabrasElDiaDe(pieza.publicaEl)}`}
             </>
           }
           titulo={pieza.nombre}
@@ -195,20 +209,21 @@ export function RevisarPieza({
                   pieza.estado === "final"
                 )}
               </span>
-              <ControlDeVentana
-                onClick={() => onIr(-1)}
-                disabled={posicion.total < 2}
-                aria-label="Pieza anterior"
-              >
-                <IconoFlecha className="rotate-180" />
-              </ControlDeVentana>
-              <ControlDeVentana
-                onClick={() => onIr(1)}
-                disabled={posicion.total < 2}
-                aria-label="Pieza siguiente"
-              >
-                <IconoFlecha />
-              </ControlDeVentana>
+              {/* **Con una sola pieza no están, no quedan apagadas.** En la
+                  misma ventana del lado de la agencia desaparecen, y acá se
+                  dibujaban grises: dos botones que no se pueden apretar
+                  pegados a la cruz, en el borde, justo donde en el teléfono
+                  hay que acertarle a la cruz. */}
+              {posicion.total > 1 && (
+                <>
+                  <ControlDeVentana onClick={() => onIr(-1)} aria-label="Pieza anterior">
+                    <IconoFlecha className="rotate-180" />
+                  </ControlDeVentana>
+                  <ControlDeVentana onClick={() => onIr(1)} aria-label="Pieza siguiente">
+                    <IconoFlecha />
+                  </ControlDeVentana>
+                </>
+              )}
             </>
           }
         />
@@ -368,15 +383,32 @@ export function RevisarPieza({
                                     setBorrador(cambio.texto);
                                   }}
                                   aria-label={`Editar el cambio ${i + 1}`}
-                                  className="rounded-full grid h-8 w-8 place-items-center text-apagado transition-colors hover:bg-hueco hover:text-tinta"
+                                  className="rounded-full grid h-11 w-11 place-items-center text-apagado transition-colors hover:bg-hueco hover:text-tinta"
                                 >
                                   <IconoEditar />
                                 </button>
+                                {/* **Si es el último, pregunta.** Medían 32
+                                    píxeles y estaban pegados: errarle al lápiz
+                                    era borrar lo escrito, sin vuelta atrás. Y
+                                    borrar el último no borra un renglón:
+                                    devuelve la pieza a «sin decidir» y se
+                                    lleva la sección entera de la pantalla, que
+                                    es un cambio que nadie pidió. */}
                                 <button
                                   type="button"
-                                  onClick={() => onBorrarCambio(cambio.id)}
+                                  onClick={() => {
+                                    if (
+                                      pieza.cambios.length === 1 &&
+                                      !confirm(
+                                        "¿Borrás el único cambio? La pieza vuelve a quedar sin decidir."
+                                      )
+                                    ) {
+                                      return;
+                                    }
+                                    onBorrarCambio(cambio.id);
+                                  }}
                                   aria-label={`Borrar el cambio ${i + 1}`}
-                                  className="rounded-full grid h-8 w-8 place-items-center text-apagado transition-colors hover:bg-alerta-tenue hover:text-alerta"
+                                  className="rounded-full grid h-11 w-11 place-items-center text-apagado transition-colors hover:bg-alerta-tenue hover:text-alerta"
                                 >
                                   <IconoBorrar />
                                 </button>
@@ -489,22 +521,55 @@ export function RevisarPieza({
                       Pedir cambios
                     </Boton>
                   ) : (
-                    <Boton
-                      variante="contorno"
-                      onClick={() => onEvento({ tipo: "pedir_revision_extra" })}
-                      title="Se lo pedimos al equipo. Te avisamos cuando la habiliten."
-                    >
-                      <IconoEditar />
-                      Pedir una revisión adicional
-                    </Boton>
+                    <span className="flex flex-col items-center gap-0.5">
+                      <Boton
+                        variante="contorno"
+                        onClick={() => onEvento({ tipo: "pedir_revision_extra" })}
+                      >
+                        <IconoEditar />
+                        Pedir una revisión adicional
+                      </Boton>
+                      {/* En un renglón y no en un `title`: en el teléfono no
+                          existe, y es justo la frase que contesta «¿y ahora
+                          qué pasa?». */}
+                      <span className="text-micro text-apagado">
+                        Se lo pedimos al equipo; te avisamos cuando la habiliten.
+                      </span>
+                    </span>
                   )}
-                  <Boton
-                    variante="aprobar"
-                    onClick={() => onEvento({ tipo: "aprobar", por: "cliente" })}
-                  >
-                    <IconoAprobar />
-                    Aprobar
-                  </Boton>
+                  {/* Con el nombre ya sabido, aprobar es un toque y queda
+                      dicho con quién queda firmado. La ventana de la firma
+                      sigue existiendo para la primera vez y para cambiarlo. */}
+                  <span className="flex flex-col items-center gap-0.5">
+                    <Boton
+                      variante="aprobar"
+                      onClick={() =>
+                        firma === null
+                          ? onEvento({ tipo: "aprobar", por: "cliente" })
+                          : onEvento({ tipo: "aprobar", por: firma })
+                      }
+                    >
+                      <IconoAprobar />
+                      Aprobar
+                    </Boton>
+                    {firma !== null && (
+                      <span className="text-micro text-apagado">
+                        aprobás como {firma || "Cliente"}
+                        {onCambiarFirma && (
+                          <>
+                            {" · "}
+                            <button
+                              type="button"
+                              onClick={onCambiarFirma}
+                              className="font-semibold underline underline-offset-2 hover:text-tinta"
+                            >
+                              cambiar
+                            </button>
+                          </>
+                        )}
+                      </span>
+                    )}
+                  </span>
                 </div>
               </>
             )}

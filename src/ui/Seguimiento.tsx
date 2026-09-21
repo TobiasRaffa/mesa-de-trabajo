@@ -135,12 +135,22 @@ export function Seguimiento({
         </>
       )}
 
-      {/* Cuando ya no quedan rondas incluidas sí hay algo que decir, porque
-          cambia lo que se puede hacer. Que sea la última no hace falta
-          aclararlo: se lee del camino. */}
+      {/* **Cuántas vueltas quedan, dicho antes de que se acaben.** Lo único
+          que se decía era «sin rondas incluidas», y solo cuando ya no quedaba
+          ninguna: el cliente se enteraba de que había un límite en el momento
+          exacto en que lo cruzaba. Y «ronda» no es una palabra de esta
+          aplicación: en todas las demás pantallas se llama «vuelta». */}
+      {!aprobada && quedan > 0 && (
+        <span className="text-menudo font-semibold text-apagado">
+          {quedan === 1
+            ? "te queda 1 pedido de cambios"
+            : `te quedan ${quedan} pedidos de cambios`}
+        </span>
+      )}
       {!aprobada && quedan <= 0 && (
         <span className="border-l-4 border-espera-borde bg-espera-tenue px-2 py-0.5 text-micro font-bold text-espera">
-          sin rondas incluidas
+          usaste {rondasIncluidas + rondasExtra}{" "}
+          {rondasIncluidas + rondasExtra === 1 ? "vuelta incluida" : "vueltas incluidas"}
         </span>
       )}
     </div>
