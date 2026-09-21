@@ -7,7 +7,10 @@
 // culpable ni al que lo importó.
 //
 // La regla que deja: lo que una pantalla necesita saber va en un módulo que no
-// toque el servidor. Acá no se importa nada, y así tiene que quedar.
+// toque el servidor. De acá no se importa nada fuera de `dominio/`, que es el
+// resto de lo que el navegador puede leer sin arrastrar `node:fs`.
+
+import { enCastellano } from "@/dominio/texto";
 
 /** Cada cosa que puede pasarle a una pieza y queda anotada. */
 export type Hito =
@@ -77,13 +80,7 @@ export function enPalabrasLoRevisado(
 
   return versiones.length === 1
     ? `la v${versiones[0]} de ${cuantas}`
-    : `${cuantas} (${enLista(versiones.map((v) => `v${v}`))})`;
-}
-
-/** «v1, v2 y v3». La coma separa y la «y» cierra, como se lee en voz alta. */
-function enLista(cosas: string[]): string {
-  if (cosas.length < 2) return cosas[0] ?? "";
-  return `${cosas.slice(0, -1).join(", ")} y ${cosas[cosas.length - 1]}`;
+    : `${cuantas} (${enCastellano(versiones.map((v) => `v${v}`))})`;
 }
 
 export type CambiosDeUnaVuelta = {

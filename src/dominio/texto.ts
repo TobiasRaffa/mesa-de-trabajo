@@ -38,3 +38,16 @@ export function coincide(texto: string, busqueda: string): boolean {
   const buscado = normalizarParaBuscar(busqueda);
   return buscado === "" || normalizarParaBuscar(texto).includes(buscado);
 }
+
+/**
+ * «Nari», «Nari y Tomás», «v1, v2 y v3»: la coma separa y la «y» cierra, como
+ * se lee en voz alta.
+ *
+ * Estaba escrita dos veces —en la historia de una pieza y en los avisos— y la
+ * necesita cualquiera que tenga que nombrar a varios sin que quede una fila de
+ * nombres pegados.
+ */
+export function enCastellano(cosas: string[]): string {
+  if (cosas.length < 2) return cosas[0] ?? "";
+  return `${cosas.slice(0, -1).join(", ")} y ${cosas[cosas.length - 1]}`;
+}

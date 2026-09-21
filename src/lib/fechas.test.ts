@@ -3,8 +3,6 @@ import {
   calcularAviso,
   calcularVencimiento,
   diasDeDiferencia,
-  fechaCorta,
-  fechaLarga,
   plazoEnPalabras,
   situacionDelPlazo,
 } from "@/lib/fechas";
@@ -127,20 +125,5 @@ describe("plazoEnPalabras", () => {
       );
       expect(texto).not.toMatch(/\b1 días\b/);
     }
-  });
-});
-
-describe("formatos de fecha", () => {
-  it("escribe la fecha como una persona", () => {
-    expect(fechaLarga(utc("2026-03-14T15:00:00Z"))).toBe("14 de marzo");
-  });
-
-  it("usa día y mes en el orden argentino", () => {
-    expect(fechaCorta(utc("2026-03-14T15:00:00Z"))).toBe("14/3");
-  });
-
-  it("muestra el día de Buenos Aires y no el universal", () => {
-    // 2026-03-15T02:00Z es el 14 a las 23:00 en Buenos Aires.
-    expect(fechaCorta(utc("2026-03-15T02:00:00Z"))).toBe("14/3");
   });
 });

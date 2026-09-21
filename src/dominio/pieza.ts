@@ -8,6 +8,9 @@
 // No sabe nada de Drive, ni de la base de datos, ni de React. Recibe una pieza
 // y un evento, y devuelve la pieza nueva o el motivo por el que no se puede.
 
+// La cuenta de días de calendario, que es una regla y no una utilidad.
+import { diasDeDiferencia } from "@/dominio/tiempo";
+
 /**
  * Dónde está una pieza.
  *
@@ -244,8 +247,12 @@ export function diasConNosotros(
   const desde = new Date(ultimoMovimiento);
   if (Number.isNaN(desde.getTime())) return null;
 
-  const dia = 24 * 60 * 60 * 1000;
-  return Math.max(0, Math.floor((ahora.getTime() - desde.getTime()) / dia));
+  // **Días de calendario, no bloques de veinticuatro horas.** Dividir por un
+  // día en milisegundos —que es lo que hacía— cuenta otra cosa: algo que
+  // volvió el viernes a las seis de la tarde y se mira el domingo al mediodía
+  // daba «1» acá y «2» en todo el resto de la aplicación, así que el semáforo
+  // del tablero —que se prende a los dos días— se prendía un día tarde.
+  return Math.max(0, diasDeDiferencia(desde, ahora));
 }
 
 /** ¿De quién se está esperando algo? Es la pregunta que contesta el tablero. */
