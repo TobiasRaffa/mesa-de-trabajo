@@ -55,7 +55,9 @@ import {
   laTenemosNosotros,
   sigueEnJuego,
 } from "@/dominio/pieza";
+import { Ampliada, type Lamina } from "@/ui/Ampliada";
 import {
+  IconoAmpliar,
   IconoComparar,
   IconoConfig,
   IconoDrive,
@@ -68,7 +70,7 @@ import {
   EncabezadoDeVentana,
 } from "@/ui/EncabezadoDeVentana";
 import { Fondo } from "@/ui/Fondo";
-import { enPalabrasElDia } from "@/admin/cuando";
+import { enPalabrasElDia, enPalabrasElDiaDe } from "@/dominio/tiempo";
 import { tonoDeEspera } from "@/ui/tonos";
 import type { NodoArchivo } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
@@ -129,6 +131,16 @@ export function ResumenDeTrabajo({
   // escribieron encima del archivo en Drive, y cuándo. Se pide aparte porque
   // cuesta una vuelta por pieza y solo hace falta con la ventana abierta.
   const [historia, setHistoria] = useState<PiezaConHistoria[] | null>(null);
+  /**
+   * Por qué no se pudo leer lo que pidió el cliente.
+   *
+   * **El fallo se tragaba entero.** `.then((r) => r.ok && setHistoria(...))` y
+   * un `.catch(() => {})`: con Drive caído, `historia` se quedaba en `null`
+   * para siempre y la ventana se dibujaba como si el cliente no hubiera pedido
+   * nada. Alguien miraba, veía la pieza limpia, y entregaba la misma vuelta de
+   * vuelta sin atender un solo cambio.
+   */
+  const [errorHistoria, setErrorHistoria] = useState<string | null>(null);
 
   // **Cuál se está mirando, por su id y no por su posición.** Entregar algo
   // cambia su estado, y el orden de la lista sale del estado: guardando el
@@ -140,12 +152,22 @@ export function ResumenDeTrabajo({
   // estaba configurando, sin un efecto que lo limpie a mano.
   const [comparando, setComparando] = useState<string | null>(null);
   const [configurando, setConfigurando] = useState<string | null>(null);
+  /** La pieza, en grande. Es el mismo visor que usa el portal. */
+  const [ampliada, setAmpliada] = useState<Lamina[] | null>(null);
 
   useEffect(() => {
     let vivo = true;
     historiaDeCarpeta(c.carpetaId)
-      .then((r) => vivo && r.ok && setHistoria(r.piezas))
-      .catch(() => {});
+      .then((r) => {
+        if (!vivo) return;
+        if (r.ok) {
+          setHistoria(r.piezas);
+          setErrorHistoria(null);
+        } else {
+          setErrorHistoria(r.motivo);
+        }
+      })
+      .catch(() => vivo && setErrorHistoria("No pude leer lo que pidió el cliente."));
     return () => {
       vivo = false;
     };
@@ -176,17 +198,55 @@ export function ResumenDeTrabajo({
     ...(piezas ?? []).filter((p) => !sigueEnJuego(p.estado)),
   ];
 
-  const donde = Math.max(
-    0,
-    enOrden.findIndex((p) => p.id === abierta)
-  );
-  const pieza = enOrden[donde];
+  /**
+   * Cuál se está mirando.
+   *
+   * **«No la encontré» no puede significar «mostrá la primera».** Era
+   * `Math.max(0, findIndex(...))`, que convierte el -1 en 0: si la pieza que se
+   * pidió no estaba en la lista de esta carpeta, la ventana abría **otra** con
+   * el mismo encabezado —y con su botón de Configurar— sin decir una palabra.
+   * Pasaba de verdad con los archivos de una subcarpeta, y el que configuraba
+   * la pieza equivocada no tenía cómo enterarse.
+   *
+   * Sin pieza pedida —se abrió la carpeta entera— sí arranca por la primera,
+   * que es lo que se quiere.
+   */
+  const buscada = abierta ? enOrden.findIndex((p) => p.id === abierta) : 0;
+  const noEstaLaPedida = Boolean(abierta) && buscada === -1 && (piezas?.length ?? 0) > 0;
+  const donde = Math.max(0, buscada);
+  const pieza = noEstaLaPedida ? undefined : enOrden[donde];
   const detalle = pieza && historia?.find((h) => h.id === pieza.id);
 
   const ir = (paso: number) => {
     const siguiente = enOrden[(donde + paso + enOrden.length) % enOrden.length];
     if (siguiente) setAbierta(siguiente.id);
   };
+
+  /**
+   * Pasar de pieza con las flechas del teclado.
+   *
+   * **Ir a la siguiente era cruzar la ventana en diagonal.** Los botones están
+   * arriba a la derecha y lo que se mira está abajo a la izquierda, así que
+   * revisar diez piezas eran diez viajes completos del mouse. Las flechas son
+   * lo que cualquiera prueba primero en una ventana que dice «pieza 2 de 5».
+   *
+   * No se atienden mientras se escribe: adentro hay campos y desplegables
+   * donde la flecha mueve el cursor o cambia el valor.
+   */
+  useEffect(() => {
+    if (enOrden.length < 2) return;
+
+    const alTeclado = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const donde = document.activeElement?.tagName;
+      if (donde === "INPUT" || donde === "SELECT" || donde === "TEXTAREA") return;
+      e.preventDefault();
+      ir(e.key === "ArrowLeft" ? -1 : 1);
+    };
+
+    document.addEventListener("keydown", alTeclado);
+    return () => document.removeEventListener("keydown", alTeclado);
+  });
 
   return (
     <>
@@ -203,21 +263,23 @@ export function ResumenDeTrabajo({
           role="dialog"
           aria-modal="true"
           aria-label={`${c.cliente}: ${c.carpeta}`}
-          className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-tarjeta bg-lienzo sm:rounded-tarjeta"
+          className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-tarjeta bg-lienzo sm:rounded-tarjeta"
         >
           {/*
             El encabezado: qué se está mirando y cómo salir. Nada más que eso.
-            Lo único que hay acá que no es el título es «Abrir la carpeta», y
+            Lo único que hay acá que no es el título es «Ver la carpeta», y
             está porque es la única acción de la ventana que no es de una pieza
             sino del trabajo entero: al lado del nombre del trabajo es donde
             alguien la va a buscar.
           */}
           <EncabezadoDeVentana
             rotulo={
-              <>
+              // `aria-live` para que un lector de pantalla diga «pieza 2 de 5»
+              // al pasar con las flechas, que es lo único que cambia.
+              <span aria-live="polite">
                 {c.cliente} · {c.carpeta}
                 {enOrden.length > 1 && ` · pieza ${donde + 1} de ${enOrden.length}`}
-              </>
+              </span>
             }
             // **El nombre de verdad, el de Drive.** Decía «stickers» donde el
             // archivo se llama «V2_stickers.pdf»: quien lo lee acá y después
@@ -243,7 +305,7 @@ export function ResumenDeTrabajo({
                   href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
                   className={`${ENLACE_DE_VENTANA} ml-1`}
                 >
-                  Abrir la carpeta
+                  Ver la carpeta
                 </Link>
               </>
             }
@@ -263,6 +325,21 @@ export function ResumenDeTrabajo({
             {piezas !== null && enOrden.length === 0 && (
               <p className="px-5 py-4 text-normal text-apagado">
                 Esta carpeta no tiene piezas.
+              </p>
+            )}
+
+            {/* Lo dice en vez de mostrar otra: una ventana que abre la pieza
+                equivocada con el encabezado correcto es peor que una que avisa. */}
+            {noEstaLaPedida && (
+              <p className="px-5 py-4 text-normal text-alerta">
+                No encontré esa pieza en esta carpeta. Puede que la hayan movido o
+                renombrado en Drive.
+              </p>
+            )}
+
+            {pieza && errorHistoria && (
+              <p className="mx-5 mt-4 border-l-4 border-alerta bg-alerta-tenue px-4 py-3 text-menudo font-semibold text-alerta">
+                No pude leer lo que pidió el cliente: {errorHistoria}
               </p>
             )}
 
@@ -301,6 +378,35 @@ export function ResumenDeTrabajo({
                   Abrir en Drive
                 </BotonEnlace>
               )}
+
+              {/* **Ver en grande, acá adentro.** Para mirar la pieza que se
+                  está por decidir había que abrirla en otra pestaña del
+                  navegador —el toque sobre la miniatura lleva a Drive— y
+                  volver. El visor ya existe: lo usa el portal. */}
+              <Boton
+                variante="contorno"
+                onClick={() => {
+                  const ultima = pieza.archivos[pieza.archivos.length - 1];
+                  const previa = pieza.archivos[pieza.archivos.length - 2];
+                  const anterior = pieza.versiones.at(-2)?.numero ?? 1;
+                  const lamina = (id: string, n: number, rotulo?: string) => ({
+                    src: urlDeMiniatura(id, 1600, pieza.modificado),
+                    alt: `${pieza.nombreCompleto}, vuelta ${n}`,
+                    rotulo,
+                  });
+                  setAmpliada(
+                    comparando === pieza.id && previa
+                      ? [
+                          lamina(previa, anterior, `Antes · v${anterior}`),
+                          lamina(ultima, pieza.version, `Ahora · v${pieza.version}`),
+                        ]
+                      : [lamina(ultima, pieza.version)]
+                  );
+                }}
+              >
+                <IconoAmpliar />
+                Ver en grande
+              </Boton>
 
               {pieza.vueltas > 1 && (
                 <Boton
@@ -352,6 +458,23 @@ export function ResumenDeTrabajo({
                   alEntregar={recargar}
                 />
 
+                {/* **Y cuando no hay nada para entregar, qué falta.** El botón
+                    simplemente no estaba: quien venía a entregar miraba la
+                    fila, no lo encontraba, y no tenía cómo saber si le faltaba
+                    hacer algo o si la pantalla estaba rota. Lo que falta es
+                    siempre lo mismo y se puede decir. */}
+                {pieza.estado === "en_curso" &&
+                  !hayAlgoParaEntregar(
+                    pieza.estado,
+                    pieza.versiones[pieza.versiones.length - 1]?.numero ?? 1,
+                    pieza.versionEntregada
+                  ) && (
+                    <span className="text-menudo text-apagado">
+                      Para entregar falta subir a Drive una vuelta más alta que la v
+                      {pieza.versionEntregada ?? pieza.version}.
+                    </span>
+                  )}
+
                 <Boton variante="contorno" onClick={() => setConfigurando(pieza.id)}>
                   <IconoConfig />
                   Configurar
@@ -361,6 +484,8 @@ export function ResumenDeTrabajo({
           )}
         </div>
       </Fondo>
+
+      {ampliada && <Ampliada laminas={ampliada} onCerrar={() => setAmpliada(null)} />}
 
       {configurando && pieza && (
         <ConfigurarPieza
@@ -400,6 +525,11 @@ function Ficha({
   // La última vuelta es la que se está mirando, y es la que tiene imagen.
   const archivo = p.archivos[p.archivos.length - 1];
   const anterior = p.archivos[p.archivos.length - 2];
+  // **Comparando, las dos vueltas ocupan el ancho entero.** La ficha vive en
+  // una grilla de dos columnas —la imagen y el detalle—, así que al comparar
+  // las dos vueltas se repartían una sola columna: unos 210 píxeles cada una
+  // en una pantalla normal, que no alcanza para comparar nada. Lo que se vino
+  // a hacer es mirar dos imágenes; el detalle puede ir abajo.
   const aLaPar = comparando && anterior !== undefined;
 
   const nuestros = detalle
@@ -407,7 +537,11 @@ function Ficha({
     : null;
 
   return (
-    <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-8">
+    <div
+      className={`grid gap-6 p-5 lg:gap-8 ${
+        aLaPar ? "" : "lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]"
+      }`}
+    >
       {/* Los rótulos llevan el nombre del archivo y no «v1» a secas: comparar
           dos imágenes parecidas sin saber cuál archivo es cuál es la mitad de
           la comparación. */}
@@ -500,7 +634,7 @@ function Ficha({
             <>
               {p.entregadaEl && (
                 <Dato rotulo="Se entregó">
-                  {enPalabrasElDia(p.entregadaEl.slice(0, 10))}
+                  {enPalabrasElDiaDe(p.entregadaEl)}
                 </Dato>
               )}
               {nuestros !== null && (
@@ -510,11 +644,25 @@ function Ficha({
               )}
             </>
           ) : (
-            p.vence && <Dato rotulo="Vence">{enPalabrasElDia(p.vence)}</Dato>
+            /* **Y ninguno cuando ya no espera a nadie.** Una pieza aprobada o
+               caída no vence: mostraba «Vence 11 oct» pegado a la pastilla
+               «Aprobada», una fecha en la que no va a pasar nada. */
+            <>
+              {sigueEnJuego(p.estado) && p.vence && (
+                <Dato rotulo="Vence">{enPalabrasElDia(p.vence)}</Dato>
+              )}
+              {/* **Aprobada o caída: cuándo se entregó.** Era el único caso
+                  sin ningún dato de tiempo, y justamente el que más se
+                  consulta después —«¿esto cuándo se lo mandamos?»—. La rama de
+                  arriba ya lo dice mientras la pieza es nuestra; acá faltaba. */}
+              {!sigueEnJuego(p.estado) && p.entregadaEl && (
+                <Dato rotulo="Se entregó">{enPalabrasElDiaDe(p.entregadaEl)}</Dato>
+              )}
+            </>
           )}
           {p.publicaEl && <Dato rotulo="Sale">{enPalabrasElDia(p.publicaEl)}</Dato>}
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Estado estado={p.estado} />
+            <Estado estado={p.estado} mirada="agencia" />
             {!p.visible && (
               <span className="rounded-full bg-tinta px-2.5 py-1 font-mono text-micro font-bold uppercase tracking-wider text-lienzo">
                 Oculta
@@ -523,7 +671,7 @@ function Ficha({
           </div>
         </dl>
 
-        {detalle && <DetalleDePieza pieza={detalle} vueltas={p.vueltas} />}
+        {detalle && <DetalleDePieza pieza={detalle} version={p.version} />}
       </div>
     </div>
   );
@@ -675,10 +823,19 @@ function RevisionExtra({
         disabled={yendo}
         onClick={async () => {
           setYendo(true);
-          const r = await habilitarExtraDePieza(carpetaId, piezaId);
-          setYendo(false);
-          setDicho(r.motivo);
-          if (r.ok) onHecho();
+          // **Con `try`/`finally`, y no es ceremonia.** Sin él, una acción que
+          // rechaza —la red se cayó, el servidor contestó mal— dejaba `yendo`
+          // en verdadero para siempre: el botón quedaba apagado mostrando «…»
+          // hasta recargar la página, y sin decir qué pasó.
+          try {
+            const r = await habilitarExtraDePieza(carpetaId, piezaId);
+            setDicho(r.motivo);
+            if (r.ok) onHecho();
+          } catch {
+            setDicho("No se pudo. Probá de nuevo.");
+          } finally {
+            setYendo(false);
+          }
         }}
       >
         {yendo ? "…" : "Otorgar revisión extra"}

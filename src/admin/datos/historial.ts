@@ -89,7 +89,14 @@ async function recorrer(
  */
 export function comoCsv(filas: FilaDeHistorial[]): string {
   const celda = (v: string | number) => {
-    const texto = String(v);
+    // **Lo que arranca con `=`, `+`, `-` o `@` sale con un apóstrofo delante.**
+    // Dos de estas columnas —«Quién» y «Detalle»— llevan texto escrito por el
+    // cliente, y este archivo está pensado para abrirse con doble clic en
+    // Excel: una celda que empieza con `=` es una fórmula y se evalúa sola en
+    // la máquina de quien lo abre. El apóstrofo le dice a la planilla que es
+    // texto, y no se ve en la celda.
+    const crudo = String(v);
+    const texto = /^[=+\-@\t\r]/.test(crudo) ? `'${crudo}` : crudo;
     return /[;"\n\r]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
   };
   const lineas = [

@@ -25,6 +25,8 @@
 // único sobre lo que se puede hacer algo ahora.
 
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { EncabezadoDePagina } from "@/admin/EncabezadoDePagina";
 import { Plegable } from "@/admin/Plegable";
 import { MensajesSinLeer } from "@/admin/MensajesSinLeer";
 import { ResumenDeTrabajo } from "@/admin/ResumenDeTrabajo";
@@ -40,7 +42,7 @@ import type {
   CarpetaEnElTablero,
   PiezaEnElTablero,
 } from "@/admin/datos/tablero";
-import { Estado } from "@/ui/Estado";
+import { laTenemosNosotros } from "@/dominio/pieza";
 import { IconoFlecha } from "@/ui/Icono";
 import type { Persona } from "@/lib/equipo";
 import { Miniatura } from "@/ui/Miniatura";
@@ -48,12 +50,15 @@ import { tonoDeEspera, tonoDelNombre } from "@/ui/tonos";
 import { masVieja, AVISA_DESDE, ALARMA_DESDE } from "@/dominio/espera";
 import { urlDeMiniatura } from "@/lib/miniaturas";
 
-const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
+import { enPalabrasElDiaDe } from "@/dominio/tiempo";
 
 // **Solo el título.** Cada columna llevaba debajo una frase que la explicaba
 // —«El cliente ya habló. Falta hacerlo.»— y se pidió sacarla: se lee una vez,
 // y después es un renglón gris que empuja los trabajos para abajo.
-const CANCHAS: Record<Cancha, { titulo: string; filo: string; punto: string; comoEsta: string }> =
+const CANCHAS: Record<
+  Cancha,
+  { titulo: string; filo: string; punto: string; comoEsta: string; queFalta?: string }
+> =
   {
     sin_entregar: {
       titulo: "Sin entregar",
@@ -81,6 +86,13 @@ const CANCHAS: Record<Cancha, { titulo: string; filo: string; punto: string; com
       filo: "border-lima",
       punto: "bg-lima",
       comoEsta: "Aprobado",
+      // **Y lo que falta, dicho.** Esta columna parece el archivo de lo
+      // terminado y es lo contrario: es trabajo pendiente nuestro. Un trabajo
+      // se va de acá cuando alguien mueve el archivo aprobado a «Entregas
+      // finales», en Drive, a mano —así lo define `yaSeEntrego`— y eso no lo
+      // enunciaba ninguna pantalla: quedaban trabajos acumulados en una
+      // columna verde que nadie sabía que había que vaciar.
+      queFalta: "Mové el archivo aprobado a «Entregas finales» para cerrarlo.",
     },
   };
 
@@ -130,24 +142,122 @@ function porCliente(carpetas: CarpetaEnElTablero[]): PorCliente[] {
 export function TableroPorCliente({
   carpetas,
   equipo,
+  campana,
 }: {
   carpetas: CarpetaEnElTablero[];
   /** Para poder cambiar quién lleva un trabajo sin salir del tablero. */
   equipo: Persona[];
+  /** La campana de notificaciones, que la arma el servidor. */
+  campana: React.ReactNode;
 }) {
   // Cuál se está mirando en grande. Vive acá arriba y no en cada ficha: la
   // ventana tapa la pantalla entera, así que solo puede haber una.
-  const [mirando, setMirando] = useState<{
-    carpeta: CarpetaEnElTablero;
-    /** Con cuál pieza abrir, cuando se tocó una y no la carpeta. */
-    pieza?: string;
-  } | null>(null);
+  /**
+   * Cuál se está mirando en grande, **anotado en la dirección**.
+   *
+   * Vivía solo en la memoria de esta pantalla: recargar perdía la ventana y
+   * dejaba el tablero con todos los clientes cerrados, el botón «atrás» del
+   * navegador se iba del tablero entero en vez de cerrarla, y no había ninguna
+   * dirección que nombrara un trabajo, así que «mirá esta» se resolvía diciendo
+   * el camino en voz alta. `proxy.ts` justifica el `?volver` hablando de «quien
+   * abre un link a un trabajo puntual, de los que se pasan por chat»: ese link
+   * no se podía generar desde ningún lado.
+   */
+  const router = useRouter();
+  const enLaDireccion = useSearchParams();
+  const abierto = enLaDireccion.get("trabajo");
+  const piezaAbierta = enLaDireccion.get("pieza") ?? undefined;
   const [filtros, setFiltros] = useState<Filtros>(SIN_FILTROS);
 
   const aLaVista = filtrar(carpetas, filtros);
 
+  /** Busca en el árbol entero: el trabajo puede estar a dos escalones. */
+  const buscarCarpeta = (
+    donde: CarpetaEnElTablero[],
+    id: string
+  ): CarpetaEnElTablero | null => {
+    for (const c of donde) {
+      if (c.carpetaId === id) return c;
+      const adentro = buscarCarpeta(c.hijas, id);
+      if (adentro) return adentro;
+    }
+    return null;
+  };
+
+  const mirando = abierto ? buscarCarpeta(carpetas, abierto) : null;
+
+  function mirar(carpeta: CarpetaEnElTablero, pieza?: string) {
+    const params = new URLSearchParams();
+    params.set("trabajo", carpeta.carpetaId);
+    if (pieza) params.set("pieza", pieza);
+    // `push` y no `replace`: así «atrás» cierra la ventana en vez de irse del
+    // tablero, que es lo que cualquiera espera del botón de atrás.
+    router.push(`/gestion/tablero?${params}`, { scroll: false });
+  }
+
+  /**
+   * Las cifras de arriba, sobre lo que de verdad se está viendo.
+   *
+   * **No se enteraban del filtro.** Vivían en la página, que no sabe nada de
+   * filtros: con «Solo los míos» puesto, el encabezado seguía diciendo «12
+   * trabajos · 5 para hacer» sobre tres trabajos en pantalla. Mientras hay un
+   * filtro puesto, ninguna cifra de la pantalla puede hablar de lo que no se
+   * está viendo.
+   */
+  const vencidas = aLaVista.filter((c) => c.vencida);
+  // **Lo que falta hacer, sin contar lo que ya está hecho y sin entregar.** Se
+  // sumaba `enAgencia` entero, que incluye las piezas terminadas esperando el
+  // botón «Entregar»: el encabezado decía «5 para hacer» mientras la columna
+  // «A cargo nuestro» mostraba 0 y «Nada por acá».
+  const paraHacer = aLaVista.reduce((t, c) => t + Math.max(0, c.enAgencia - c.sinEntregar), 0);
+  const sinEntregar = aLaVista.reduce((t, c) => t + c.sinEntregar, 0);
+
   return (
     <>
+      <EncabezadoDePagina
+        titulo="Tablero"
+        alLado={
+          <>
+            <p className="text-menudo text-apagado">
+              {aLaVista.length} {aLaVista.length === 1 ? "trabajo" : "trabajos"}
+              {paraHacer > 0 && (
+                <span className="font-bold text-acento">
+                  {" · "}
+                  {paraHacer} {paraHacer === 1 ? "pieza" : "piezas"} para hacer
+                </span>
+              )}
+              {sinEntregar > 0 && (
+                <span className="font-bold text-acento">
+                  {" · "}
+                  {sinEntregar} sin entregar
+                </span>
+              )}
+            </p>
+            {campana}
+          </>
+        }
+      />
+
+      {/* **Lo vencido, una línea y el filtro.** Era un cartel que listaba cada
+          trabajo con su fecha, arriba de las columnas que ya los dicen con el
+          nombre en rojo, la etiqueta y la fecha: lo mismo hasta cinco veces en
+          la misma pantalla. Y cada renglón llevaba a otra pantalla que la que
+          abre ese mismo trabajo en la columna, así que un trabajo tenía dos
+          destinos según de dónde se lo tocara. */}
+      {vencidas.length > 0 && !filtros.soloVencidos && (
+        <button
+          type="button"
+          onClick={() => setFiltros({ ...filtros, soloVencidos: true })}
+          className="mt-6 flex w-full items-center gap-2 border-l-4 border-alerta bg-alerta-tenue px-5 py-3
+                     text-left text-normal font-extrabold text-alerta transition-colors hover:bg-alerta-tenue/70"
+        >
+          {vencidas.length === 1
+            ? "Se pasó 1 fecha"
+            : `Se pasaron ${vencidas.length} fechas`}
+          <span className="font-semibold underline underline-offset-4">ver solo esos</span>
+        </button>
+      )}
+
       {/*
         **El tablero se dibuja aunque no haya nada.** Antes, sin un solo
         trabajo, la pantalla entera se reemplazaba por un cartel: se iban las
@@ -175,14 +285,19 @@ export function TableroPorCliente({
           Ningún trabajo pasa ese filtro.
         </p>
       ) : (
-        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        // **Cuatro columnas recién a los 1280.** A los 1024, con la barra
+        // lateral puesta, cada columna quedaba de unos 162 píxeles: los
+        // nombres de los trabajos entraban cortados y la vista rápida no tenía
+        // dónde abrirse. Entre 1024 y 1280 quedan dos columnas de 350, que es
+        // donde los nombres entran enteros.
+        <div className="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
           {ORDEN.map((cual) => (
             <Columna
               key={cual}
               cual={cual}
               clientes={porCliente(aLaVista.filter((c) => c.cancha === cual))}
               hayVentana={mirando !== null}
-              onMirar={(carpeta, pieza) => setMirando({ carpeta, pieza })}
+              onMirar={mirar}
             />
           ))}
         </div>
@@ -190,10 +305,10 @@ export function TableroPorCliente({
 
       {mirando && (
         <ResumenDeTrabajo
-          carpeta={mirando.carpeta}
-          soloPieza={mirando.pieza}
+          carpeta={mirando}
+          soloPieza={piezaAbierta}
           equipo={equipo}
-          onCerrar={() => setMirando(null)}
+          onCerrar={() => router.push("/gestion/tablero", { scroll: false })}
         />
       )}
     </>
@@ -211,7 +326,7 @@ function Columna({
   hayVentana: boolean;
   onMirar: (c: CarpetaEnElTablero, pieza?: string) => void;
 }) {
-  const { titulo, filo } = CANCHAS[cual];
+  const { titulo, filo, queFalta } = CANCHAS[cual];
   const trabajos = clientes.reduce((n, c) => n + c.carpetas.length, 0);
 
   return (
@@ -224,15 +339,21 @@ function Columna({
         con tres trabajos adentro de ese cliente. Lo que se pregunta mirando
         una columna es cuánto hay ahí, y cuánto hay son trabajos.
       */}
-      <div className="flex items-baseline justify-between gap-3">
+      <div className={`flex items-baseline justify-between gap-3 ${trabajos === 0 ? "opacity-45" : ""}`}>
         <h2 className="text-guia font-extrabold tracking-tight [font-stretch:100%]">{titulo}</h2>
         <span className="cifras text-titulo font-extrabold leading-none tracking-tighter text-apagado">
           {trabajos}
         </span>
       </div>
-      {clientes.length === 0 ? (
-        <p className="mt-4 text-menudo text-apagado">Nada por acá.</p>
-      ) : (
+      {/* **Una columna vacía no dice nada: el cero ya lo dijo.** Eran tres
+          «Nada por acá.» al lado de tres ceros gigantes, o sea la misma
+          respuesta cuatro veces en la misma pantalla. Lo que sí ayuda es que
+          la columna con trabajo salte sola, y eso se consigue apagando las
+          vacías, no agregándoles texto. */}
+      {queFalta && trabajos > 0 && (
+        <p className="mt-1 text-micro text-apagado">{queFalta}</p>
+      )}
+      {clientes.length === 0 ? null : (
         <ul className="mt-4 flex flex-col gap-2">
           {clientes.map((c) => (
             <li
@@ -342,7 +463,10 @@ function Senales({ cliente }: { cliente: PorCliente }) {
           {porVencer === 1 ? "por vencer" : `${porVencer} por vencer`}
         </Senal>
       )}
-      {sinEntregar > 0 && <Senal tono="acento">{sinEntregar} sin entregar</Senal>}
+      {/* Con la unidad, que es lo que faltaba: el título de la columna ya dice
+          «Sin entregar», así que el número suelto repetía la palabra en vez de
+          decir de qué son. */}
+      {sinEntregar > 0 && <Senal tono="acento">{sinEntregar} piezas</Senal>}
     </span>
   );
 }
@@ -477,6 +601,15 @@ function Trabajo({
           >
             {c.carpeta}
           </span>
+          {/* **Cuál está oculta, dicho en el renglón.** Se podía filtrar por
+              «Solo los ocultos» y la pantalla no marcaba ninguno: había que
+              poner el filtro y deducirlo por descarte. Es la misma pastilla
+              que usa la ventana del trabajo. */}
+          {!c.visible && (
+            <span className="shrink-0 bg-tinta px-1.5 text-micro font-extrabold uppercase tracking-wider text-lienzo">
+              Oculta
+            </span>
+          )}
           {/* **Hace cuánto que lo tenemos nosotros.** No es un plazo —no
               tenemos límite— pero es lo que dice si algo se está quedando
               quieto. Suma lo de adentro: el problema tiene que verse desde
@@ -497,7 +630,11 @@ function Trabajo({
           {/* **La fecha va en el renglón y no solo al apoyar el mouse.** Es lo
               primero que se pregunta de un trabajo abierto, y en un teléfono no
               hay dónde apoyar nada. */}
-          {c.vence && (
+          {/* Una carpeta no tiene un estado único, así que la regla es la
+              misma dicha de otra forma: la fecha se escribe cuando queda algo
+              esperando al cliente. Con todo de nuestro lado, lo que corre es
+              «hace cuánto que lo tenemos» y el vencimiento está congelado. */}
+          {c.vence && (c.vencida || c.porVencer || c.sinRevisar > 0) && (
             <span
               className={`cifras shrink-0 text-micro ${
                 c.vencida
@@ -508,7 +645,7 @@ function Trabajo({
               }`}
             >
               {c.vencida ? "venció " : ""}
-              {fecha.format(c.vence)}
+              {enPalabrasElDiaDe(c.vence)}
             </span>
           )}
         </button>
@@ -587,39 +724,21 @@ function Trabajo({
               c.muestras.length > 0 ? "mt-1.5" : ""
             }`}
           >
-            {c.extraPedida > 0 ? (
+            {/* **Lo que el renglón de abajo no dice.** Repetía el estado de
+                la cancha, los días con nosotros y el vencimiento, que están
+                todos en el renglón que esta tarjeta está tapando: se apoyaba
+                el mouse para ver algo más y salía lo mismo, corrido dos
+                centímetros. Lo que aporta es la imagen, quién lo lleva,
+                cuántas piezas, y si pide una decisión. */}
+            {c.extraPedida > 0 && (
               <span className="font-extrabold uppercase tracking-widest text-alerta">
                 Pide otra vuelta
               </span>
-            ) : (
-              <span className="font-extrabold uppercase tracking-widest text-apagado">
-                {cancha.comoEsta}
-              </span>
             )}
             <span className="text-apagado">
-              {c.asignadaA ?? "sin asignar"}
-              {c.diasConNosotros !== null && (
-                <span className={`font-extrabold ${tonoDeEspera(c.diasConNosotros)}`}>
-                  {" · "}
-                  {c.diasConNosotros} {c.diasConNosotros === 1 ? "día" : "días"} con
-                  nosotros
-                </span>
-              )}
-              {c.enJuego > 0 && ` · ${c.enJuego} ${unaPieza ? "pieza" : "piezas"}`}
-              {c.vence && (
-                <span
-                  className={
-                    c.vencida
-                      ? "font-extrabold text-alerta"
-                      : c.porVencer
-                        ? "font-extrabold text-espera"
-                        : ""
-                  }
-                >
-                  {" · "}
-                  {c.vencida ? "venció el" : "vence el"} {fecha.format(c.vence)}
-                </span>
-              )}
+              {c.asignadaA}
+              {c.enJuego > 0 &&
+                `${c.asignadaA ? " · " : ""}${c.enJuego} ${unaPieza ? "pieza" : "piezas"}`}
             </span>
           </p>
         </div>
@@ -692,7 +811,11 @@ function RenglonDePieza({
           {p.nombre}
         </span>
         <span className="flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5">
-          <Estado estado={p.estado} />
+          {/* **Sin pastilla de estado acá.** La columna ya dice en qué cancha
+              está —«A cargo del cliente»— y la pastilla decía lo mismo con las
+              palabras del cliente —«PARA REVISAR»—: el mismo dato dos veces, en
+              dos idiomas, apretando el nombre del archivo, que es lo que de
+              verdad hay que poder leer. */}
           {p.diasConNosotros !== null && (
             <span
               className={`cifras text-micro font-extrabold ${tonoDeEspera(
@@ -705,7 +828,12 @@ function RenglonDePieza({
               {p.diasConNosotros}d
             </span>
           )}
-          {p.vence && (
+          {/* **Un reloj a la vez.** El renglón mostraba los dos —«3d» y
+              «vence el 20 sept»— y uno de los dos ya no corre: mientras la
+              pieza está de nuestro lado el vencimiento del cliente está
+              congelado, y cuando vuelve a él lo que se cuenta es su fecha.
+              Es la misma regla que ya aplica la ventana del trabajo. */}
+          {p.vence && !laTenemosNosotros(p.estado) && (
             <span
               className={`cifras text-micro ${
                 p.vencida
@@ -716,7 +844,7 @@ function RenglonDePieza({
               }`}
             >
               {p.vencida ? "venció " : ""}
-              {fecha.format(p.vence)}
+              {enPalabrasElDiaDe(p.vence)}
             </span>
           )}
         </span>

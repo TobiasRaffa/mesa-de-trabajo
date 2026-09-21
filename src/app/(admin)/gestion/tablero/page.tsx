@@ -15,78 +15,41 @@
 // peleando por la misma pantalla: una lista de lo que pasó, que se lee una vez
 // y se archiva, y el estado de los trabajos, que se mira para decidir.
 
-import Link from "next/link";
 import { Campana } from "@/admin/Campana";
-import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
+import { PANTALLA } from "@/admin/EncabezadoDePagina";
 import { misAvisos } from "@/admin/datos/clientes";
 import { elTablero } from "@/admin/datos/tablero";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
 import { TableroPorCliente } from "@/admin/TableroPorCliente";
 import { elEquipo } from "@/lib/equipo";
+import { quienSoy } from "@/lib/sesion";
 
 export const dynamic = "force-dynamic";
-
-const fecha = new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" });
 
 export default async function TableroPagina() {
   let tablero;
   try {
     tablero = await elTablero();
   } catch (error) {
-    return <ErrorDeDrive error={error} />;
+    return <ErrorDeDrive error={error} titulo="Tablero" />;
   }
-
-  const vencidas = tablero.carpetas.filter((c) => c.vencida);
-  const paraHacer = tablero.carpetas.reduce((t, c) => t + c.enAgencia, 0);
 
   return (
     <main className={PANTALLA}>
-      <EncabezadoDePagina
-        titulo="Tablero"
-        alLado={
-          <>
-            <p className="text-menudo text-apagado">
-              {tablero.carpetas.length}{" "}
-              {tablero.carpetas.length === 1 ? "trabajo" : "trabajos"}
-              {paraHacer > 0 && (
-                <span className="font-bold text-acento"> · {paraHacer} para hacer</span>
-              )}
-            </p>
-            {/* La campana despliega las notificaciones acá mismo y dice
-                cuántas hay sin leer. */}
-            <Campana avisos={await misAvisos()} />
-          </>
+      {/* **El encabezado y el cartel de vencidos los dibuja el tablero.** Acá
+          no se sabe qué filtro hay puesto, y las cifras de arriba tienen que
+          hablar de lo que se está viendo: con «Solo los míos» puesto, esta
+          pantalla decía «12 trabajos · 5 para hacer» sobre tres trabajos. */}
+      <TableroPorCliente
+        carpetas={tablero.carpetas}
+        equipo={await elEquipo()}
+        campana={
+          /* La campana despliega las notificaciones acá mismo y dice cuántas
+             hay sin leer. */
+          <Campana avisos={await misAvisos()} yo={(await quienSoy())?.nombre} />
         }
       />
 
-      {/* Lo vencido, arriba y afuera: es lo único que hay que ver aunque no se
-          abra ningún cliente. */}
-      {vencidas.length > 0 && (
-        <section className="mt-6 border-l-4 border-alerta bg-alerta-tenue px-5 py-4">
-          <h2 className="text-normal font-extrabold text-alerta">
-            {vencidas.length === 1
-              ? "Se pasó una fecha"
-              : `Se pasaron ${vencidas.length} fechas`}
-          </h2>
-          <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
-            {vencidas.map((c) => (
-              <li key={c.carpetaId} className="text-menudo font-semibold text-alerta">
-                <Link
-                  href={`/gestion/cliente/${c.clienteId}/carpeta/${c.carpetaId}`}
-                  className="underline underline-offset-4"
-                >
-                  {c.cliente} · {c.carpeta}
-                </Link>{" "}
-                <span className="font-normal">
-                  venció el {c.vence && fecha.format(c.vence)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <TableroPorCliente carpetas={tablero.carpetas} equipo={await elEquipo()} />
     </main>
   );
 }

@@ -45,7 +45,9 @@ describe("hace cuánto", () => {
   });
 
   it("más de un mes, la fecha", () => {
-    expect(haceCuanto(antes(40 * 86_400_000), ahora)).toMatch(/^el \d+\/\d+$/);
+    // «el 9 ago», con el mes en letras: es el mismo formato que usan el árbol,
+    // el tablero y el portal. Antes acá decía «el 9/8» y en las listas «9 ago».
+    expect(haceCuanto(antes(40 * 86_400_000), ahora)).toMatch(/^el \d+ \w+$/);
   });
 
   it("con basura, nada", () => {

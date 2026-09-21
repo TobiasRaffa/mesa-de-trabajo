@@ -21,6 +21,7 @@
 import { useState, useTransition } from "react";
 import { entregarCarpeta, type ParaAvisar } from "@/app/(admin)/gestion/acciones";
 import { AvisoDeEntrega } from "@/admin/AvisoDeEntrega";
+import { Boton } from "@/ui/Boton";
 import { Ventana } from "@/ui/Ventana";
 import { DIAS_POSIBLES } from "@/lib/dias";
 
@@ -89,6 +90,18 @@ export function Entregar({
   // Lo que se va a mandar: arranca en lo que corre hoy.
   const [diasElegidos, setDiasElegidos] = useState(dias);
 
+  // **Y vuelve a arrancar ahí cada vez que el plazo de verdad cambia.** Este
+  // botón queda montado mientras la carpeta esté abierta, así que sin esto se
+  // quedaba con la foto del plazo que había al dibujarlo: cambiabas la carpeta
+  // a siete días en el engranaje, tocabas Entregar, y el cartel le prometía
+  // tres al cliente. Peor todavía, como `diasElegidos` ya no coincidía con el
+  // plazo nuevo, los tres viajaban **explícitos** y pisaban lo recién guardado.
+  const [plazoQueVi, setPlazoQueVi] = useState(dias);
+  if (dias !== plazoQueVi) {
+    setPlazoQueVi(dias);
+    setDiasElegidos(dias);
+  }
+
   if (cuantas === 0 && !recienEntregado) return null;
 
   function entregar() {
@@ -125,17 +138,15 @@ export function Entregar({
   // pasa a tener la pantalla entera en vez de un rincón.
   const adentro = (
     <>
-      <button
-        type="button"
+      <Boton
         onClick={() => setConfirmando(true)}
         // Entregado, ya no hay nada que entregar: queda apagado mientras se
         // muestra el aviso, en vez de desaparecer y mover todo de lugar.
         disabled={cuantas === 0}
-        className="rounded-full min-h-toque shrink-0 bg-acento px-4 text-normal font-bold tracking-tight
-                   text-white transition-colors hover:bg-acento-hover disabled:opacity-35"
+        className="shrink-0"
       >
         {piezaId ? "Entregar esta" : `Entregar ${cuantas}`}
-      </button>
+      </Boton>
 
       {confirmando && (
         <Ventana
@@ -156,11 +167,12 @@ export function Entregar({
       )}
 
       {recienEntregado && (
-        <Ventana
-          titulo="Falta avisarle"
-          bajada="Entregar y avisar son dos actos, y el segundo es el que se olvida."
-          onCerrar={() => setRecienEntregado(null)}
-        >
+        // **Sin bajada.** Decía «Entregar y avisar son dos actos, y el
+        // segundo es el que se olvida», que es la razón por la que esta
+        // ventana existe: una máxima interna, siempre la misma, arriba de un
+        // mensaje que hay que leer y mandar. La ventana ya se explica sola —el
+        // título dice qué falta y abajo está el texto—.
+        <Ventana titulo="Falta avisarle" onCerrar={() => setRecienEntregado(null)}>
           <AvisoDeEntrega
             avisar={recienEntregado.avisar}
             cuantas={recienEntregado.cuantas}
@@ -235,24 +247,12 @@ function Confirmacion({
         {dias === 1 ? "día para revisar" : "días para revisar"}
       </label>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onSi}
-          disabled={yendo}
-          className="rounded-full min-h-toque bg-acento px-4 text-normal font-bold tracking-tight
-                     text-white transition-colors hover:bg-acento-hover disabled:opacity-40"
-        >
+        <Boton onClick={onSi} disabled={yendo}>
           {yendo ? "Entregando…" : "Sí, entregar"}
-        </button>
-        <button
-          type="button"
-          onClick={onNo}
-          disabled={yendo}
-          className="rounded-full min-h-toque border-2 border-tinta px-4 text-normal font-bold
-                     tracking-tight text-tinta transition-colors hover:bg-hueco"
-        >
+        </Boton>
+        <Boton variante="contorno" onClick={onNo} disabled={yendo}>
           Todavía no
-        </button>
+        </Boton>
       </div>
       {error && (
         <p aria-live="polite" className="text-menudo font-semibold text-alerta">

@@ -36,7 +36,7 @@ import { Estado } from "@/ui/Estado";
 import { reabrirPieza } from "@/app/(admin)/gestion/acciones";
 import { EncabezadoDeVentana } from "@/ui/EncabezadoDeVentana";
 import { Fondo } from "@/ui/Fondo";
-import { enPalabrasLaFecha } from "@/admin/cuando";
+import { enPalabrasLaFecha } from "@/dominio/tiempo";
 
 export function ConfigurarPieza({
   pieza,
@@ -68,7 +68,7 @@ export function ConfigurarPieza({
         role="dialog"
         aria-modal="true"
         aria-label={`Configurar ${archivo.nombre}`}
-        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-t-tarjeta bg-lienzo sm:rounded-tarjeta"
+        className="flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-t-tarjeta bg-lienzo sm:rounded-tarjeta"
       >
         <EncabezadoDeVentana
           rotulo="Configurar"
@@ -97,7 +97,6 @@ export function ConfigurarPieza({
                     id={archivo.id}
                     carpetaId={carpetaId}
                     quien={archivo.responsableQueCorre}
-                    propio={archivo.responsable !== undefined}
                     equipo={equipo}
                     alGuardar={onCambio}
                   />
@@ -112,7 +111,6 @@ export function ConfigurarPieza({
                     id={archivo.id}
                     carpetaId={carpetaId}
                     dias={archivo.diasQueCorren}
-                    propio={archivo.dias !== undefined}
                     alGuardar={onCambio}
                   />
                 </div>
@@ -121,7 +119,7 @@ export function ConfigurarPieza({
 
             <section className="flex flex-col items-start gap-2 sm:items-end sm:text-right">
               <h4 className={TITULO}>Estado</h4>
-              <Estado estado={archivo.estado} />
+              <Estado estado={archivo.estado} mirada="agencia" />
               {/* **Reabrir vive acá y no solo en la ficha del árbol.** Es lo
                   único que se puede hacer con una pieza aprobada, y esta
                   ventana es donde se la trabaja: dos lugares para configurar
@@ -223,10 +221,19 @@ function Reabrir({
         title="Se la devuelve al cliente para que la mire de nuevo, y saca el archivo de «Entregas finales»."
         onClick={async () => {
           setYendo(true);
-          const r = await reabrirPieza(carpetaId, piezaId);
-          setYendo(false);
-          setDicho(r.motivo);
-          if (r.ok) onHecho();
+          // **Con `try`/`finally`, y no es ceremonia.** Sin él, una acción que
+          // rechaza —la red se cayó, el servidor contestó mal— dejaba `yendo`
+          // en verdadero para siempre: el botón quedaba apagado mostrando «…»
+          // hasta recargar la página, y sin decir qué pasó.
+          try {
+            const r = await reabrirPieza(carpetaId, piezaId);
+            setDicho(r.motivo);
+            if (r.ok) onHecho();
+          } catch {
+            setDicho("No se pudo. Probá de nuevo.");
+          } finally {
+            setYendo(false);
+          }
         }}
       >
         {yendo ? "…" : "Reabrir"}

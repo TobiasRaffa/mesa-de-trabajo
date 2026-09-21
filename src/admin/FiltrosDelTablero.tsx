@@ -35,18 +35,43 @@ export const SIN_FILTROS: Filtros = {
 export const hayFiltros = (f: Filtros) =>
   f.quien !== null || f.visible !== null || f.soloVencidos || f.soloSinLeer;
 
-/** Deja los trabajos que pasan todos los filtros puestos. */
+/** Si esta carpeta, ella sola, pasa los filtros. */
+function pasa(c: CarpetaEnElTablero, f: Filtros): boolean {
+  if (f.quien !== null && c.asignadaA !== f.quien) return false;
+  if (f.visible !== null && c.visible !== f.visible) return false;
+  if (f.soloVencidos && !c.vencida) return false;
+  if (f.soloSinLeer && c.sinLeer === 0) return false;
+  return true;
+}
+
+/**
+ * Deja los trabajos que pasan todos los filtros puestos.
+ *
+ * **Mira el árbol entero, no el primer escalón.** El trabajo no siempre está
+ * arriba: «Banners / Septiembre» es una carpeta de trabajo tanto como
+ * «Banners», y el filtro solo miraba el primer nivel. Con eso, «Solo los
+ * míos» escondía una subcarpeta asignada a quien filtraba porque su carpeta
+ * madre la lleva otro —y al revés, mostraba una carpeta madre entera con
+ * subcarpetas de todo el equipo adentro—.
+ *
+ * Una carpeta se conserva si pasa ella **o** si le queda alguna hija, con las
+ * hijas ya filtradas: así el camino hasta el trabajo que pasa no se corta.
+ */
 export function filtrar(
   carpetas: CarpetaEnElTablero[],
   f: Filtros
 ): CarpetaEnElTablero[] {
-  return carpetas.filter((c) => {
-    if (f.quien !== null && c.asignadaA !== f.quien) return false;
-    if (f.visible !== null && c.visible !== f.visible) return false;
-    if (f.soloVencidos && !c.vencida) return false;
-    if (f.soloSinLeer && c.sinLeer === 0) return false;
-    return true;
-  });
+  const salida: CarpetaEnElTablero[] = [];
+  for (const c of carpetas) {
+    const hijas = filtrar(c.hijas, f);
+    if (pasa(c, f) || hijas.length > 0) salida.push({ ...c, hijas });
+  }
+  return salida;
+}
+
+/** Todas las carpetas del árbol, a cualquier profundidad. */
+function todasLasDelArbol(carpetas: CarpetaEnElTablero[]): CarpetaEnElTablero[] {
+  return carpetas.flatMap((c) => [c, ...todasLasDelArbol(c.hijas)]);
 }
 
 export function FiltrosDelTablero({
@@ -64,11 +89,26 @@ export function FiltrosDelTablero({
 }) {
   // Solo los que de verdad llevan algo: ofrecer a todo el equipo incluiría
   // nombres que nunca van a devolver nada.
+  // **Del árbol entero.** Salían del primer nivel, así que quien solo lleva
+  // subcarpetas no aparecía en la lista: su nombre no se podía elegir aunque
+  // tuviera trabajo asignado.
   const quienes = [
-    ...new Set(carpetas.map((c) => c.asignadaA).filter((q): q is string => q !== null)),
+    ...new Set(
+      todasLasDelArbol(carpetas)
+        .map((c) => c.asignadaA)
+        .filter((q): q is string => q !== null)
+    ),
   ].sort((a, b) => a.localeCompare(b, "es"));
 
   const puesto = hayFiltros(filtros);
+
+  // Cuántos clientes escribieron, para que el contador diga lo que el
+  // interruptor promete.
+  const clientesQueEscribieron = new Set(
+    todasLasDelArbol(carpetas)
+      .filter((c) => c.sinLeer > 0)
+      .map((c) => c.clienteId)
+  ).size;
 
   return (
     <div className="mt-6 flex flex-wrap items-center gap-2 border-y border-linea py-3">
@@ -117,11 +157,16 @@ export function FiltrosDelTablero({
         Vencidos
       </Interruptor>
 
+      {/* **Dice lo que filtra.** Se llamaba «Con mensajes» y los mensajes son
+          del cliente, no del trabajo: puesto, dejaba todos los trabajos de los
+          clientes que escribieron —que es lo correcto— pero el contador de al
+          lado seguía diciendo «7 trabajos», y el nombre hacía esperar siete
+          conversaciones. */}
       <Interruptor
         puesto={filtros.soloSinLeer}
         onTocar={() => onCambiar({ ...filtros, soloSinLeer: !filtros.soloSinLeer })}
       >
-        Con mensajes
+        Clientes que escribieron
       </Interruptor>
 
       {/* Cuántos quedaron, y cómo salir. Un tablero filtrado que no dice que
@@ -130,6 +175,13 @@ export function FiltrosDelTablero({
         <>
           <span className="text-menudo text-apagado">
             {cuantos} {cuantos === 1 ? "trabajo" : "trabajos"}
+            {filtros.soloSinLeer && clientesQueEscribieron > 0 && (
+              <>
+                {" · "}
+                {clientesQueEscribieron}{" "}
+                {clientesQueEscribieron === 1 ? "cliente" : "clientes"}
+              </>
+            )}
           </span>
           <button
             type="button"

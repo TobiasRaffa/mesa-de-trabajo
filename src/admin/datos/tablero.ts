@@ -11,10 +11,8 @@
 // Todo sale de datos que ya existen: no hay un estado nuevo que mantener.
 
 import { ajustesDe, esCarpetaReservada } from "@/lib/ajustes";
-import type { Aviso } from "@/lib/avisos";
-import { misAvisos, misClientes } from "@/admin/datos/clientes";
+import { misClientes } from "@/admin/datos/clientes";
 import { sinLeerPorCliente } from "@/lib/conversaciones";
-import { correoConfigurado } from "@/lib/correo";
 import { personaPorId } from "@/lib/equipo";
 import { responsableDe, responsableQueCorre } from "@/lib/responsables";
 import { subcarpetasDe } from "@/lib/google";
@@ -187,15 +185,21 @@ export type PiezaEnElTablero = {
   porVencer: boolean;
 };
 
+/**
+ * Lo que necesita el tablero.
+ *
+ * **Solo las carpetas.** Llevaba además los últimos treinta avisos, cuántos
+ * quedaban sin ver y si el correo está configurado: nadie los usaba —la
+ * campana pide sus avisos por su cuenta— y armarlos costaba una lectura
+ * entera de la bandeja en la pantalla más pesada del día, dos veces por
+ * visita.
+ */
 export type Tablero = {
-  avisos: Aviso[];
-  sinVer: number;
   carpetas: CarpetaEnElTablero[];
-  correoConfigurado: boolean;
 };
 
 export async function elTablero(): Promise<Tablero> {
-  const [avisos, clientes] = await Promise.all([misAvisos(), misClientes()]);
+  const clientes = await misClientes();
 
   const sinLeer = await sinLeerPorCliente("agencia");
 
@@ -224,8 +228,6 @@ export async function elTablero(): Promise<Tablero> {
   );
 
   return {
-    avisos: avisos.slice(0, 30),
-    sinVer: avisos.filter((a) => !a.visto).length,
     // **Una carpeta vacía no va al tablero.** Estaba y no decía nada: ni
     // trabajo pendiente ni trabajo hecho, un renglón que hay que leer para
     // descubrir que no hay nada. Sigue estando en la ficha del cliente, que es
@@ -246,7 +248,6 @@ export async function elTablero(): Promise<Tablero> {
       .flat()
       .filter((c) => c.piezas > 0 || (c.hijas.length > 0 && c.entregadas === 0))
       .sort((a, b) => (b.diasConNosotros ?? -1) - (a.diasConNosotros ?? -1)),
-    correoConfigurado: correoConfigurado(),
   };
 }
 

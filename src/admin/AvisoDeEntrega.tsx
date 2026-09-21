@@ -16,6 +16,7 @@
 import { useState } from "react";
 import { linkDeWhatsApp, mensajeDeEntrega } from "@/lib/plantillas";
 import type { ParaAvisar } from "@/app/(admin)/gestion/acciones";
+import { BotonEnlace } from "@/ui/Boton";
 
 export function AvisoDeEntrega({
   avisar,
@@ -35,12 +36,24 @@ export function AvisoDeEntrega({
       ? `/t/${avisar.token}`
       : new URL(`/t/${avisar.token}`, location.origin).toString();
 
-  const texto = mensajeDeEntrega({
-    cliente: "",
-    carpeta: avisar.carpeta,
-    link,
-    dias: avisar.dias,
-  });
+  /**
+   * El mensaje, editable de verdad.
+   *
+   * **Tenía forma de campo y no se podía escribir.** Era un `<textarea
+   * readOnly>` con el cursor de texto y el borde de un campo: cualquiera lo
+   * toca para agregarle una línea, no pasa nada, y no hay nada que diga por
+   * qué. El comentario de al lado decía «se puede editar antes de copiarlo»,
+   * así que la intención estaba escrita y no implementada. Se cumple: lo que
+   * se copia y lo que sale por WhatsApp es lo que quedó acá.
+   */
+  const [texto, setTexto] = useState(() =>
+    mensajeDeEntrega({
+      cliente: "",
+      carpeta: avisar.carpeta,
+      link,
+      dias: avisar.dias,
+    })
+  );
 
   const whatsapp = linkDeWhatsApp(avisar.telefono, texto);
 
@@ -64,8 +77,8 @@ export function AvisoDeEntrega({
       {/* El texto se muestra entero y se puede editar antes de copiarlo: quien
           manda es quien decide qué dice. */}
       <textarea
-        readOnly
         value={texto}
+        onChange={(e) => setTexto(e.target.value)}
         rows={4}
         aria-label="El mensaje para el cliente"
         className="w-full resize-y border border-linea bg-papel p-2 text-menudo
@@ -74,15 +87,14 @@ export function AvisoDeEntrega({
 
       <div className="flex flex-wrap gap-2">
         {whatsapp ? (
-          <a
+          <BotonEnlace
+            variante="principal"
             href={whatsapp}
             target="_blank"
             rel="noreferrer noopener"
-            className="rounded-full min-h-toque inline-flex items-center bg-acento px-4 text-normal
-                       font-bold tracking-tight text-white transition-colors hover:bg-acento-hover"
           >
             Mandarlo por WhatsApp
-          </a>
+          </BotonEnlace>
         ) : (
           // Sin teléfono no se ofrece un botón que no va a funcionar: se dice
           // dónde se carga, que es lo único útil en ese momento.

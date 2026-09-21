@@ -12,18 +12,9 @@ import { EN_PALABRAS, type EstadoDePieza } from "@/lib/piezas";
 import { Estado } from "@/ui/Estado";
 import type { ComentarioDeDrive } from "@/lib/google";
 
-const cuando = new Intl.DateTimeFormat("es-AR", {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-function enPalabras(iso: string): string {
-  const fecha = new Date(iso);
-  return Number.isNaN(fecha.getTime()) ? "" : cuando.format(fecha);
-}
+// El formato es el de `cuando.ts`, que es el único lugar donde se decide cómo
+// se escribe una fecha en gestión.
+import { enPalabrasLaFecha as enPalabras } from "@/dominio/tiempo";
 
 export type PiezaConHistoria = EstadoDePieza & {
   id: string;
@@ -49,7 +40,7 @@ export function HistoriaDePiezas({ piezas }: { piezas: PiezaConHistoria[] }) {
             <li key={pieza.id} className="border-t border-linea pt-4">
               <div className="flex flex-wrap items-center gap-3">
                 <h3 className="text-guia font-bold tracking-tight">{pieza.nombre}</h3>
-                <Estado estado={pieza.estado} />
+                <Estado estado={pieza.estado} mirada="agencia" />
                 {pieza.mudada && (
                   <span className="text-micro font-extrabold uppercase tracking-wider text-apagado">
                     en Entregas finales

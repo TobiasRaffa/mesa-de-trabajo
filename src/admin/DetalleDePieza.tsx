@@ -13,15 +13,22 @@
 
 import { cambiosPorVuelta } from "@/dominio/historia";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
-import { enPalabrasLaFecha } from "@/admin/cuando";
+import { enPalabrasLaFecha } from "@/dominio/tiempo";
 
 export function DetalleDePieza({
   pieza,
-  vueltas,
+  version,
 }: {
   pieza: PiezaConHistoria;
-  /** En qué vuelta va la pieza, según los archivos que hay en Drive. */
-  vueltas: number;
+  /**
+   * En qué vuelta va la pieza, según el número escrito en el archivo más alto.
+   *
+   * **Recibía cuántos archivos hay, que no es lo mismo.** Con «V1», «V2», «V4»
+   * y «V6» son cuatro archivos y la vuelta seis: los cambios que el cliente
+   * está escribiendo y todavía no mandó se rotulaban «Cambios v4» sobre una
+   * pieza que va por la v6.
+   */
+  version: number;
 }) {
   // **Una pieza aprobada no tiene cambios a medio escribir.** Aprobar los
   // borra, pero hay piezas guardadas de antes de que lo hiciera, y esta
@@ -30,7 +37,7 @@ export function DetalleDePieza({
   const borrador =
     pieza.estado === "final" && !pieza.enviada ? [] : pieza.cambios.map((c) => c.texto);
 
-  const porVuelta = cambiosPorVuelta(pieza.historia, borrador, vueltas, pieza.enviada);
+  const porVuelta = cambiosPorVuelta(pieza.historia, borrador, version, pieza.enviada);
 
   if (porVuelta.length === 0 && pieza.comentarios.length === 0) return null;
 
@@ -42,10 +49,17 @@ export function DetalleDePieza({
         encima, eso es un párrafo del que no se puede sacar por qué salió así
         la V2.
       */}
-      {porVuelta.map((v) => (
+      {/* **Lo último arriba.** Se dibujaban de la vuelta 1 en adelante, así
+          que lo que el cliente está pidiendo **ahora** —que es a lo que se
+          entra— quedaba al fondo, debajo de todas las vueltas viejas. Las
+          anteriores se consultan de vez en cuando; se pueden abrir. */}
+      {[...porVuelta].reverse().map((v, i) => (
         <div
           key={v.version}
-          className="border-l-4 border-acento bg-acento-tenue/40 py-1.5 pl-3"
+          className={`border-l-4 border-acento bg-acento-tenue/40 py-1.5 pl-3 ${
+            // Las viejas, atenuadas: están para consultar, no para leer.
+            i === 0 ? "" : "opacity-70"
+          }`}
         >
           <p className="text-micro font-extrabold uppercase tracking-widest text-acento">
             Cambios v{v.version}
