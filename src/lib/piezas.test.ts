@@ -3,20 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // El almacén se reemplaza por uno en memoria: lo que se prueba acá es la regla
 // —cuándo una pieza sigue siendo la misma y cuándo vuelve a empezar—, no cómo
 // se guarda.
-const guardado: Record<string, unknown> = {};
+const { memoriaDePruebas } = await import("@/lib/almacen/enMemoria");
+const guardado = memoriaDePruebas.ver("piezas");
 
-vi.mock("@/lib/almacen", () => ({
-  coleccion: () => ({
-    todo: async () => guardado,
-    uno: async (id: string) => guardado[id],
-    guardar: async (id: string, v: unknown) => {
-      guardado[id] = v;
-    },
-    guardarVarios: async (varios: Record<string, unknown>) => {
-      Object.assign(guardado, varios);
-    },
-  }),
-}));
+// El doble del almacén es el compartido: cumple el contrato entero —`cambiar`
+// incluido— así que lo que pasa acá dice algo de lo que va a pasar de verdad.
+vi.mock("@/lib/almacen", async () => (await import("@/lib/almacen/enMemoria")).memoriaDePruebas);
 
 const { estadosDe } = await import("@/lib/piezas");
 import type { EstadoDePieza } from "@/lib/piezas";
@@ -188,5 +180,101 @@ describe("lo anotado de antes no se le cuelga a un archivo nuevo", () => {
     const r = await estadosDe(CARPETA, [{ id: PIEZA, archivos: ["A"] }]);
 
     expect(r[PIEZA].estado).toBe("entregada");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("la ficha sigue a la pieza cuando le cambia el nombre", () => {
+  // **La identidad es `carpeta::nombre.ext`, y el nombre sale de la vuelta más
+  // baja que hay en Drive.** Una pieza con `stickers.pdf` y `V2 stickers.jpg`
+  // se llama `::stickers.pdf`; el día que alguien borra el PDF viejo pasa a
+  // llamarse `::stickers.jpg`, y con la identidad se perdía todo lo anotado:
+  // estado, rondas, cambios e historia. La pieza renacía en curso, como si el
+  // trabajo empezara de nuevo, y ni siquiera quedaba anotado el reemplazo.
+  //
+  // Lo que la reconoce es compartir un archivo de Drive, no parecerse de
+  // nombre: un archivo pertenece a una sola pieza dentro de una carpeta.
+  const CON_PDF = "carpeta1::stickers.pdf";
+  const CON_JPG = "carpeta1::stickers.jpg";
+
+  it("se borra la vuelta más baja y la pieza conserva su vida", async () => {
+    guardarPieza({ archivos: ["pdf-viejo", "jpg-nuevo"] });
+
+    // Ya no está el PDF: la pieza pasa a llamarse por el JPG que queda.
+    const r = await estadosDe(CARPETA, [{ id: CON_JPG, archivos: ["jpg-nuevo"] }]);
+
+    expect(r[CON_JPG].estado).toBe("final");
+    expect(r[CON_JPG].ronda).toBe(2);
+    expect(r[CON_JPG].cambios).toHaveLength(1);
+    expect(r[CON_JPG].historia).toHaveLength(1);
+  });
+
+  it("la ficha se muda de verdad: la vieja no queda dando vueltas", async () => {
+    guardarPieza({ archivos: ["pdf-viejo", "jpg-nuevo"] });
+
+    await estadosDe(CARPETA, [{ id: CON_JPG, archivos: ["jpg-nuevo"] }]);
+
+    expect(guardado[CON_PDF], "la vieja se borra").toBeUndefined();
+    expect(guardado[CON_JPG], "y queda la de ahora").toBeDefined();
+  });
+
+  it("también cuando aparece después una vuelta más baja de otro formato", async () => {
+    // El camino inverso: estaba `V2 stickers.jpg` sola y alguien sube
+    // `stickers.pdf`, que pasa a ser la vuelta uno y le da el nombre.
+    guardado[CON_JPG] = {
+      carpetaId: CARPETA,
+      estado: "entregada",
+      ronda: 1,
+      rondasExtra: 0,
+      cambios: [],
+      enviada: false,
+      mudada: false,
+      archivos: ["jpg-nuevo"],
+      historia: [{ id: "h1", que: "entregada", quien: "El equipo", cuando: "2026-01-01" }],
+    };
+
+    const r = await estadosDe(CARPETA, [
+      { id: CON_PDF, archivos: ["pdf-viejo", "jpg-nuevo"] },
+    ]);
+
+    expect(r[CON_PDF].estado).toBe("entregada");
+    expect(r[CON_PDF].ronda).toBe(1);
+  });
+
+  it("no le roba la ficha a una pieza que sigue existiendo", async () => {
+    // Dos piezas con el mismo nombre y distinto formato son dos piezas a
+    // propósito. Mientras las dos estén, ninguna adopta a la otra.
+    guardado[CON_PDF] = {
+      carpetaId: CARPETA,
+      estado: "final",
+      ronda: 2,
+      rondasExtra: 0,
+      cambios: [],
+      enviada: true,
+      mudada: false,
+      archivos: ["pdf-viejo"],
+      historia: [],
+    };
+
+    const r = await estadosDe(CARPETA, [
+      { id: CON_PDF, archivos: ["pdf-viejo"] },
+      { id: CON_JPG, archivos: ["jpg-nuevo"] },
+    ]);
+
+    expect(r[CON_PDF].estado).toBe("final");
+    expect(r[CON_JPG].estado, "la otra nace limpia").toBe("en_curso");
+    expect(guardado[CON_PDF], "y la del PDF sigue guardada").toBeDefined();
+  });
+
+  it("una pieza sin ningún archivo conocido en común sigue naciendo limpia", async () => {
+    // Es la otra mitad, y no se puede perder: borrar el archivo y subir otro
+    // con el mismo nombre no puede heredar una vida ajena.
+    guardarPieza({ archivos: ["pdf-viejo"] });
+
+    const r = await estadosDe(CARPETA, [{ id: CON_JPG, archivos: ["otro-del-todo"] }]);
+
+    expect(r[CON_JPG].estado).toBe("en_curso");
+    expect(r[CON_JPG].ronda).toBe(0);
   });
 });

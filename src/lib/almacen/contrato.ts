@@ -25,6 +25,16 @@
 export type Coleccion<T> = {
   /** Todo lo guardado. El orden es el de escritura. */
   todo(): Promise<Record<string, T>>;
+  /**
+   * Los que tienen este comienzo de identificador.
+   *
+   * **Existe por los tramos viejos de una conversación.** Se guardan con la
+   * clave `<cliente>::<n>`, y leerlos era traer `todo()` y filtrar: con el
+   * chat abierto en «ver lo anterior», cada seis segundos se bajaban los
+   * tramos viejos de **todos** los clientes para dibujar los de uno. Un
+   * identificador con forma es una consulta que la base sabe hacer.
+   */
+  losQueEmpiezanCon(prefijo: string): Promise<Record<string, T>>;
   uno(id: string): Promise<T | undefined>;
   guardar(id: string, valor: T): Promise<void>;
   /**

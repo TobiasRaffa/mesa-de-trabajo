@@ -33,3 +33,10 @@ begin
   return new;
 end;
 $$;
+
+-- El disparador vive acá abajo por lo mismo: la función es de este archivo, y
+-- separarlos deja la puerta abierta a que uno se aplique sin el otro.
+drop trigger if exists documentos_modificado on documentos;
+create trigger documentos_modificado
+  before update on documentos
+  for each row execute function marcar_modificado();

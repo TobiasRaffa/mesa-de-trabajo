@@ -16,20 +16,51 @@ import { subcarpetasDe } from "@/lib/google";
 /** Cuánto se recuerda la lista antes de volver a preguntarle a Drive. */
 const RECUERDO_MS = 60 * 1000;
 
-let cache: { ids: Set<string>; vence: number } | null = null;
+/**
+ * De qué cliente es cada carpeta de trabajo.
+ *
+ * **Un mapa y no una lista, y esa es la diferencia que se nota.** Antes esto
+ * guardaba solo los identificadores, así que la otra pregunta —«¿de quién es
+ * esta carpeta?»— recorría los clientes de a uno pidiéndole a Drive las
+ * subcarpetas de cada uno, y la hacía **por cada carpeta**: validar un
+ * formulario con diez clientes y sesenta carpetas eran hasta seiscientas
+ * llamadas encadenadas. Las dos preguntas salen de la misma vuelta a Drive, así
+ * que las dos salen de acá.
+ */
+let cache: { de: Map<string, Cliente>; vence: number } | null = null;
 
-export async function idsDeCarpetasReales(): Promise<Set<string>> {
+async function mapaDeCarpetas(): Promise<Map<string, Cliente>> {
   const ahora = Date.now();
-  if (cache && cache.vence > ahora) return cache.ids;
+  if (cache && cache.vence > ahora) return cache.de;
 
   const clientes = await clientesHabilitados();
   // En paralelo: son pocas carpetas y esperar una por una haría que cada
   // guardado tarde la suma de todas.
   const porCliente = await Promise.all(clientes.map((c) => subcarpetasDe(c.id)));
 
-  const ids = new Set(porCliente.flat().map((c) => c.id));
-  cache = { ids, vence: ahora + RECUERDO_MS };
-  return ids;
+  const de = new Map<string, Cliente>();
+  clientes.forEach((cliente, i) => {
+    for (const carpeta of porCliente[i]) de.set(carpeta.id, cliente);
+  });
+
+  cache = { de, vence: ahora + RECUERDO_MS };
+  return de;
+}
+
+export async function idsDeCarpetasReales(): Promise<Set<string>> {
+  return new Set((await mapaDeCarpetas()).keys());
+}
+
+/**
+ * Todas las carpetas de trabajo con el cliente de cada una.
+ *
+ * **Sin recortar por alcance**, como todo lo de este módulo: quien la use tiene
+ * que recortarla, y hay un guardián que verifica que se pida desde el único
+ * lugar que lo hace. Existe para contestar de una sola vez lo que antes se
+ * preguntaba carpeta por carpeta.
+ */
+export async function carpetasConSuCliente(): Promise<Map<string, Cliente>> {
+  return mapaDeCarpetas();
 }
 
 /**
@@ -66,12 +97,9 @@ export function olvidarCarpetas(): void {
 export async function clienteDeCarpeta(carpetaId: string): Promise<Cliente | null> {
   if (!carpetaId) return null;
   try {
-    for (const cliente of await clientesHabilitados()) {
-      const carpetas = await subcarpetasDe(cliente.id);
-      if (carpetas.some((c) => c.id === carpetaId)) return cliente;
-    }
+    return (await mapaDeCarpetas()).get(carpetaId) ?? null;
   } catch {
     // Ante la duda, de nadie.
+    return null;
   }
-  return null;
 }

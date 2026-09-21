@@ -51,20 +51,18 @@ create index if not exists documentos_por_coleccion
 
 -- `modificado` lo pone la base y no la aplicación: si lo mandara el código,
 -- alcanzaría con olvidarse una vez para que la fecha mienta.
-create or replace function marcar_modificado()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.modificado = now();
-  return new;
-end;
-$$;
-
-drop trigger if exists documentos_modificado on documentos;
-create trigger documentos_modificado
-  before update on documentos
-  for each row execute function marcar_modificado();
+--
+-- **La función la escribe la 002 y nadie más, y eso es lo importante.** Estaba
+-- definida acá *y* allá: la 002 le agrega subir el número de versión, que es el
+-- cerrojo que impide que dos personas se pisen. Como este archivo está escrito
+-- para poder volver a pegarse —`if not exists`, `create or replace`—, alcanzaba
+-- con repegarlo para mirar las políticas y el cerrojo se apagaba **en
+-- silencio**: la versión dejaba de subir, la comprobación coincidía siempre, y
+-- volvía la pérdida de mensajes que la 002 vino a arreglar. Una sola definición
+-- y no hay forma de que eso pase.
+--
+-- El disparador sí se crea acá, porque es de esta tabla; apunta a la función
+-- que la 002 deja escrita.
 
 -- ---------------------------------------------------------------------------
 -- Quién puede entrar.

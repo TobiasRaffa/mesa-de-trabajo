@@ -15,13 +15,46 @@ const b64url = (b: crypto.BinaryLike) =>
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 
-// El token dura una hora; lo guardamos en memoria para no pedirlo en cada pantalla.
-let cache: { token: string; vence: number } | null = null;
+/**
+ * El token dura una hora; lo guardamos en memoria para no pedirlo en cada
+ * pantalla.
+ *
+ * **Se guarda la promesa, no el token.** Guardando el valor, la caché recién
+ * existe cuando Google contestó: un arranque en frío con doce miniaturas
+ * dispara doce pedidos de token a la vez, porque ninguno encuentra escrito lo
+ * que otro todavía está esperando. Con la promesa, el primero abre el viaje y
+ * los otros once se cuelgan del mismo.
+ */
+let cache: { token: Promise<string>; vence: number } | null = null;
 
-async function tokenDeGoogle(): Promise<string> {
+/**
+ * Tira el token guardado.
+ *
+ * Hace falta porque el token puede morir **antes** de la hora: si se rota o se
+ * revoca la llave de servicio, el guardado sigue pareciendo válido y toda la
+ * aplicación falla hasta que venza solo. Se llama ante un 401, que es Google
+ * diciendo exactamente eso.
+ */
+function olvidarElToken(): void {
+  cache = null;
+}
+
+function tokenDeGoogle(): Promise<string> {
   const ahora = Math.floor(Date.now() / 1000);
   if (cache && cache.vence > ahora + 60) return cache.token;
 
+  // Si el pedido falla, la promesa rota no puede quedar guardada: dejaría toda
+  // la aplicación fallando sobre el mismo error hasta que venciera.
+  const pedido = pedirToken().catch((e) => {
+    olvidarElToken();
+    throw e;
+  });
+  cache = { token: pedido, vence: ahora + 3500 };
+  return pedido;
+}
+
+async function pedirToken(): Promise<string> {
+  const ahora = Math.floor(Date.now() / 1000);
   const { email, llave } = credencialesDeGoogle();
 
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
@@ -45,13 +78,64 @@ async function tokenDeGoogle(): Promise<string> {
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion: `${header}.${claims}.${firma}`,
     }),
+    signal: AbortSignal.timeout(ESPERA_MS),
   });
 
   const data = await r.json();
   if (!r.ok) throw new Error("Google rechazó la autenticación: " + JSON.stringify(data));
 
-  cache = { token: data.access_token, vence: ahora + 3500 };
+  // **Se comprueba que haya token de verdad.** Un 200 con un cuerpo raro
+  // guardaba `undefined` y dejaba casi una hora de pedidos firmados
+  // «Bearer undefined», que fallan sin decir por qué.
+  if (typeof data.access_token !== "string" || !data.access_token) {
+    throw new Error("Google contestó sin token: " + JSON.stringify(data));
+  }
   return data.access_token;
+}
+
+/**
+ * Cuánto se espera a Google antes de dar por perdido un pedido.
+ *
+ * Sin esto no había ningún límite: un socket colgado dejaba la petición
+ * esperando hasta que la plataforma la matara, y del otro lado alguien mirando
+ * una rueda que no termina nunca.
+ */
+const ESPERA_MS = 20_000;
+
+/**
+ * Un pedido a Drive, firmado.
+ *
+ * Junta las tres cosas que cada llamada repetía o se olvidaba: poner el token,
+ * ponerle un límite de tiempo, y —lo que no hacía ninguna— **volver a intentar
+ * una vez si Google contesta 401**, tirando antes el token guardado. Sin eso,
+ * rotar la llave de servicio rompía la aplicación entera hasta que el token
+ * venciera solo.
+ */
+async function aDrive(
+  url: string,
+  init: RequestInit = {},
+  /**
+   * Sin límite de tiempo.
+   *
+   * Para bajar un archivo: el límite de `fetch` alcanza también al cuerpo, y
+   * un archivo de diseño de trescientos megas por una conexión lenta tarda más
+   * que cualquier número razonable para una consulta. Cortarlo a los veinte
+   * segundos sería romper justo lo que DECISIONES prometió que iba a andar.
+   */
+  sinLimite = false
+): Promise<Response> {
+  const pedir = async () =>
+    fetch(url, {
+      ...init,
+      headers: { ...init.headers, Authorization: "Bearer " + (await tokenDeGoogle()) },
+      ...(sinLimite ? {} : { signal: AbortSignal.timeout(ESPERA_MS) }),
+    });
+
+  const r = await pedir();
+  if (r.status !== 401) return r;
+
+  olvidarElToken();
+  return pedir();
 }
 
 /**
@@ -75,16 +159,63 @@ async function tokenDeGoogle(): Promise<string> {
  */
 const RECUERDO_MS = 30 * 1000;
 
-const recordado = new Map<string, { valor: unknown; vence: number }>();
+const recordado = new Map<string, { valor: Promise<unknown>; vence: number }>();
 
-async function conMemoria<T>(clave: string, traer: () => Promise<T>): Promise<T> {
+/**
+ * **Guarda la promesa, no el resultado**, y esa diferencia es la que hacía que
+ * esto no sirviera para lo que fue escrito.
+ *
+ * El comentario de arriba dice que una pantalla con doce miniaturas pregunta
+ * doce veces por la misma carpeta. Es cierto, pero el navegador dispara las
+ * doce **a la vez**: guardando el resultado, la caché recién se escribe cuando
+ * la primera vuelve, y para entonces las otras once ya salieron. Se hacían los
+ * doce viajes igual, por cada nivel del árbol. Guardando la promesa, las once
+ * que llegan después se cuelgan de la que ya está en el aire.
+ */
+function conMemoria<T>(clave: string, traer: () => Promise<T>): Promise<T> {
   const ahora = Date.now();
   const guardado = recordado.get(clave);
-  if (guardado && guardado.vence > ahora) return guardado.valor as T;
+  if (guardado && guardado.vence > ahora) return guardado.valor as Promise<T>;
 
-  const valor = await traer();
-  recordado.set(clave, { valor, vence: ahora + RECUERDO_MS });
-  return valor;
+  // Lo que falla no se recuerda: un error guardado medio minuto convierte un
+  // tropiezo de red en media pantalla rota.
+  const pedido = traer().catch((e) => {
+    recordado.delete(clave);
+    throw e;
+  });
+  recordado.set(clave, { valor: pedido, vence: ahora + RECUERDO_MS });
+  barrerLoVencido(ahora);
+  return pedido;
+}
+
+/**
+ * Saca lo que ya venció.
+ *
+ * Las claves son una por archivo de Drive visto, y sin esto el mapa solo
+ * crecía: en el modo local, que es un proceso que queda prendido todo el día,
+ * no lo vaciaba nada salvo mover o renombrar algo. Se barre de a poco, al
+ * escribir, para no recorrer el mapa entero en cada pregunta.
+ */
+function barrerLoVencido(ahora: number): void {
+  if (recordado.size < 500) return;
+  for (const [clave, guardado] of recordado) {
+    if (guardado.vence <= ahora) recordado.delete(clave);
+  }
+}
+
+/**
+ * Lo que hay que olvidar además de esto, cuando algo cambió en Drive.
+ *
+ * **`permisos.ts` tiene su propia memoria de qué carpeta cuelga de cuál**, con
+ * cinco minutos de recuerdo, y `olvidarDrive` no la tocaba: esconder una
+ * carpeta o mover un archivo seguía dejando pasar al cliente por el camino
+ * viejo hasta cinco minutos después. No se puede importar desde acá —sería un
+ * círculo—, así que quien tenga memoria propia la anota en esta lista.
+ */
+const otrasMemorias: Array<() => void> = [];
+
+export function alOlvidarDrive(limpiar: () => void): void {
+  otrasMemorias.push(limpiar);
 }
 
 /**
@@ -96,6 +227,7 @@ async function conMemoria<T>(clave: string, traer: () => Promise<T>): Promise<T>
  */
 export function olvidarDrive(): void {
   recordado.clear();
+  for (const limpiar of otrasMemorias) limpiar();
 }
 
 export type ArchivoDrive = {
@@ -127,7 +259,7 @@ async function todasLasPaginas<T>(
 
   do {
     const url = pagina ? `${urlSinPagina}&pageToken=${encodeURIComponent(pagina)}` : urlSinPagina;
-    const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+    const r = await aDrive(url);
     const data = await r.json();
     if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? queNoHay));
     salida.push(...((data.files ?? []) as T[]));
@@ -218,11 +350,10 @@ export async function datosDeCarpeta(folderId: string): Promise<CarpetaDrive> {
 }
 
 async function pedirDatosDeCarpeta(folderId: string): Promise<CarpetaDrive> {
-  const token = await tokenDeGoogle();
   const fields = encodeURIComponent("id,name,webViewLink,modifiedTime");
   const url = `${DRIVE}/files/${encodeURIComponent(folderId)}?fields=${fields}&supportsAllDrives=true`;
 
-  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  const r = await aDrive(url);
   const data = await r.json();
   if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "no encontré la carpeta"));
   return data;
@@ -232,12 +363,8 @@ async function pedirDatosDeCarpeta(folderId: string): Promise<CarpetaDrive> {
 export async function moverArchivo(fileId: string, desde: string, hacia: string) {
   // Lo recordado quedó viejo en el momento en que esto cambia algo.
   olvidarDrive();
-  const token = await tokenDeGoogle();
   const url = `${DRIVE}/files/${fileId}?addParents=${hacia}&removeParents=${desde}&fields=id,name,parents&supportsAllDrives=true`;
-  const r = await fetch(url, {
-    method: "PATCH",
-    headers: { Authorization: "Bearer " + token },
-  });
+  const r = await aDrive(url, { method: "PATCH" });
   const data = await r.json();
   if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "no pude mover el archivo"));
   return data;
@@ -269,12 +396,11 @@ export type MetadatosArchivo = {
 export async function renombrarArchivo(fileId: string, nombre: string): Promise<void> {
   // Lo recordado quedó viejo en el momento en que esto cambia algo.
   olvidarDrive();
-  const token = await tokenDeGoogle();
-  const r = await fetch(
-    `${DRIVE}/files/${fileId}?fields=id,name&supportsAllDrives=true`,
+  const r = await aDrive(
+    `${DRIVE}/files/${encodeURIComponent(fileId)}?fields=id,name&supportsAllDrives=true`,
     {
       method: "PATCH",
-      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: nombre }),
     }
   );
@@ -289,13 +415,12 @@ export async function metadatosArchivo(fileId: string): Promise<MetadatosArchivo
 }
 
 async function pedirMetadatos(fileId: string): Promise<MetadatosArchivo> {
-  const token = await tokenDeGoogle();
   const fields = encodeURIComponent(
     "id,name,mimeType,parents,thumbnailLink,modifiedTime,webViewLink"
   );
   const url = `${DRIVE}/files/${encodeURIComponent(fileId)}?fields=${fields}&supportsAllDrives=true`;
 
-  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  const r = await aDrive(url);
   const data = await r.json();
   if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "no encontré el archivo"));
   return data;
@@ -385,7 +510,6 @@ export async function leerComentarios(
   { ok: true; comentarios: ComentarioDeDrive[] } | { ok: false; motivo: string }
 > {
   try {
-    const token = await tokenDeGoogle();
     // Drive v3 obliga a pedir los campos: sin esto contesta comentarios vacíos.
     const fields = encodeURIComponent(
       "comments(id,content,createdTime,resolved,anchor," +
@@ -396,7 +520,7 @@ export async function leerComentarios(
       `${DRIVE}/files/${encodeURIComponent(fileId)}/comments` +
       `?fields=${fields}&pageSize=100&includeDeleted=false`;
 
-    const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+    const r = await aDrive(url);
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       return {
@@ -518,10 +642,17 @@ export async function bytesDeMiniatura(
   link: string,
   px: number
 ): Promise<{ bytes: ArrayBuffer; tipo: string }> {
-  const token = await tokenDeGoogle();
   const url = urlConTamano(link, px);
 
-  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  // **La dirección la dijo Drive, así que se mira a dónde apunta.** Va firmada
+  // con la llave de servicio de la agencia: mandarla a cualquier host que
+  // aparezca en `thumbnailLink` sería confiar en que Google nunca conteste
+  // algo raro. Hoy son las suyas; esta línea hace que siga siendo así.
+  if (!esDeGoogle(url)) {
+    throw new Error("La miniatura no apunta a Google.");
+  }
+
+  const r = await aDrive(url);
   if (!r.ok) throw new Error(`Google devolvió ${r.status} al pedir la miniatura.`);
 
   return {
@@ -540,10 +671,21 @@ export async function bytesDeMiniatura(
  * sin que nada se junte en el medio.
  */
 export async function abrirArchivo(fileId: string): Promise<Response> {
-  const token = await tokenDeGoogle();
   const url = `${DRIVE}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`;
 
-  const r = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+  const r = await aDrive(url, {}, true);
   if (!r.ok) throw new Error(`Google devolvió ${r.status} al pedir el archivo.`);
   return r;
+}
+
+/** Si una dirección es de Google, mirando el host y no cómo empieza el texto. */
+function esDeGoogle(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === "googleusercontent.com" || host.endsWith(".googleusercontent.com")
+      || host === "google.com" || host.endsWith(".google.com")
+      || host === "googleapis.com" || host.endsWith(".googleapis.com");
+  } catch {
+    return false;
+  }
 }

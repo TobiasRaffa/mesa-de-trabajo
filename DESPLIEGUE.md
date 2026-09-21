@@ -137,13 +137,22 @@ Entonces: **Supabase primero, Netlify después.**
 2. Guardar la contraseña de la base que pide al crearlo. No la vamos a usar
    acá, pero perderla es un lío.
 3. Abrir **SQL Editor** y pegar, **en orden y de a uno**, los archivos de
-   `supabase/migraciones/`. Hoy son dos:
+   `supabase/migraciones/`. Hoy son tres:
 
    - `001_documentos.sql` — crea la única tabla, `documentos`.
    - `002_version.sql` — le agrega el número de versión de cada documento, que
      es lo que impide que dos personas escribiendo a la vez se pisen. Sin esto
      la aplicación arranca igual, y el día que el cliente y la agencia escriban
-     en el mismo instante se pierde un mensaje.
+     en el mismo instante se pierde un mensaje. **Es también la que deja escrito
+     el disparador**, así que no alcanza con la 001.
+   - `003_guardar_varios.sql` — la función que guarda varios documentos en una
+     sola transacción. Sin ella, guardar el calendario de doce piezas o cambiar
+     un plazo con todo lo que hereda debajo **falla**: la aplicación la llama
+     por su nombre.
+
+   Las tres van **en orden**. Y si alguna vez hay que volver a pegar una vieja,
+   pegá también las que vienen después: la 001 está escrita para poder
+   repegarse, y hasta hace poco eso apagaba en silencio el cerrojo de la 002.
 4. Ir a **Project Settings → API** y copiar dos cosas:
    - **Project URL** → va en `SUPABASE_URL`
    - **`service_role` key** → va en `SUPABASE_SERVICE_KEY`

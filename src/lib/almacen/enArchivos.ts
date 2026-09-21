@@ -73,12 +73,26 @@ export const enArchivos: Almacen = {
   coleccion<T>(nombre: string, valido: (valor: unknown) => valor is T): Coleccion<T> {
     const archivo = path.join(CARPETA, `${nombre}.json`);
 
-    async function todo(): Promise<Record<string, T>> {
-      const crudo = await leerCrudo(archivo);
-      if (!crudo || typeof crudo !== "object" || Array.isArray(crudo)) return {};
+    /**
+     * Todo lo que hay escrito, sin filtrar.
+     *
+     * **Las escrituras parten de acá y no de `todo()`, y eso evita perder
+     * datos.** Las cuatro reescriben el archivo entero: partiendo de la versión
+     * filtrada, cualquier documento que no valide —uno guardado por una versión
+     * anterior, uno tocado a mano— desaparecía del disco la próxima vez que
+     * alguien guardara **cualquier otra cosa**, sin un error ni un aviso.
+     * Supabase no se comporta así: ahí lo que no valida se saltea al leer pero
+     * la fila sigue estando. Ahora los dos hacen lo mismo.
+     */
+    async function crudo(): Promise<Record<string, unknown>> {
+      const leido = await leerCrudo(archivo);
+      if (!leido || typeof leido !== "object" || Array.isArray(leido)) return {};
+      return leido as Record<string, unknown>;
+    }
 
+    async function todo(): Promise<Record<string, T>> {
       const salida: Record<string, T> = {};
-      for (const [id, valor] of Object.entries(crudo as Record<string, unknown>)) {
+      for (const [id, valor] of Object.entries(await crudo())) {
         if (valido(valor)) salida[id] = valor;
       }
       return salida;
@@ -86,6 +100,15 @@ export const enArchivos: Almacen = {
 
     return {
       todo,
+      // Acá todo vive en un archivo, así que filtrar es lo mismo que leer: lo
+      // que se ahorra está del lado de Supabase, donde es una consulta menos y
+      // muchísimos menos bytes por la red.
+      async losQueEmpiezanCon(prefijo) {
+        const todos = await todo();
+        return Object.fromEntries(
+          Object.entries(todos).filter(([id]) => id.startsWith(prefijo))
+        );
+      },
       async uno(id) {
         return (await todo())[id];
       },
@@ -93,12 +116,12 @@ export const enArchivos: Almacen = {
       // meta en el medio.
       async guardar(id, valor) {
         await enFila(archivo, async () => {
-          await escribirCrudo(archivo, { ...(await todo()), [id]: valor });
+          await escribirCrudo(archivo, { ...(await crudo()), [id]: valor });
         });
       },
       async guardarVarios(cambios) {
         await enFila(archivo, async () => {
-          const actual: Record<string, T> = await todo();
+          const actual: Record<string, unknown> = await crudo();
           for (const [id, valor] of Object.entries(cambios)) {
             if (valor === undefined) delete actual[id];
             else actual[id] = valor;
@@ -108,7 +131,7 @@ export const enArchivos: Almacen = {
       },
       async borrar(id) {
         await enFila(archivo, async () => {
-          const actual = await todo();
+          const actual = await crudo();
           delete actual[id];
           await escribirCrudo(archivo, actual);
         });
@@ -117,8 +140,9 @@ export const enArchivos: Almacen = {
       // guardar entre lo que esto lee y lo que esto escribe.
       async cambiar(id, como) {
         return enFila(archivo, async () => {
-          const actual = await todo();
-          const nuevo = como(actual[id]);
+          const actual = await crudo();
+          const anterior = actual[id];
+          const nuevo = como(valido(anterior) ? anterior : undefined);
           if (nuevo === undefined) delete actual[id];
           else actual[id] = nuevo;
           await escribirCrudo(archivo, actual);

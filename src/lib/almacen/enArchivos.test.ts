@@ -21,10 +21,27 @@ type Cosa = { valor: number };
 const esCosa = (v: unknown): v is Cosa =>
   Boolean(v) && typeof (v as Cosa).valor === "number";
 
-const coleccion = enArchivos.coleccion<Cosa>("prueba", esCosa);
+/**
+ * Cada prueba estrena su propia colección, con un nombre nuevo.
+ *
+ * **Antes se borraba la carpeta entre pruebas, y eso dependía de que el sistema
+ * de archivos cooperara.** En Windows, con la máquina cargada, `rm` no siempre
+ * termina a tiempo: la prueba siguiente encontraba los veintiocho documentos
+ * que había dejado la anterior y fallaba —«esperaba x, y, z y encontré p0…p27»—
+ * sin que hubiera nada mal en el almacén. Y una prueba que pasa sola y falla en
+ * conjunto es una prueba que se deja de mirar.
+ *
+ * Un nombre distinto por prueba es un archivo distinto: no hay nada que borrar.
+ */
+let cuantas = 0;
+let coleccion = enArchivos.coleccion<Cosa>("prueba0", esCosa);
+/** Dónde escribe la colección de esta prueba, para mirar el archivo crudo. */
+let archivoDeLaPrueba = path.join(temporal, "datos", "prueba0.json");
 
-beforeEach(async () => {
-  await rm(path.join(temporal, "datos"), { recursive: true, force: true });
+beforeEach(() => {
+  cuantas += 1;
+  coleccion = enArchivos.coleccion<Cosa>(`prueba${cuantas}`, esCosa);
+  archivoDeLaPrueba = path.join(temporal, "datos", `prueba${cuantas}.json`);
 });
 
 describe("dos cosas guardándose a la vez", () => {
@@ -80,7 +97,7 @@ describe("dos cosas guardándose a la vez", () => {
 describe("lo que ya hacía bien", () => {
   it("escribe entero o no escribe", async () => {
     await coleccion.guardar("a", { valor: 1 });
-    const crudo = await readFile(path.join(temporal, "datos", "prueba.json"), "utf8");
+    const crudo = await readFile(archivoDeLaPrueba, "utf8");
     expect(JSON.parse(crudo)).toEqual({ a: { valor: 1 } });
   });
 

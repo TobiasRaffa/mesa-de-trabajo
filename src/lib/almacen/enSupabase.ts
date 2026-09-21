@@ -129,6 +129,26 @@ export const enSupabase: Almacen = {
 
     return {
       todo,
+      /**
+       * Los que empiezan así, preguntados como corresponde.
+       *
+       * `like` con el comodín al final usa el índice de la clave primaria: la
+       * base manda solo los que importan en vez de todos los de la colección.
+       */
+      async losQueEmpiezanCon(prefijo) {
+        // `%` y `_` son comodines de `like`; un identificador que los tenga
+        // adentro traería de más.
+        const escapado = prefijo.replace(/([%_\\])/g, "\\$1");
+        const filas = (await pedir(
+          `${TABLA}?${filtro}&id=like.${encodeURIComponent(`${escapado}*`)}&select=id,datos&order=creado.asc`
+        )) as Fila[] | null;
+
+        const salida: Record<string, T> = {};
+        for (const fila of filas ?? []) {
+          if (valido(fila.datos)) salida[fila.id] = fila.datos;
+        }
+        return salida;
+      },
       async uno(id) {
         const filas = (await pedir(
           `${TABLA}?${filtro}&id=eq.${encodeURIComponent(id)}&select=datos&limit=1`
@@ -139,17 +159,31 @@ export const enSupabase: Almacen = {
       async guardar(id, valor) {
         await upsert([{ id, datos: valor }]);
       },
+      /**
+       * Varios de una vez, **en una sola transacción**.
+       *
+       * El contrato dice que esto existe porque hay cambios que no tienen
+       * sentido a medias, y del lado de acá la promesa era falsa: eran dos
+       * pedidos HTTP, un borrado y después una escritura, y un corte en el
+       * medio dejaba la mitad hecha —las carpetas sin su plazo propio y el
+       * cliente sin el nuevo, o sea todo heredando de la nada—. En el almacén
+       * de archivos es una sola escritura y se cumple sola.
+       *
+       * Ahora lo hace una función de Postgres, que corre entera o no corre.
+       * `null` borra, que es como el contrato escribe `undefined`.
+       */
       async guardarVarios(cambios) {
-        const aGuardar: Array<{ id: string; datos: T }> = [];
-        const aBorrar: string[] = [];
+        if (Object.keys(cambios).length === 0) return;
+
+        const comoJson: Record<string, T | null> = {};
         for (const [id, valor] of Object.entries(cambios)) {
-          if (valor === undefined) aBorrar.push(id);
-          else aGuardar.push({ id, datos: valor });
+          comoJson[id] = valor === undefined ? null : valor;
         }
-        // Primero se borra y después se escribe: al revés, un corte en el
-        // medio dejaría puesto lo nuevo **y** lo que había que sacar.
-        await borrarVarios(aBorrar);
-        await upsert(aGuardar);
+
+        await pedir("rpc/guardar_varios", {
+          method: "POST",
+          body: JSON.stringify({ la_coleccion: nombre, cambios: comoJson }),
+        });
       },
       async borrar(id) {
         await borrarVarios([id]);

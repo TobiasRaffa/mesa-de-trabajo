@@ -179,8 +179,11 @@ async function cambiar(id: string, parche: Partial<AjustesDeCliente>): Promise<v
   // que hacer: al agregar el teléfono, esta función compiló, corrió, y habría
   // borrado el teléfono de todos en la primera vez que alguien tocara otra
   // cosa. Un campo nuevo ya no obliga a tocar nada de acá.
-  const actual = (await leerGuardado())[id] ?? clienteNuevo();
-  await almacen.guardar(id, { ...actual, ...parche });
+  // **En un solo paso, con `cambiar`.** Leer y después guardar son dos, y en
+  // el medio entra cualquier otra escritura: poner el tag mientras otra
+  // persona apaga el cliente hacía que uno de los dos cambios desapareciera
+  // sin error y sin rastro.
+  await almacen.cambiar(id, (habia) => ({ ...(habia ?? clienteNuevo()), ...parche }));
 }
 
 /**

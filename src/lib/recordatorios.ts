@@ -90,10 +90,33 @@ export async function recordarSiHaceFalta(
 
   try {
     const id = clave(pieza, clase);
-    if (await almacen.uno(id)) return null;
 
-    await almacen.guardar(id, { cuando: ahora.toISOString() });
-    await avisar({ clase, ...donde, detalle: pieza.detalle });
+    // **El lugar se pide con `cambiar`, que es la única primitiva atómica.**
+    // Era `uno()` y después `guardar()`: dos personas abriendo el tablero a la
+    // misma hora leían las dos «no está», escribían las dos, y al cliente le
+    // llegaban dos correos iguales. Con `cambiar` gana uno solo, y se reconoce
+    // porque le devuelven la marca que escribió él.
+    // El que gana es el que encontró el lugar vacío. La marca se mira adentro
+    // del `cambiar` y no comparando lo que quedó: dos pedidos del mismo
+    // instante escriben la misma fecha, y entonces los dos creerían haber
+    // ganado. `como` puede correr más de una vez, y la última es la que queda,
+    // así que esta bandera vale por el intento que ganó.
+    let loPuseYo = false;
+    await almacen.cambiar(id, (habia) => {
+      loPuseYo = habia === undefined;
+      return habia ?? { cuando: ahora.toISOString() };
+    });
+    if (!loPuseYo) return null;
+
+    try {
+      await avisar({ clase, ...donde, detalle: pieza.detalle });
+    } catch (e) {
+      // **Si no salió, la marca se borra.** Anotarlo antes de mandarlo lo
+      // dejaba dado por enviado para siempre —la clave ya estaba tomada— y el
+      // aviso de que algo venció no se volvía a intentar nunca.
+      await almacen.borrar(id).catch(() => undefined);
+      throw e;
+    }
     return clase;
   } catch {
     return null;

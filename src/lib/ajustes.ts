@@ -112,6 +112,20 @@ export async function ajustesDe(carpetaId: string): Promise<AjustesDeCarpeta> {
   return normalizar(await almacen.uno(carpetaId));
 }
 
+/**
+ * Los ajustes de varias carpetas, **en una sola lectura**.
+ *
+ * `ajustesDe` es un documento por llamada, y el árbol la llamaba una vez por
+ * carpeta adentro de un `map`: en Supabase eso es un viaje de red por carpeta
+ * para dibujar una lista. Es el mismo atajo que ya usaba `escondidosEntre`.
+ */
+export async function ajustesDeVarias(
+  ids: string[]
+): Promise<Record<string, AjustesDeCarpeta>> {
+  const guardados = await almacen.todo();
+  return Object.fromEntries(ids.map((id) => [id, normalizar(guardados[id])]));
+}
+
 export async function guardarAjustesDe(
   carpetaId: string,
   ajustes: AjustesDeCarpeta
@@ -144,13 +158,22 @@ export async function carpetasConLink(): Promise<Record<string, string>> {
   return salida;
 }
 
+/**
+ * El token del link de una carpeta, creándolo si todavía no tenía.
+ *
+ * **Se pide en un solo paso y se devuelve el que quedó guardado.** Leyendo y
+ * escribiendo por separado, dos visitas a la vez fabricaban dos tokens
+ * distintos y el segundo pisaba al primero: **el link que ya se le había
+ * pasado al cliente dejaba de abrir**. Devolver lo que `cambiar` dejó
+ * guardado hace que el que se entrega sea siempre el que está en la base.
+ */
 export async function linkDeCarpeta(carpetaId: string): Promise<string> {
-  const ajustes = await ajustesDe(carpetaId);
-  if (ajustes.token) return ajustes.token;
-
-  const token = randomBytes(12).toString("base64url");
-  await guardarAjustesDe(carpetaId, { ...ajustes, token });
-  return token;
+  const quedo = await almacen.cambiar(carpetaId, (habia) => {
+    const ajustes = normalizar(habia ?? {});
+    if (ajustes.token) return ajustes;
+    return { ...ajustes, token: randomBytes(12).toString("base64url") };
+  });
+  return normalizar(quedo ?? {}).token ?? "";
 }
 
 // ---------------------------------------------------------------------------

@@ -29,6 +29,24 @@ describe("migraciones", () => {
     expect([...numeros].sort()).toEqual(numeros);
   });
 
+  it("ninguna función se define en dos migraciones", () => {
+    // **Volver a pegar una migración vieja no puede deshacer una nueva.** La
+    // 001 y la 002 definían las dos `marcar_modificado()`, y la de la 001 no
+    // subía el número de versión: como ese archivo está escrito para poder
+    // repegarse, repegarlo apagaba el cerrojo optimista **sin fallar**, y
+    // volvía la pérdida de mensajes que la 002 arregló. Una función, un dueño.
+    const donde = new Map<string, string[]>();
+    for (const archivo of archivos) {
+      const sql = readFileSync(join(CARPETA, archivo), "utf8");
+      for (const m of sql.matchAll(/create\s+(?:or\s+replace\s+)?function\s+(\w+)/gi)) {
+        donde.set(m[1], [...(donde.get(m[1]) ?? []), archivo]);
+      }
+    }
+
+    const repetidas = [...donde].filter(([, archivos]) => archivos.length > 1);
+    expect(repetidas, "cada función tiene que definirse en una sola migración").toEqual([]);
+  });
+
   it.each(archivos)("%s tiene sintaxis válida de Postgres", async (archivo) => {
     const { parse, formatSqlError, hasSqlDetails } = await import("libpg-query");
     const sql = readFileSync(join(CARPETA, archivo), "utf8");

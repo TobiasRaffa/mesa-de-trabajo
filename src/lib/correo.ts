@@ -28,6 +28,10 @@ export function correoConfigurado(): boolean {
   return Boolean(process.env.RESEND_API_KEY?.trim() && process.env.CORREO_DESDE?.trim());
 }
 
+
+/** Cuánto se espera al proveedor de correo antes de darlo por perdido. */
+const ESPERA_MS = 8000;
+
 export async function mandarCorreo(
   para: string,
   asunto: string,
@@ -49,6 +53,13 @@ export async function mandarCorreo(
         subject: asunto,
         text: cuerpo,
       }),
+      // **Con límite, porque esto está en el camino de la respuesta.** El
+      // aviso se manda mientras el cliente espera a que su aprobación termine
+      // de guardarse: sin tope, el proveedor lento o caído convertía algo que
+      // ya se guardó bien en un error en la pantalla del cliente, que entonces
+      // volvía a apretar Aprobar. El aviso está diseñado para no ser condición
+      // —nunca lanza— y esto hace que tampoco sea una espera sin fin.
+      signal: AbortSignal.timeout(ESPERA_MS),
     });
 
     if (!r.ok) {

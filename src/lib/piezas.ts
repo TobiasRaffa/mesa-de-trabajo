@@ -13,6 +13,7 @@
 // la discusión de «esto ya lo habíamos aprobado» sin que nadie tenga que
 // acordarse.
 
+import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { coleccion } from "@/lib/almacen";
 import type { Estado } from "@/dominio/pieza";
@@ -106,6 +107,62 @@ export type EstadoDePieza = {
   historia: EntradaDeHistoria[];
 };
 
+/**
+ * Todo lo guardado de todas las piezas, **una sola vez por pedido**.
+ *
+ * Las tres preguntas que se hacen sobre una carpeta —en qué anda cada pieza,
+ * qué se mudó a «Entregas finales» y cuántas aprobadas ya no están— se
+ * contestan recorriendo la colección entera, y se hacen **por cada carpeta del
+ * árbol**. Un tablero con cuarenta carpetas eran unas ochenta descargas de la
+ * misma tabla en un solo render: en la computadora, ochenta lecturas del mismo
+ * archivo; en internet, ochenta viajes.
+ *
+ * `cache` de React lo recuerda mientras dure el pedido y lo olvida después, así
+ * que nada queda viejo entre una pantalla y la siguiente. Lo que esto mismo
+ * escribe se le anota encima, abajo, para que el recuerdo no quede atrasado
+ * respecto de lo que acaba de guardar.
+ */
+const cajaDePiezas = cache(() => ({
+  // La **promesa**, no el resultado: dos lecturas que salen a la vez tienen
+  // que colgarse del mismo viaje, no hacer dos.
+  pedido: null as Promise<Record<string, EstadoDePieza>> | null,
+}));
+
+function todasLasPiezas(): Promise<Record<string, EstadoDePieza>> {
+  const caja = cajaDePiezas();
+  caja.pedido ??= almacen.todo();
+  return caja.pedido;
+}
+
+/**
+ * **La única forma de escribir piezas**, y por eso.
+ *
+ * El recuerdo de arriba es una optimización, y una optimización que contesta
+ * distinto que la base es un error con otro nombre: una acción que guarda una
+ * pieza y después lee la carpeta vería la foto de **antes** de su propia
+ * escritura. Que las tres escrituras del módulo pasen por acá hace que eso no
+ * dependa de que alguien se acuerde —hay un guardián en `cimientos.test.ts` que
+ * verifica que nadie escriba por otro lado—.
+ *
+ * Se le anota encima al recuerdo en vez de tirarlo: acá ya sabemos exactamente
+ * qué cambió, y tirarlo obligaría a volver a leer la colección entera en la
+ * carpeta siguiente del mismo render, que es justo lo que esto vino a evitar.
+ * Si nadie leyó todavía, no hay nada que poner al día.
+ */
+async function escribir(cambios: Record<string, EstadoDePieza | undefined>): Promise<void> {
+  if (Object.keys(cambios).length === 0) return;
+  await almacen.guardarVarios(cambios);
+
+  const caja = cajaDePiezas();
+  if (!caja.pedido) return;
+
+  const leido = await caja.pedido;
+  for (const [id, valor] of Object.entries(cambios)) {
+    if (valor === undefined) delete leido[id];
+    else leido[id] = valor;
+  }
+}
+
 const ESTADOS: Estado[] = [
   "en_curso",
   "entregada",
@@ -173,7 +230,14 @@ function normalizar(v: EstadoDePieza): EstadoDePieza {
   const crudo = v as unknown as Record<string, unknown>;
   return {
     carpetaId: v.carpetaId,
-    estado: ESTADOS.includes(crudo.estado as Estado) ? (crudo.estado as Estado) : "entregada",
+    // **`en_curso`, que es el estado seguro.** Caía a `entregada`, con el
+    // argumento de que es «el más inofensivo: no aprueba nada ni cierra nada».
+    // No lo es: `entregada` quiere decir que el cliente la ve y la puede
+    // aprobar. Una pieza guardada por una versión anterior, o tocada a mano en
+    // el archivo, se le aparecía al cliente sin que nadie hubiera decidido
+    // entregársela. `sinTocar` —cincuenta líneas más arriba, por este mismo
+    // motivo— ya había elegido `en_curso` para el mismo caso.
+    estado: ESTADOS.includes(crudo.estado as Estado) ? (crudo.estado as Estado) : "en_curso",
     ronda: typeof crudo.ronda === "number" && crudo.ronda >= 0 ? crudo.ronda : 0,
     rondasExtra:
       typeof crudo.rondasExtra === "number" && crudo.rondasExtra >= 0 ? crudo.rondasExtra : 0,
@@ -217,13 +281,65 @@ export async function estadosDe(
   carpetaId: string,
   piezas: Array<{ id: string; archivos: string[]; masVieja?: string; version?: number }>
 ): Promise<Record<string, EstadoDePieza>> {
-  const todo = await almacen.todo();
+  const todo = await todasLasPiezas();
 
   const salida: Record<string, EstadoDePieza> = {};
-  const aGuardar: Record<string, EstadoDePieza> = {};
+  const aGuardar: Record<string, EstadoDePieza | undefined> = {};
+
+  /**
+   * Lo guardado de esta carpeta que ninguna pieza de ahora reclama por nombre.
+   *
+   * **Es lo que hace que la identidad de una pieza sobreviva a un cambio de
+   * extensión.** La identidad es `carpeta::nombre.ext`, y el nombre sale de la
+   * vuelta **más baja** que hay en Drive: una pieza con `stickers.pdf` y
+   * `V2 stickers.jpg` se llama `::stickers.pdf`, y el día que alguien borra el
+   * PDF viejo pasa a llamarse `::stickers.jpg`. Con la identidad se perdía todo
+   * lo anotado —estado, rondas, cambios, historia— y la pieza renacía en curso,
+   * como si el trabajo empezara de nuevo. Lo mismo al revés, cuando aparece
+   * después una vuelta más baja de otro formato.
+   *
+   * No se toca la regla de agrupar —dos formatos con el mismo nombre siguen
+   * siendo dos piezas a propósito, porque nadie puede decidir por el usuario
+   * cuál es cuál—: lo que se arregla es la mudanza de la ficha cuando la pieza
+   * es demostrablemente la misma.
+   */
+  const huerfanas = Object.entries(todo).filter(
+    ([clave]) => clave.startsWith(`${carpetaId}::`) && !piezas.some((p) => p.id === clave)
+  );
+  const yaAdoptadas = new Set<string>();
+  /** Las que cambiaron de nombre: hay que escribirlas bajo el de ahora. */
+  const mudadas = new Set<string>();
+
+  /**
+   * La ficha de esta pieza, buscándola también con su nombre anterior.
+   *
+   * **Lo que decide es compartir un archivo de Drive, no parecerse de nombre.**
+   * Un archivo pertenece a una sola pieza dentro de una carpeta, así que si lo
+   * guardado nombra alguno de los archivos que tengo ahora, es esta pieza y no
+   * otra. Es la misma comprobación con la que más abajo se decide si una pieza
+   * vuelve a empezar, usada para lo contrario: reconocerla.
+   */
+  const laFicha = (id: string, archivos: string[]) => {
+    if (todo[id]) return todo[id];
+
+    const vieja = huerfanas.find(
+      ([clave, guardada]) =>
+        !yaAdoptadas.has(clave) &&
+        (normalizar(guardada).archivos ?? []).some((a) => archivos.includes(a))
+    );
+    if (!vieja) return undefined;
+
+    // La ficha se muda al nombre de ahora y la vieja se borra: dejar las dos
+    // sería que la próxima lectura encontrara dos candidatas para lo mismo.
+    yaAdoptadas.add(vieja[0]);
+    mudadas.add(id);
+    aGuardar[vieja[0]] = undefined;
+    return vieja[1];
+  };
 
   for (const { id, archivos, masVieja, version } of piezas) {
-    const tal = todo[id] ? normalizar(todo[id]) : null;
+    const encontrada = laFicha(id, archivos);
+    const tal = encontrada ? normalizar(encontrada) : null;
     const guardada = tal ? conLaVueltaEntregada(tal, version) : null;
     // Lo completado hay que guardarlo, no solo mostrarlo: si se recalculara en
     // cada lectura, la vuelta nueva que suban mañana quedaría anotada como «lo
@@ -272,8 +388,13 @@ export async function estadosDe(
     }
   }
 
+  // Lo que se mudó de nombre se escribe siempre, haya cambiado algo o no: la
+  // ficha vieja se está borrando en la misma tanda, y no escribir la nueva
+  // sería perder justo lo que esta mudanza viene a salvar.
+  for (const id of mudadas) if (!(id in aGuardar)) aGuardar[id] = salida[id];
+
   // Se escribe solo cuando de verdad cambió algo, y todo junto.
-  if (Object.keys(aGuardar).length > 0) await almacen.guardarVarios(aGuardar);
+  await escribir(aGuardar);
 
   return salida;
 }
@@ -363,7 +484,7 @@ export async function estadoDe(
  * era el del archivo, siguen funcionando porque se cae a la clave.
  */
 async function mudadasDe(carpetaId: string): Promise<string[]> {
-  const todo = await almacen.todo();
+  const todo = await todasLasPiezas();
   return Object.entries(todo)
     .filter(([, p]) => p.mudada && p.carpetaId === carpetaId)
     .map(([id, p]) => p.archivoMudado ?? id);
@@ -386,7 +507,7 @@ export async function aprobadasQueSeFueron(
   presentes: string[]
 ): Promise<number> {
   const quedan = new Set(presentes);
-  const todo = await almacen.todo();
+  const todo = await todasLasPiezas();
   return Object.entries(todo).filter(
     ([id, p]) =>
       p.carpetaId === carpetaId && p.estado === "final" && !p.mudada && !quedan.has(id)
@@ -394,14 +515,14 @@ export async function aprobadasQueSeFueron(
 }
 
 export async function guardarPieza(piezaId: string, estado: EstadoDePieza): Promise<void> {
-  await almacen.guardar(piezaId, estado);
+  await escribir({ [piezaId]: estado });
 }
 
 /** Guarda varias de una vez: cerrar una revisión toca todas las piezas juntas. */
 export async function guardarPiezas(
   cambios: Record<string, EstadoDePieza>
 ): Promise<void> {
-  await almacen.guardarVarios(cambios);
+  await escribir(cambios);
 }
 
 export function anotar(
