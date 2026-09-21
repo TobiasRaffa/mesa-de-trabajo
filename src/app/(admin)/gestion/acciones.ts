@@ -41,7 +41,6 @@ import {
   miCliente,
   misAvisos,
   misCarpetas,
-  misClientes,
   todosMisClientes,
 } from "@/admin/datos/clientes";
 import { datosDeCarpeta } from "@/lib/google";
@@ -59,6 +58,7 @@ import {
   leerConversacion,
   leerConversacionEntera,
   LARGO_MAXIMO,
+  anotarHito,
   type Mensaje,
 } from "@/lib/conversaciones";
 import {
@@ -96,7 +96,13 @@ import {
 } from "@/lib/versiones";
 import { sacarClave } from "@/lib/claves";
 import { correoValido } from "@/lib/equipo";
-import { contrasenaDeQuienEsta, firmaDeAgencia, puedoVer } from "@/lib/sesion";
+import {
+  contrasenaDeQuienEsta,
+  firmaDeAgencia,
+  puedoAlgunaDe,
+  puedoVer,
+  quienSoy,
+} from "@/lib/sesion";
 import { darPorAtendido } from "@/lib/olvidos";
 import {
   esRol,
@@ -143,13 +149,35 @@ export type Resultado = { ok: true } | { ok: false; motivo: string };
  */
 const NO_ES_TUYO = { ok: false as const, motivo: "Esa parte no es tuya." };
 
+/**
+ * En qué secciones vive cada acción, para el segundo cerrojo.
+ *
+ * **La puerta separa por sección mirando la ruta; una acción no respeta la
+ * ruta.** El `Next-Action` la encuentra por su identificador, así que un POST a
+ * cualquier dirección que la persona sí pueda abrir alcanza para invocarla —se
+ * comprobó que las acciones de Clientes corren igual posteadas a Facturas—. Por
+ * eso cada acción vuelve a preguntar por su cuenta, con `puedoAlgunaDe`, en qué
+ * sección se la dibuja de verdad. Las de Admin usan `puedoVer("admin")`; estas,
+ * el conjunto de acá. Hay un guardián en `cimientos.test.ts` que verifica que
+ * ninguna acción quede sin preguntar.
+ *
+ * Son conjuntos porque una misma acción aparece en más de una sección: entregar
+ * y reabrir están en Clientes y en la ventana del Tablero; el chat, en
+ * Conversaciones y en la ficha del cliente; los avisos, en el Tablero y en
+ * Notificaciones.
+ */
+const EN_CLIENTES: Seccion[] = ["clientes"];
+const EN_CLIENTES_Y_TABLERO: Seccion[] = ["clientes", "tablero"];
+const EN_CHAT: Seccion[] = ["clientes", "conversaciones"];
+const EN_AVISOS: Seccion[] = ["tablero", "notificaciones"];
+
 // ---------------------------------------------------------------------------
 // Carpetas
 
 export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
-  const carpetaId = String(formulario.get("carpetaId") ?? "");
-  const nombre = String(formulario.get("nombre") ?? "");
+  if (!(await puedoAlgunaDe(EN_CLIENTES))) return NO_ES_TUYO;
 
+  const carpetaId = String(formulario.get("carpetaId") ?? "");
   const vistaCruda = String(formulario.get("vista") ?? "lista");
 
   if (!carpetaId) return { ok: false as const, motivo: "Falta la carpeta." };
@@ -162,6 +190,11 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
     };
   }
 
+  // **El nombre se le pregunta a Drive, no al formulario.** Es la única
+  // defensa de «Entregas finales», y venía en el propio envío: un POST con
+  // cualquier otro nombre configuraba igual la carpeta reservada, porque
+  // `misCarpetas()` sí la incluye.
+  const nombre = (await datosDeCarpeta(carpetaId).catch(() => null))?.name ?? "";
   if (esCarpetaReservada(nombre)) {
     return {
       ok: false as const,
@@ -188,16 +221,29 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
 // ---------------------------------------------------------------------------
 // Clientes
 
+/**
+ * Si ese cliente existe y le toca a quien pregunta.
+ *
+ * **Cuenta también los apagados, y hace falta que sea así.** Miraba
+ * `misClientes()`, que son los habilitados: apagar un cliente era un camino de
+ * ida, porque `cambiarCliente(id, "si")` contestaba «Ese cliente no existe»
+ * sobre el botón que la propia pantalla seguía dibujando —el árbol lista los
+ * apagados justamente para poder volver a prenderlos—. Lo mismo alcanzaba a la
+ * clave y al teléfono. Lo que separa «no es tuyo» de «está apagado» es el
+ * alcance, y eso lo sigue mirando `todosMisClientes`.
+ */
 async function esClienteReal(id: string): Promise<boolean> {
   if (!id) return false;
   try {
-    return (await misClientes()).some((c) => c.id === id);
+    return (await todosMisClientes()).some((c) => c.id === id);
   } catch {
     return false;
   }
 }
 
 export async function cambiarCliente(_previo: unknown, formulario: FormData) {
+  if (!(await puedoAlgunaDe(EN_CLIENTES))) return NO_ES_TUYO;
+
   const clienteId = String(formulario.get("clienteId") ?? "");
   const habilitado = formulario.get("habilitado") === "si";
 
@@ -221,6 +267,8 @@ export async function cambiarCliente(_previo: unknown, formulario: FormData) {
  * al navegador del cliente, así que no hay forma de que aparezcan por error.
  */
 export async function cambiarVerEnDrive(_previo: unknown, formulario: FormData) {
+  if (!(await puedoAlgunaDe(EN_CLIENTES))) return NO_ES_TUYO;
+
   const clienteId = String(formulario.get("clienteId") ?? "");
   const ver = formulario.get("verEnDrive") === "si";
 
@@ -241,6 +289,8 @@ export async function cambiarVerEnDrive(_previo: unknown, formulario: FormData) 
  * deja de funcionar en el acto.
  */
 export async function renovarLinkDeCliente(_previo: unknown, formulario: FormData) {
+  if (!(await puedoAlgunaDe(EN_CLIENTES))) return NO_ES_TUYO;
+
   const clienteId = String(formulario.get("clienteId") ?? "");
 
   if (!(await esClienteReal(clienteId))) {
@@ -294,6 +344,8 @@ export async function ponerTagDeCliente(_previo: unknown, formulario: FormData) 
  * mail es el trámite que hace que después nadie complete nada.
  */
 export async function ponerTelefonoDeCliente(_previo: unknown, formulario: FormData) {
+  if (!(await puedoAlgunaDe(EN_CLIENTES))) return NO_ES_TUYO;
+
   const clienteId = String(formulario.get("clienteId") ?? "");
   const telefono = String(formulario.get("telefono") ?? "");
 
@@ -335,6 +387,7 @@ export async function verClaveDeCliente(
 export async function pedirLinkDeCarpeta(carpetaId: string): Promise<
   { ok: true; token: string } | { ok: false; motivo: string }
 > {
+  if (!(await puedoAlgunaDe(EN_CLIENTES))) return NO_ES_TUYO;
   if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no está adentro de la de un cliente." };
   }
@@ -371,6 +424,7 @@ export async function guardarCalendario(
   carpetaId: string,
   cambios: CambioDeFecha[]
 ): Promise<Resultado> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES))) return NO_ES_TUYO;
   if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no está adentro de la carpeta de un cliente." };
   }
@@ -437,6 +491,7 @@ export async function escribirComoAgencia(
   clienteId: string,
   texto: string
 ): Promise<RespuestaDeChat> {
+  if (!(await puedoAlgunaDe(EN_CHAT))) return NO_ES_TUYO;
   if (!(await esClienteReal(clienteId))) {
     return { ok: false, motivo: "Ese cliente no existe." };
   }
@@ -533,6 +588,7 @@ export async function entregarCarpeta(
   | { ok: true; entregadas: number; avisar: ParaAvisar | null }
   | { ok: false; motivo: string }
 > {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
   if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
@@ -672,11 +728,24 @@ export async function entregarCarpeta(
       detalle: `${cuantas} ${cuantas === 1 ? "pieza" : "piezas"}`,
     });
 
+    // Queda anotado en la conversación, que es donde el cliente después
+    // pregunta «¿esto cuándo me lo mandaron?».
+    await anotarHito(
+      cliente.id,
+      `Se ${cuantas === 1 ? "entregó 1 pieza" : `entregaron ${cuantas} piezas`} en ${nombre}.`
+    );
+
     paraAvisar = {
       carpeta: nombre,
+      // **El plazo que de verdad corre para lo que se entregó.** Entregando
+      // una pieza sola se pasaba el de la carpeta: si esa pieza tiene el suyo
+      // propio —dos días donde la carpeta tiene siete— el mensaje que se le
+      // copia al cliente le prometía siete, y lo que se guardó en la pieza
+      // eran dos. El plazo se hereda escalón por escalón, así que hay que
+      // preguntar desde el nivel donde se entregó.
       dias: plazoQueCorre(
-        await plazoDe(carpetaId),
-        undefined,
+        await plazoDe(soloEsta ?? carpetaId),
+        soloEsta ? await plazoDe(carpetaId) : undefined,
         await plazoDe(cliente.id)
       ),
       token: cliente.token,
@@ -746,6 +815,7 @@ export async function reabrirPieza(
   carpetaId: string,
   piezaId: string
 ): Promise<ResultadoDePieza> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
   const cual = await laPieza(carpetaId, piezaId);
   if (!cual) return { ok: false, motivo: "No encontré esa pieza." };
 
@@ -801,6 +871,7 @@ export async function habilitarExtraDePieza(
   carpetaId: string,
   piezaId: string
 ): Promise<ResultadoDePieza> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
   const cual = await laPieza(carpetaId, piezaId);
   if (!cual) return { ok: false, motivo: "No encontré esa pieza." };
 
@@ -845,6 +916,23 @@ type Nivel = "cliente" | "carpeta" | "archivo";
  * comprueba contra su carpeta, que viene aparte: el identificador llega de
  * afuera y no se puede creer.
  */
+/**
+ * Las piezas de una carpeta, por su identidad.
+ *
+ * **Una pieza no es un archivo de Drive, y confundirlos rompía esto entero.**
+ * `piezasDeLaCarpeta` devuelve los archivos crudos, con el identificador que
+ * les puso Google; lo que viaja por la aplicación —lo que dibuja el árbol, lo
+ * que se le pasa a esta acción desde la pantalla— es la identidad de la pieza,
+ * `carpeta::nombre`, que junta todas sus vueltas en una sola cosa. Comparar
+ * una contra la otra da siempre que no, porque un identificador de Drive nunca
+ * lleva `::`: poner días o responsable a una pieza suelta fallaba siempre, y
+ * borrar lo de abajo no borraba nada.
+ */
+async function identidadesDeLaCarpeta(carpetaId: string): Promise<string[]> {
+  const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+  return conSusArchivos(carpetaId, agrupadas).map((p) => p.id);
+}
+
 async function nivelReal(
   nivel: Nivel,
   id: string,
@@ -853,10 +941,10 @@ async function nivelReal(
   if (nivel === "cliente") {
     if (!(await esClienteReal(id))) return { ok: false, motivo: "Ese cliente no existe." };
     const carpetas = await subcarpetasDe(id);
-    const archivos = await Promise.all(carpetas.map((c) => piezasDeLaCarpeta(c.id)));
+    const piezas = await Promise.all(carpetas.map((c) => identidadesDeLaCarpeta(c.id)));
     return {
       ok: true,
-      debajo: [...carpetas.map((c) => c.id), ...archivos.flat().map((a) => a.id)],
+      debajo: [...carpetas.map((c) => c.id), ...piezas.flat()],
     };
   }
 
@@ -864,16 +952,16 @@ async function nivelReal(
     if (!(await esCarpetaMia(id))) {
       return { ok: false, motivo: "Esa carpeta no existe." };
     }
-    return { ok: true, debajo: (await piezasDeLaCarpeta(id)).map((a) => a.id) };
+    return { ok: true, debajo: await identidadesDeLaCarpeta(id) };
   }
 
   if (!carpetaId || !(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
-  if (!(await piezasDeLaCarpeta(carpetaId)).some((a) => a.id === id)) {
+  if (!(await identidadesDeLaCarpeta(carpetaId)).includes(id)) {
     return { ok: false, motivo: "Ese archivo no está en la carpeta." };
   }
-  // Un archivo no tiene nada debajo.
+  // Una pieza no tiene nada debajo.
   return { ok: true, debajo: [] };
 }
 
@@ -883,6 +971,7 @@ export async function guardarDiasDeRevision(
   dias: number,
   carpetaId?: string
 ): Promise<Resultado> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
   if (!diasValidos(dias)) {
     return { ok: false, motivo: "Los días tienen que ir de 1 a 30." };
   }
@@ -907,6 +996,7 @@ export async function guardarResponsable(
   personaId: string,
   carpetaId?: string
 ): Promise<Resultado> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
   if (personaId && !(await elEquipo()).some((p) => p.id === personaId)) {
     return { ok: false, motivo: "Esa persona no está en el equipo." };
   }
@@ -971,58 +1061,56 @@ export async function darDeAlta(_previo: unknown, formulario: FormData) {
     return { ok: false as const, motivo: "Ya hay alguien con ese correo." };
   }
 
-  await sumarAlEquipo({ nombre, correo, rol, sueltas });
+  // **A qué clientes llega se decide acá, no después.** No se preguntaba, y
+  // `sumarAlEquipo` ponía «todos» por omisión: cada persona nueva nacía viendo
+  // la carpeta de todos los clientes de la agencia, y acotarla quedaba como un
+  // segundo paso desde su fila que había que acordarse de dar. Para un rol
+  // angosto —Facturación— eso dejaba el alcance abierto justo donde la sección
+  // se acababa de cerrar.
+  const clientes = await alcanceDelFormulario(formulario);
+  if (!clientes) {
+    return { ok: false as const, motivo: "Elegí al menos un cliente, o marcá «todos»." };
+  }
+
+  await sumarAlEquipo({ nombre, correo, rol, sueltas, clientes });
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
 
+/**
+ * Cambiar la ficha de alguien del equipo: quién es y a qué entra, junto.
+ *
+ * **Una sola acción para una sola ficha.** Eran dos —una para el nombre y el
+ * correo, otra para el rol y los clientes— y la pantalla las dibujaba con un
+ * «Guardar» cada una. Nadie mira una ficha y ve dos formularios: se cambiaba
+ * el nombre y el rol, se apretaba el «Guardar» de arriba, y el rol se perdía
+ * al cerrar. Lo que se decide de una persona se decide junto.
+ */
 export async function editarDelEquipo(_previo: unknown, formulario: FormData) {
   if (!(await puedoVer("admin"))) return NO_ES_TUYO;
 
   const id = String(formulario.get("id") ?? "");
   const nombre = String(formulario.get("nombre") ?? "").trim();
   const correo = String(formulario.get("correo") ?? "").trim();
-
-  const persona = (await elEquipo()).find((p) => p.id === id);
-  if (!persona) return { ok: false as const, motivo: "Esa persona no está." };
-  if (nombre.length < 2) return { ok: false as const, motivo: "Falta el nombre." };
-  if (correo && !correoValido(correo)) {
-    return { ok: false as const, motivo: "Ese correo no tiene forma de correo." };
-  }
-
-  const otra = correo ? await personaPorCorreo(correo) : null;
-  if (otra && otra.id !== id) {
-    return { ok: false as const, motivo: "Ya hay alguien con ese correo." };
-  }
-
-  await cambiarPersona(id, {
-    nombre,
-    correo,
-    avisaDeTodo: formulario.get("avisaDeTodo") === "si",
-    enDrive: String(formulario.get("enDrive") ?? "").trim(),
-  });
-  revalidatePath("/gestion", "layout");
-  return { ok: true as const };
-}
-
-/**
- * A qué partes de la gestión entra alguien: su rol, y lo que se le da aparte.
- *
- * **Las sueltas suman y nunca restan.** Lo que da el rol no se puede destildar
- * desde acá: para quitarle algo a alguien se le cambia el rol, que es la
- * decisión que de verdad se está tomando. Tildar una que el rol ya da no
- * cambia nada, y la pantalla la muestra puesta y sin tocar.
- */
-export async function cambiarAccesos(_previo: unknown, formulario: FormData) {
-  if (!(await puedoVer("admin"))) return NO_ES_TUYO;
-
-  const id = String(formulario.get("id") ?? "");
   const rol = formulario.get("rol");
   const sueltas = formulario.getAll("sueltas").filter(esSeccion);
 
   const persona = (await elEquipo()).find((p) => p.id === id);
   if (!persona) return { ok: false as const, motivo: "Esa persona no está." };
+  if (nombre.length < 2) return { ok: false as const, motivo: "Falta el nombre." };
+
+  // **Sin correo no entra nunca.** Entrar busca por correo, así que una ficha
+  // sin correo es una persona que está en la lista, recibe trabajo asignado y
+  // no tiene puerta. `darDeAlta` ya lo exigía; editar lo dejaba borrar.
+  if (!correoValido(correo)) {
+    return { ok: false as const, motivo: "Sin correo no puede entrar: hace falta uno." };
+  }
   if (!esRol(rol)) return { ok: false as const, motivo: "Elegí un rol." };
+
+  const otra = await personaPorCorreo(correo);
+  if (otra && otra.id !== id) {
+    return { ok: false as const, motivo: "Ya hay alguien con ese correo." };
+  }
 
   const clientes = await alcanceDelFormulario(formulario);
   if (!clientes) {
@@ -1032,7 +1120,15 @@ export async function cambiarAccesos(_previo: unknown, formulario: FormData) {
   const sinAdmin = await dejariaSinAdmin(id, seccionesDe(rol, sueltas));
   if (sinAdmin) return sinAdmin;
 
-  await cambiarPersona(id, { rol, sueltas, clientes });
+  await cambiarPersona(id, {
+    nombre,
+    correo,
+    avisaDeTodo: formulario.get("avisaDeTodo") === "si",
+    enDrive: String(formulario.get("enDrive") ?? "").trim(),
+    rol,
+    sueltas,
+    clientes,
+  });
   revalidatePath("/gestion", "layout");
   return { ok: true as const };
 }
@@ -1167,6 +1263,7 @@ export async function unirConLaOtra(
   carpetaId: string,
   piezaId: string
 ): Promise<Resultado> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
   if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no es de un cliente." };
   }
@@ -1231,15 +1328,25 @@ export async function unirConLaOtra(
 // ---------------------------------------------------------------------------
 // La bandeja
 
-export async function marcarAvisosVistos(): Promise<void> {
-  // Solo los suyos: tocar «marcar leído» no puede bajarle el contador a
-  // quien lleva otros clientes.
-  await marcarVistos((await misAvisos()).map((a) => a.id));
+export async function marcarAvisosVistos(ids?: string[]): Promise<void> {
+  if (!(await puedoAlgunaDe(EN_AVISOS))) return;
+  // **Para quien mira, y solo los suyos.** Tocar «marcar leído» no puede
+  // bajarle el contador a quien lleva otros clientes —por eso se cruzan los
+  // identificadores que llegan de afuera contra los suyos— ni a sus
+  // compañeros, que es lo que hacía cuando «visto» era uno para todos.
+  const yo = await quienSoy();
+  if (!yo) return;
+  const mios = (await misAvisos()).map((a) => a.id);
+  const cuales = ids ? mios.filter((id) => ids.includes(id)) : mios;
+  if (cuales.length === 0) return;
+
+  await marcarVistos(cuales, yo.id);
   revalidatePath("/gestion", "layout");
 }
 
 /** La agencia leyó la conversación de un cliente. */
 export async function marcarChatLeido(clienteId: string): Promise<void> {
+  if (!(await puedoAlgunaDe(EN_CHAT))) return;
   if (!(await esClienteReal(clienteId))) return;
   await marcarLeido("agencia", clienteId);
   revalidatePath("/gestion", "layout");
@@ -1260,6 +1367,7 @@ export type Abierta =
   | { ok: false; motivo: string };
 
 export async function abrirCliente(clienteId: string): Promise<Abierta> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES))) return NO_ES_TUYO;
   if (!(await esClienteReal(clienteId))) {
     return { ok: false, motivo: "Ese cliente no existe." };
   }
@@ -1284,6 +1392,7 @@ export async function abrirCarpeta(
   carpetaId: string,
   heredado: { dias: number; responsable: string | null }
 ): Promise<Abierta> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
   if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
@@ -1311,6 +1420,7 @@ export async function historiaDeCarpeta(
 ): Promise<
   { ok: true; piezas: PiezaConHistoria[] } | { ok: false; motivo: string }
 > {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
   if (!(await esCarpetaMia(carpetaId))) {
     return { ok: false, motivo: "Esa carpeta no existe." };
   }
@@ -1336,6 +1446,7 @@ export async function cambiarVisibilidad(
   ids: string[],
   visible: boolean
 ): Promise<{ ok: boolean; motivo?: string }> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
   if (ids.length === 0) return { ok: false, motivo: "No me dijiste qué." };
 
   for (const id of ids) {
@@ -1373,6 +1484,7 @@ export async function traerConversacion(
   | { ok: true; mensajes: Mensaje[]; hayAnteriores: boolean }
   | { ok: false; motivo: string }
 > {
+  if (!(await puedoAlgunaDe(EN_CHAT))) return NO_ES_TUYO;
   if (!(await esClienteReal(clienteId))) {
     return { ok: false, motivo: "Ese cliente no existe." };
   }

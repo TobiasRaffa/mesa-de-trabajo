@@ -19,6 +19,7 @@ import { correoConfigurado } from "@/lib/correo";
 import { codigoDeAltaDe, codigoLegible, elEquipo } from "@/lib/equipo";
 import { tieneClave } from "@/lib/claves";
 import { quienesNoPuedenEntrar } from "@/lib/olvidos";
+import { enCastellano } from "@/dominio/texto";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export default async function Admin() {
   try {
     [clientes, gente] = await Promise.all([todosMisClientes(), elEquipo()]);
   } catch (error) {
-    return <ErrorDeDrive error={error} />;
+    return <ErrorDeDrive error={error} titulo="Admin" />;
   }
 
   // Quiénes ya eligieron su contraseña. Sin ella una persona existe en la
@@ -61,13 +62,38 @@ export default async function Admin() {
 
   const hayCorreo = correoConfigurado();
   const sinCorreo = gente.filter((p) => !p.correo).length;
+  const sinClave = clientes.filter((c) => !c.tag).length;
+  const sinEntrar = gente.filter((p) => !conClave.has(p.id)).length;
+  const pidieron = Object.keys(esperando).length;
+  // Con nombre: «Nari y Tomás pidieron…» se lee y se actúa; «2 personas
+  // pidieron…» obliga a recorrer la lista buscando cuáles.
+  const quienesPiden = enCastellano(
+    gente.filter((p) => esperando[p.id]).map((p) => p.nombre)
+  );
+
+  // **El resumen de un plegable existe para no tener que abrirlo.** Decían «1
+  // cliente» y «3 personas», que es el largo de la lista: un dato que no
+  // decide nada. Lo que decide si hay que abrir es si falta una clave —sin
+  // tag el portal de ese cliente no deja pasar a nadie, ni con el link
+  // correcto— y si alguien está esperando que le reinicien la suya.
+  const resumenDeClaves =
+    sinClave > 0 ? `${sinClave} sin clave` : clientes.length === 0 ? "sin clientes" : "todas puestas";
+
+  const resumenDelEquipo =
+    [
+      pidieron > 0 && `${pidieron} pidió contraseña`,
+      sinCorreo > 0 && `${sinCorreo} sin correo`,
+      sinEntrar > 0 && `${sinEntrar} todavía no ${sinEntrar === 1 ? "entró" : "entraron"}`,
+    ]
+      .filter((x): x is string => Boolean(x))
+      .join(" · ") || "todo en orden";
 
   return (
     <main className={PANTALLA}>
-      <EncabezadoDePagina
-        titulo="Admin"
-        bajada="Lo que se configura una vez: las claves de los clientes, quiénes son del equipo y a qué parte entra cada uno."
-      />
+      {/* Sin bajada: decía «las claves de los clientes, quiénes son del
+          equipo y a qué parte entra cada uno», que son los dos títulos que
+          están tres centímetros más abajo, con las mismas palabras. */}
+      <EncabezadoDePagina titulo="Admin" />
 
       {/* ------------------------- Claves de los clientes ----------------- */}
       <div className="mt-10 border-t border-linea pt-5">
@@ -76,7 +102,7 @@ export default async function Admin() {
           y los dos títulos con su resumen alcanzan para elegir cuál. */}
       <Plegable
         titulo="Claves de los clientes"
-        resumen={`${clientes.length} ${clientes.length === 1 ? "cliente" : "clientes"}`}
+        resumen={resumenDeClaves}
       >
         <p className="mt-1 text-menudo text-apagado">
           Es la palabra que el cliente escribe después de abrir su link. Se la
@@ -100,7 +126,7 @@ export default async function Admin() {
       <div className="mt-8 border-t border-linea pt-5">
       <Plegable
         titulo="El equipo"
-        resumen={`${gente.length} ${gente.length === 1 ? "persona" : "personas"}`}
+        resumen={resumenDelEquipo}
       >
         <p className="mt-1 text-menudo text-apagado">
           Esta lista es la lista de usuarios: quien está acá con un correo y un
@@ -110,16 +136,19 @@ export default async function Admin() {
           canal que el link de la aplicación.
         </p>
 
-        {Object.keys(esperando).length > 0 && (
+        {/* **Nombradas, y con el botón al lado.** Decía «están marcadas en la
+            lista» y mandaba a entrar a «Editar»: dos clics por persona para
+            llegar a un botón que ahora está en su propia fila. */}
+        {pidieron > 0 && (
           <div className="mt-4 border-l-4 border-alerta bg-alerta-tenue px-5 py-4">
             <p className="text-normal font-semibold text-alerta">
-              {Object.keys(esperando).length === 1
-                ? "Alguien no puede entrar y pidió que le reinicien la contraseña."
-                : `${Object.keys(esperando).length} personas pidieron que les reinicien la contraseña.`}
+              {pidieron === 1
+                ? `${quienesPiden} no puede entrar y pidió que le reinicien la contraseña.`
+                : `${quienesPiden} pidieron que les reinicien la contraseña.`}
             </p>
             <p className="mt-1 text-menudo text-alerta">
-              Están marcadas en la lista. Entrá a «Editar» y tocá «Reiniciar
-              contraseña»: eligen una nueva la próxima vez que entren.
+              En su fila está «Reiniciar contraseña»: eligen una nueva la
+              próxima vez que entren.
             </p>
           </div>
         )}
@@ -130,9 +159,14 @@ export default async function Admin() {
           </p>
         )}
 
-        {hayCorreo && sinCorreo > 0 && (
-          <p className="mt-4 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-menudo font-semibold text-espera">
-            {sinCorreo} sin correo: no les llega nada.
+        {/* **Sin correo no entran**, que es bastante peor que «no les llega
+            nada»: entrar busca por correo. Y estaba adentro del `hayCorreo`,
+            así que con los avisos apagados no se decía nunca. */}
+        {sinCorreo > 0 && (
+          <p className="mt-4 border-l-4 border-alerta bg-alerta-tenue px-5 py-4 text-menudo font-semibold text-alerta">
+            {sinCorreo === 1
+              ? "1 persona sin correo: no puede entrar."
+              : `${sinCorreo} personas sin correo: no pueden entrar.`}
           </p>
         )}
 
@@ -155,7 +189,7 @@ export default async function Admin() {
           </ul>
         )}
 
-        <SumarPersona />
+        <SumarPersona clientes={clientes.map((c) => ({ id: c.id, nombre: c.nombre }))} />
       </Plegable>
       </div>
     </main>

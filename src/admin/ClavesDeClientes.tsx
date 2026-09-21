@@ -57,11 +57,22 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
   const [estadoVer, verClave, viendo] = useActionState(verClaveDeCliente, null);
   const [estadoTag, guardarTag, guardando] = useActionState(ponerTagDeCliente, null);
 
-  const revelada = estadoVer?.ok ? estadoVer.clave : null;
+  // **Lo revelado se olvida al cerrar.** Salía directo del estado de la
+  // acción, que sobrevive a cerrar el panel: se apretaba «Cerrar» y después
+  // «Ver» otra vez, y la clave aparecía sin pedir la contraseña. Quien se
+  // levanta de la silla con la pantalla abierta deja esa puerta abierta.
+  const [revelada, setRevelada] = useState<string | null>(null);
+  const [atendida, setAtendida] = useState(estadoVer);
   const fallo = [estadoVer, estadoTag].find((r) => r && !r.ok);
+
+  if (estadoVer !== atendida) {
+    setAtendida(estadoVer);
+    if (estadoVer?.ok) setRevelada(estadoVer.clave);
+  }
 
   function cerrar() {
     setModo(null);
+    setRevelada(null);
   }
 
   return (
@@ -69,7 +80,12 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
       <div className="flex flex-wrap items-center gap-2">
         <h3 className={`${TITULO} min-w-0 flex-1`}>{cliente.nombre}</h3>
 
-        {!cliente.tieneClave && <span className={ETIQUETA}>falta</span>}
+        {/* **Sin clave no entra nadie**, ni con el link correcto. Se dibujaba
+            con `ETIQUETA` —gris menudo en mayúsculas—, el mismo estilo que usa
+            «heredado» para un detalle sin consecuencia. */}
+        {!cliente.tieneClave && (
+          <span className={`${ETIQUETA} text-alerta`}>sin clave: no entra nadie</span>
+        )}
 
         {estadoTag?.ok && (
           <span className="text-micro font-extrabold uppercase tracking-wider text-acento">

@@ -32,6 +32,19 @@ const TODOS = archivosBajo(FUENTE);
 const SIN_PRUEBAS = TODOS.filter((f) => !f.endsWith(".test.ts") && !f.endsWith(".test.tsx"));
 const relativo = (f: string) => path.relative(RAIZ, f).replace(/\\/g, "/");
 
+/**
+ * El archivo sin sus líneas de `import`.
+ *
+ * Buscar un nombre en el texto entero no prueba nada: al borrar la llamada, el
+ * import queda y el nombre sigue apareciendo. Se descubrió rompiendo una de
+ * estas pruebas a propósito, que es para lo que sirve hacerlo.
+ */
+const sinImports = (texto: string) =>
+  texto
+    .split(/\r?\n/)
+    .filter((linea) => !linea.trimStart().startsWith("import "))
+    .join("\n");
+
 // ---------------------------------------------------------------------------
 
 /**
@@ -452,7 +465,6 @@ describe("las puertas", () => {
     const deAdmin = [
       "darDeAlta",
       "editarDelEquipo",
-      "cambiarAccesos",
       "reiniciarClaveDePersona",
       "quitarDelEquipo",
       "ponerTagDeCliente",
@@ -475,6 +487,157 @@ describe("las puertas", () => {
       sinPreguntar,
       "Estas acciones cambian quién entra y a qué, y no preguntan quién las " +
         "está llamando. Empezá por `if (!(await puedoVer(\"admin\"))) return NO_ES_TUYO;`."
+    ).toEqual([]);
+  });
+
+  it("toda acción de gestión pregunta a qué sección pertenece", () => {
+    // **La puerta separa por sección mirando la ruta; una acción no respeta la
+    // ruta.** El `Next-Action` la encuentra por su identificador, así que el
+    // POST llega igual desde cualquier dirección que la persona pueda abrir: se
+    // comprobó que las acciones de Clientes corren posteadas a `/gestion/
+    // facturas`. Por eso cada acción vuelve a preguntar por su cuenta —las de
+    // Admin con `puedoVer("admin")`, el resto con `puedoAlgunaDe(...)`—. Sin
+    // esto, quien solo factura leía y tocaba los clientes, los chats y las
+    // piezas con solo mandar el POST. Este guardián existe para que una acción
+    // nueva no nazca sin cerrojo: es exactamente el descuido que ya pasó.
+    //
+    // **Y mira tres cosas que la primera versión dejaba pasar**, cada una un
+    // agujero por donde entraba una acción sin cerrojo:
+    //
+    //   1. **Todos los `acciones.ts`, no uno.** Leía un solo archivo por su
+    //      nombre completo, así que una carpeta nueva bajo `(admin)` con sus
+    //      propias acciones nacía sin vigilancia.
+    //   2. **Las dos formas de escribir una función.** Partía por
+    //      `export async function`, y una acción escrita
+    //      `export const guardarX = async (...) => {}` ni siquiera aparecía en
+    //      la lista: no fallaba, directamente no se la contaba.
+    //   3. **Que el cerrojo sea lo primero.** Aceptaba la llamada en cualquier
+    //      parte del cuerpo —incluso adentro de un comentario, o después de
+    //      haber leído del almacén lo que se iba a proteger—. Comprobar
+    //      permisos después de usarlos no es comprobarlos.
+    // **La puerta misma es la excepción, y es una sola.** Las acciones de
+    // `/gestion/entrar` son las de entrar: mirar un correo, escribir la
+    // contraseña, pedir ayuda, salir. Exigirles sesión sería exigir haber
+    // entrado para poder entrar. Está nombrada acá, con su motivo, en vez de
+    // caer por descuido — y abajo se verifica que ahí adentro no haya nada más
+    // que la puerta, porque si no sería el lugar donde esconder una acción
+    // para que este guardián no la mire.
+    const LA_PUERTA = "src/app/(admin)/gestion/entrar/acciones.ts";
+
+    const archivos = TODOS.filter(
+      (f) =>
+        /[/\\]acciones\.ts$/.test(relativo(f)) &&
+        relativo(f).startsWith("src/app/") &&
+        relativo(f) !== LA_PUERTA
+    );
+    expect(archivos.length, "No encontré los archivos de acciones.").toBeGreaterThan(0);
+
+    const sinCerrojo = archivos.flatMap((f) => {
+      const texto = sinImports(readFileSync(f, "utf8"));
+
+      // Las dos formas: función exportada y constante exportada con flecha.
+      const declara = /^export\s+(?:async\s+function\s+(\w+)|const\s+(\w+)\s*=\s*async)/gm;
+
+      const encontradas: Array<{ nombre: string; desde: number }> = [];
+      for (const m of texto.matchAll(declara)) {
+        encontradas.push({ nombre: m[1] ?? m[2], desde: m.index! });
+      }
+
+      return encontradas
+        .filter(({ desde }, i) => {
+          const hasta = encontradas[i + 1]?.desde ?? texto.length;
+          const bloque = texto.slice(desde, hasta);
+
+          // El cuerpo arranca después de la llave que abre. Se saltean los
+          // comentarios y los renglones en blanco, y lo primero que quede
+          // tiene que ser el cerrojo.
+          const abre = bloque.indexOf("{\n");
+          if (abre === -1) return true;
+
+          const primera = bloque
+            .slice(abre + 2)
+            .split("\n")
+            .map((l) => l.trim())
+            .find(
+              (l) => l && !l.startsWith("//") && !l.startsWith("*") && !l.startsWith("/*")
+            );
+
+          return !primera || !/^if \(!\(await (puedoVer\("admin"\)|puedoAlgunaDe\()/.test(primera);
+        })
+        .map(({ nombre }) => `${relativo(f)}: ${nombre}`);
+    });
+
+    expect(
+      sinCerrojo,
+      "Estas acciones no arrancan preguntando en qué sección se las dibuja, y " +
+        "una acción se puede invocar desde cualquier ruta. La primera línea " +
+        'tiene que ser `if (!(await puedoAlgunaDe([...]))) return NO_ES_TUYO;` ' +
+        'con las secciones que la usan, o `puedoVer("admin")` si es de Admin.'
+    ).toEqual([]);
+  });
+
+  it("en la puerta no hay nada más que la puerta", () => {
+    // La otra mitad de la excepción de arriba. `/gestion/entrar` es la única
+    // dirección que abre sin sesión —`proxy.ts` la deja pasar antes de mirar la
+    // galleta—, así que una acción puesta ahí queda al alcance de cualquiera
+    // **sin haber entrado**. Mientras sean las tres de entrar, el riesgo es
+    // el que se decidió tener; una cuarta hay que decidirla a propósito.
+    const fuente = sinImports(leer("src/app/(admin)/gestion/entrar/acciones.ts"));
+
+    const exportadas = [
+      ...fuente.matchAll(/^export\s+(?:async\s+function\s+(\w+)|const\s+(\w+)\s*=\s*async)/gm),
+    ].map((m) => m[1] ?? m[2]);
+
+    expect(
+      exportadas.sort(),
+      "Apareció una acción nueva en la pantalla de entrar, que es la única que " +
+        "se abre sin sesión. Si de verdad va ahí, sumala a esta lista y dejá " +
+        "escrito por qué puede llamarla alguien que no entró."
+    ).toEqual(["entrar", "olvide", "salir"]);
+  });
+
+  it("ninguna pantalla de gestión queda fuera del alcance de la puerta", () => {
+    // **El matcher del proxy es una lista de direcciones, y las listas se
+    // quedan cortas.** Hoy dice `/gestion`, `/gestion/:path*` y `/diagnostico`:
+    // una pantalla nueva bajo `(admin)` en cualquier otra dirección —`/informes`,
+    // pongamos— no pasaría por la puerta **en absoluto**. No se vería como un
+    // error de permisos: se vería como una pantalla que anda, abierta para
+    // cualquiera que sepa la dirección, incluido quien no entró nunca.
+    const proxy = leer("src/proxy.ts");
+    const matcher = proxy.slice(proxy.indexOf("matcher:"), proxy.indexOf("]", proxy.indexOf("matcher:")));
+    const patrones = [...matcher.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(patrones.length, "No encontré el matcher del proxy.").toBeGreaterThan(0);
+
+    /** Si el matcher cubre esa dirección. `:path*` cubre lo que cuelga. */
+    const cubierta = (ruta: string) =>
+      patrones.some((p) => {
+        const base = p.replace("/:path*", "");
+        return p.includes(":path*") ? ruta === base || ruta.startsWith(`${base}/`) : ruta === p;
+      });
+
+    const paginas = archivosBajo(path.join(FUENTE, "app", "(admin)")).filter((f) =>
+      /[/\\]page\.tsx$/.test(f)
+    );
+
+    const afuera = paginas
+      .map(
+        (f) =>
+          "/" +
+          path
+            .relative(path.join(FUENTE, "app"), path.dirname(f))
+            .replace(/\\/g, "/")
+            .split("/")
+            .filter((t) => t && !t.startsWith("("))
+            .map((t) => (t.startsWith("[") ? "cualquiera" : t))
+            .join("/")
+      )
+      .filter((ruta) => !cubierta(ruta));
+
+    expect(
+      afuera,
+      "Estas pantallas de gestión no pasan por la puerta: el matcher de " +
+        "`src/proxy.ts` no las cubre, así que las abre cualquiera. Agregá su " +
+        "dirección al matcher."
     ).toEqual([]);
   });
 
@@ -559,38 +722,67 @@ describe("las puertas", () => {
     ).toEqual([]);
   });
 
-  it("ninguna ruta de API sirve datos sin saber quién pregunta", () => {
+  it("ninguna ruta de API sirve datos sin decir a qué sección pertenece", () => {
+    // **La separación por rol tiene que alcanzar también a `/api`.** El `proxy`
+    // la aplica mirando la dirección, y su matcher cubre `/gestion` y
+    // `/diagnostico` pero **no** `/api`: durante un tiempo, cualquier sesión de
+    // gestión valía lo mismo en las cuatro rutas, y alguien dado de alta para
+    // facturar se bajaba el historial entero de un cliente con escribir la
+    // dirección.
+    //
+    // La versión anterior de esta prueba buscaba que el **nombre** de alguna
+    // función de autorización apareciera en el archivo. Eso no alcanza: el
+    // nombre aparece igual en un comentario, o llamado después de haber leído
+    // lo que se iba a proteger. Ahora se verifica la forma:
+    //
+    //   1. La ruta declara `const PUERTA: Puerta = { agencia, cliente }`, que
+    //      dice qué secciones sirve y si entra el cliente del portal.
+    //   2. Se la pasa a una de las dos puertas del módulo de permisos.
+    //
+    // Y del otro lado, `quienPide` —la que contesta «quién sos» sin preguntar
+    // «te toca»— dejó de exportarse: no hay forma de saltearse el paso, porque
+    // la versión sin sección no se puede llamar desde afuera.
     const rutas = archivosBajo(path.join(FUENTE, "app", "api")).filter((f) =>
       f.endsWith("route.ts")
     );
     expect(rutas.length, "No encontré ninguna ruta de API.").toBeGreaterThan(0);
 
-    const sinPuerta = rutas
-      .filter((f) => {
-        // Se sacan los imports antes de buscar. La primera versión de esta
-        // prueba no lo hacía, y no atrapaba nada: al borrar la llamada, el
-        // import quedaba y el nombre seguía apareciendo en el archivo. Se
-        // descubrió rompiéndola a propósito, que es para lo que sirve hacerlo.
-        const cuerpo = readFileSync(f, "utf8")
-          .split("\n")
-          .filter((linea) => !linea.trimStart().startsWith("import "))
-          .join("\n");
-        // Las tres formas de preguntar quién está del otro lado. `quienPide`
-        // es la general —contesta «cliente», «agencia» o «nadie»—; las otras
-        // dos son de cuando solo puede haber un cliente mirando.
-        return !["quienPide(", "clienteQueEntro(", "entroAlCliente("].some((c) =>
-          cuerpo.includes(c)
-        );
+    const flojas = rutas
+      .map((f) => {
+        const texto = readFileSync(f, "utf8");
+        const cuerpo = sinImports(texto);
+
+        if (!/const PUERTA: Puerta = \{/.test(cuerpo)) {
+          return `${relativo(f)}: no declara su PUERTA`;
+        }
+        if (!/quienPide(En|De)\([\s\S]{0,200}?PUERTA/.test(cuerpo)) {
+          return `${relativo(f)}: no le pasa su PUERTA a quienPideEn/quienPideDe`;
+        }
+        return null;
       })
-      .map(relativo);
+      .filter(Boolean);
 
     expect(
-      sinPuerta,
-      "Estas rutas devuelven datos sin comprobar la galleta del cliente. " +
-        "Alcanzaba con conocer un identificador de Drive —que lo ve cualquiera " +
-        "a quien le compartieron la carpeta— para bajarse el archivo sin haber " +
-        "escrito nunca una clave."
+      flojas,
+      "Cada ruta de /api tiene que decir a qué secciones sirve y comprobarlo. " +
+        "Sin eso, la separación por rol se termina en las pantallas y las rutas " +
+        "quedan abiertas para cualquier sesión de gestión."
     ).toEqual([]);
+  });
+
+  it("la puerta sin sección no se puede llamar desde afuera", () => {
+    // Es lo que hace que la prueba de arriba no dependa de la buena memoria de
+    // nadie: mientras `quienPide` fue pública, una ruta podía preguntar «¿quién
+    // es?» y olvidarse de «¿le toca?». Las cuatro se olvidaron.
+    const permisos = leer("src/lib/permisos.ts");
+
+    expect(
+      /export\s+async\s+function\s+quienPide\s*\(/.test(permisos),
+      "`quienPide` no puede volver a exportarse: contesta quién sos sin mirar " +
+        "la sección, y esa es exactamente la llamada que se olvida."
+    ).toBe(false);
+    expect(permisos).toContain("export async function quienPideEn");
+    expect(permisos).toContain("export async function quienPideDe");
   });
 
   it("la gestión pide los clientes por un solo lugar", () => {
@@ -623,6 +815,9 @@ describe("las puertas", () => {
       "clienteDeCarpeta",
       "esCarpetaDelCliente",
       "idsDeCarpetasReales",
+      // El mapa entero de carpetas a clientes: sin recortar, como todo lo de
+      // ese módulo.
+      "carpetasConSuCliente",
       // Un aviso nombra al cliente y la carpeta: sin recortar, cuenta lo que
       // el alcance viene a no mostrar.
       "losAvisos",
@@ -660,7 +855,11 @@ describe("las puertas", () => {
     expect(
       permisos,
       "QuienPide tiene que traer las raíces de quien pregunta, no un permiso general."
-    ).toContain('tipo: "agencia"; raices: string[]');
+    ).toMatch(/tipo:\s*"agencia";\s*raices:\s*string\[\];/);
+    expect(
+      permisos,
+      "Y las secciones, que son lo que separa qué ruta le toca."
+    ).toMatch(/secciones:\s*Seccion\[\];/);
     expect(
       /raices: \[\]|carpetasAdministradas\(\) : \[quien\.raiz\]/.test(permisos),
       "archivoAutorizado volvió a autorizar a la agencia contra todas las carpetas."
@@ -717,6 +916,67 @@ describe("las reglas del negocio no se escriben dos veces", () => {
       "Estos archivos escriben a mano cuántas rondas entran. Tiene que salir de " +
         "RONDAS_INCLUIDAS_POR_DEFECTO en @/dominio/pieza, que es el único lugar " +
         "que va a cambiar el día que se negocie por cliente."
+    ).toEqual([]);
+  });
+});
+
+describe("una fecha se escribe de una sola manera", () => {
+  it("nadie arma su propio formateador", () => {
+    // **Estaban en nueve archivos, y el precio no fue la repetición.** Ninguna
+    // de las copias fijaba la zona horaria, y un `Intl.DateTimeFormat` sin zona
+    // usa la del servidor: en internet, tiempo universal. **Cada hora que la
+    // aplicación mostraba estaba tres horas adelantada** —un mensaje de las
+    // ocho y media de la noche decía 23:30— y desde una máquina de Buenos Aires,
+    // que es donde se desarrolla, no se nota nunca.
+    //
+    // Y no era la primera vez: el propio módulo que centralizaba esto decía que
+    // el formato «estaba copiado tres veces». Se volvió a copiar seis veces más.
+    const DUENO = "src/dominio/tiempo.ts";
+
+    const culpables = SIN_PRUEBAS.filter(
+      (f) => relativo(f) !== DUENO && readFileSync(f, "utf8").includes("new Intl.DateTimeFormat")
+    ).map(relativo);
+
+    expect(
+      culpables,
+      "El formato de las fechas vive en `src/dominio/tiempo.ts` y en ningún " +
+        "otro lado: `enPalabrasElDiaDe`, `enPalabrasLaFecha`, `enPalabrasElMes`, " +
+        "`enPalabrasConAnio`, `enPalabrasElDiaLargo`. Lo importante no es no " +
+        "repetir: es que la zona horaria esté puesta, y en una copia se olvida."
+    ).toEqual([]);
+  });
+});
+
+describe("lo recordado no puede contestar distinto que la base", () => {
+  it("las piezas se escriben por un solo lugar", () => {
+    // **La colección de piezas se lee una vez por pedido y se recuerda.** Sin
+    // eso, las tres preguntas que se hacen sobre una carpeta —en qué anda cada
+    // pieza, qué se mudó a «Entregas finales», cuántas aprobadas ya no están—
+    // recorrían la colección entera **por cada carpeta del árbol**: un tablero
+    // con cuarenta carpetas eran ochenta descargas de la misma tabla en un solo
+    // render.
+    //
+    // El precio de recordar es que quien escriba tiene que dejar el recuerdo al
+    // día, y eso no puede depender de que alguien se acuerde: una acción que
+    // guarda una pieza y después lee la carpeta vería la foto de antes de su
+    // propia escritura. Por eso hay un solo escritor, `escribir`, que guarda y
+    // anota; esto verifica que nadie lo esquive.
+    const fuente = sinImports(
+      readFileSync(path.join(FUENTE, "lib", "piezas.ts"), "utf8")
+    );
+
+    const abre = fuente.indexOf("async function escribir(");
+    expect(abre, "No encontré `escribir` en piezas.ts.").toBeGreaterThan(-1);
+    const cuerpoDeEscribir = fuente.slice(abre, fuente.indexOf("\n}", abre));
+
+    const escrituras = [...fuente.matchAll(/almacen\.(guardar|guardarVarios|borrar)\(/g)];
+    const porFuera = escrituras.filter((m) => !cuerpoDeEscribir.includes(m[0]));
+
+    expect(
+      porFuera.map((m) => m[0]),
+      "Las piezas se guardan con `escribir(...)`, que además deja al día lo " +
+        "recordado de este pedido. Escribiendo directo contra el almacén, la " +
+        "lectura siguiente del mismo render devuelve la foto de antes."
     ).toEqual([]);
   });
 });
@@ -840,7 +1100,7 @@ describe("la ventana del trabajo no vuelve a mezclar mirar con hacer", () => {
     expect(abre, "La ventana dejó de usar el encabezado compartido.").toBeGreaterThan(-1);
     const encabezado = ventana.slice(abre, ventana.indexOf("{/* El medio", abre));
     expect(encabezado).toContain("titulo=");
-    expect(encabezado).toContain("Abrir la carpeta");
+    expect(encabezado).toContain("Ver la carpeta");
     expect(encabezado).toContain("onCerrar=");
   });
 });

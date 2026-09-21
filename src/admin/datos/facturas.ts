@@ -35,6 +35,14 @@ export type FacturasDeUnCliente = {
   /** La carpeta «Facturas» en Drive, si existe. */
   carpetaId: string | null;
   enlaceDrive?: string;
+  /**
+   * La carpeta del cliente en Drive.
+   *
+   * Para quien **no** tiene «Facturas»: es el único lugar donde se puede ir a
+   * crearla, y sin este enlace la pantalla decía «no tiene carpeta» sin dar a
+   * dónde ir a arreglarlo.
+   */
+  carpetaDelCliente?: string;
   facturas: FacturaDeCliente[];
   /** Drive no contestó por este cliente. No es lo mismo que no tener ninguna. */
   fallo: boolean;
@@ -49,6 +57,7 @@ export async function lasFacturas(): Promise<FacturasDeUnCliente[]> {
         clienteId: cliente.id,
         cliente: cliente.nombre,
         carpetaId: null,
+        carpetaDelCliente: cliente.enlaceDrive,
         facturas: [],
         fallo: false,
       };
