@@ -23,8 +23,26 @@ const CABECERAS = [
   {
     // El link del cliente lleva su token. Sin esto, viaja en la cabecera
     // Referer a cualquier sitio que se abra desde adentro del portal.
+    //
+    // **`same-origin` y no `no-referrer`, y la diferencia tiraba abajo la
+    // aplicación entera.** Con `no-referrer`, el navegador manda además la
+    // cabecera `Origin` en `null` —lo dice la especificación: sin referente,
+    // el origen se serializa como nulo—. Next compara ese `Origin` con el host
+    // para protegerse de CSRF en las Server Actions y aborta la acción cuando
+    // no coinciden; la única razón por la que esto no se vio nunca es que
+    // **saltea la comprobación en `localhost`**, que es donde se programa.
+    //
+    // Entrando por cualquier otra dirección —la red de casa, el dominio real—
+    // no andaba una sola acción: ni entrar, ni la clave del portal, ni
+    // aprobar, ni entregar. La pantalla quedaba en blanco y el servidor
+    // contestaba 500.
+    //
+    // `same-origin` hace lo que el párrafo de arriba quería: a cualquier sitio
+    // ajeno no le llega nada, así que el token del cliente sigue sin viajar.
+    // Adentro de nuestro propio origen sí, que es lo que el navegador necesita
+    // para poder decir de dónde viene el formulario.
     key: "Referrer-Policy",
-    value: "no-referrer",
+    value: "same-origin",
   },
   {
     // Para navegadores viejos que no entienden frame-ancestors.

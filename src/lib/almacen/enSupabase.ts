@@ -91,6 +91,16 @@ const esChoque = (e: unknown) => (e as { estado?: number })?.estado === 409;
  */
 const INTENTOS = 5;
 
+/**
+ * ¿El error es «esa función no existe en la base»?
+ *
+ * PostgREST lo contesta con `PGRST202`. Se mira el código y no el texto porque
+ * el texto trae el nombre de los parámetros y cambia solo.
+ */
+function esFuncionQueFalta(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("PGRST202");
+}
+
 export const enSupabase: Almacen = {
   coleccion<T>(nombre: string, valido: (valor: unknown) => valor is T): Coleccion<T> {
     const filtro = `coleccion=eq.${encodeURIComponent(nombre)}`;
@@ -180,10 +190,43 @@ export const enSupabase: Almacen = {
           comoJson[id] = valor === undefined ? null : valor;
         }
 
-        await pedir("rpc/guardar_varios", {
-          method: "POST",
-          body: JSON.stringify({ la_coleccion: nombre, cambios: comoJson }),
-        });
+        try {
+          await pedir("rpc/guardar_varios", {
+            method: "POST",
+            body: JSON.stringify({ la_coleccion: nombre, cambios: comoJson }),
+          });
+          return;
+        } catch (error) {
+          // **Si la función no está, se guarda como antes y se avisa.**
+          //
+          // La base puede ser más vieja que el código: alguien sube esta
+          // versión y todavía no pegó `003_guardar_varios.sql`. Sin esto, ese
+          // día se rompe **todo lo que escriba más de un documento** —guardar
+          // un calendario, cambiar un plazo con lo que hereda debajo, entregar
+          // una tanda— con un 404 de Postgres en la cara y una pantalla en
+          // blanco.
+          //
+          // El camino viejo no es atómico, que es justamente lo que la función
+          // vino a arreglar: un corte en el medio deja la mitad hecha. Pero es
+          // exactamente lo que esta aplicación hizo durante meses, así que
+          // degradar a eso no empeora nada, y un aviso en el registro dice qué
+          // falta hacer.
+          if (!esFuncionQueFalta(error)) throw error;
+
+          console.warn(
+            "Falta la función `guardar_varios` en la base: pegá " +
+              "supabase/migraciones/003_guardar_varios.sql en el SQL Editor. " +
+              "Mientras tanto se guarda en dos pasos, sin transacción."
+          );
+
+          const aBorrar = Object.keys(cambios).filter((id) => cambios[id] === undefined);
+          const aEscribir = Object.entries(cambios)
+            .filter(([, valor]) => valor !== undefined)
+            .map(([id, valor]) => ({ id, datos: valor as T }));
+
+          await borrarVarios(aBorrar);
+          await upsert(aEscribir);
+        }
       },
       async borrar(id) {
         await borrarVarios([id]);
