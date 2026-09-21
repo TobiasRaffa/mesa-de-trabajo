@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Drive se reemplaza por un doble: estas pruebas verifican la decisión de
 // permisos, no la conexión con Google.
-vi.mock("@/lib/google", () => ({ metadatosArchivo: vi.fn() }));
+// `alOlvidarDrive` se deja pasar sin hacer nada: acá no hay memoria de Drive
+// que limpiar, y lo que se prueba es la decisión, no el aviso.
+vi.mock("@/lib/google", () => ({ metadatosArchivo: vi.fn(), alOlvidarDrive: () => {} }));
 // Los clientes también se reemplazan: acá se prueba la decisión de permisos,
 // no cómo se descubren las carpetas compartidas.
 vi.mock("@/lib/clientes", () => ({ clientesHabilitados: vi.fn() }));
@@ -13,11 +15,17 @@ vi.mock("@/lib/ajustes", async (original) => ({
   escondidosEntre: vi.fn(async (ids: string[]) => new Set(ids.filter((i) => ESCONDIDOS.has(i)))),
 }));
 
+// Las secciones van en el tipo desde que la separación por rol alcanza también
+// a las rutas. Acá se prueba el recorte por **carpetas**, así que van todas:
+// qué sección abre cada ruta lo prueba `puertasDeApi.test.ts`.
+const TODAS = [...SECCIONES];
+
 /** Lo que la agencia apagó, para esta prueba. */
 const ESCONDIDOS = new Set<string>();
 
 import { clientesHabilitados } from "@/lib/clientes";
 import { metadatosArchivo } from "@/lib/google";
+import { SECCIONES } from "@/dominio/roles";
 import {
   archivoAutorizado,
   cadenaHasta,
@@ -369,7 +377,7 @@ describe("la cadena hasta el cliente", () => {
  * como se abre un agujero: la segunda pantalla que lo necesite lo copia.
  */
 describe("la agencia mira con otra vara", () => {
-  const comoAgencia = { tipo: "agencia" as const, raices: [CLIENTE] };
+  const comoAgencia = { tipo: "agencia" as const, raices: [CLIENTE], secciones: TODAS };
 
   beforeEach(() => {
     clientes.mockResolvedValue([cliente(CLIENTE), cliente("otro-cliente")]);
@@ -395,6 +403,7 @@ describe("la agencia mira con otra vara", () => {
     await expect(
       archivoAutorizado("archivo-1", {
         tipo: "agencia" as const,
+        secciones: TODAS,
         raices: [CLIENTE, "otro-cliente"],
       })
     ).resolves.not.toBeNull();
@@ -451,7 +460,11 @@ describe("una carpeta no se sirve como si fuera un archivo", () => {
   it("ni para la agencia", async () => {
     conUnaSubcarpeta();
     await expect(
-      archivoAutorizado("sub", { tipo: "agencia" as const, raices: [CLIENTE] })
+      archivoAutorizado("sub", {
+        tipo: "agencia" as const,
+        raices: [CLIENTE],
+        secciones: TODAS,
+      })
     ).resolves.toBeNull();
   });
 

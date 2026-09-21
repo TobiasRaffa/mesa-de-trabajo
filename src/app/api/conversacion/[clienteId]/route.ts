@@ -16,7 +16,7 @@
 
 import type { NextRequest } from "next/server";
 import { cookies } from "next/headers";
-import { entroAlCliente } from "@/lib/acceso";
+import { quienPideDe, type Puerta } from "@/lib/permisos";
 import {
   hayAnteriores,
   leerConversacion,
@@ -25,6 +25,15 @@ import {
 
 const sinDetalle = (mensaje: string, codigo: number) =>
   new Response(mensaje, { status: codigo, headers: { "Content-Type": "text/plain" } });
+
+/**
+ * A quién sirve esta ruta.
+ *
+ * **Solo el cliente.** La agencia no la usa: pide los mensajes por una acción
+ * de servidor, que además le marca el chat como leído. Dejarla abierta «por si
+ * acaso» sería una segunda puerta a la misma conversación, con otro criterio.
+ */
+const PUERTA: Puerta = { agencia: null, cliente: true };
 
 export async function GET(
   req: NextRequest,
@@ -39,7 +48,7 @@ export async function GET(
 
   // Igual que con los archivos: si no corresponde, se contesta como si no
   // existiera. Un 403 confirmaría que el cliente existe.
-  if (!(await entroAlCliente(clienteId, await cookies()))) {
+  if (!(await quienPideDe(clienteId, await cookies(), PUERTA))) {
     return sinDetalle("No encontrado", 404);
   }
 

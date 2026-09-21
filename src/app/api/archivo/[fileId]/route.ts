@@ -14,7 +14,12 @@ import { cookies } from "next/headers";
 
 import { abrirArchivo } from "@/lib/google";
 import { cabeceraDeDescarga } from "@/lib/descargas";
-import { archivoAutorizado, quienPide } from "@/lib/permisos";
+import {
+  archivoAutorizado,
+  pasaPorFacturas,
+  quienPideEn,
+  type Puerta,
+} from "@/lib/permisos";
 
 const sinDetalle = (mensaje: string, codigo: number) =>
   new Response(mensaje, { status: codigo, headers: { "Content-Type": "text/plain" } });
@@ -30,6 +35,27 @@ const sinDetalle = (mensaje: string, codigo: number) =>
  */
 const SE_PUEDE_MIRAR = new Set(["application/pdf"]);
 
+/**
+ * A quién sirve esta ruta.
+ *
+ * **El cliente entra**: es la ruta por la que se lleva su trabajo. De la
+ * agencia entran las tres secciones donde hay algo para abrir —el árbol de
+ * Clientes, la ventana del Tablero y la pantalla de Facturas—. Quedan afuera
+ * Conversaciones y Notificaciones, que no muestran archivos, y Admin y
+ * Diagnóstico, que no son para mirar trabajo.
+ */
+const PUERTA: Puerta = { agencia: ["clientes", "tablero", "facturas"], cliente: true };
+
+/**
+ * Lo que se cobra es otra sección, y también para los bytes.
+ *
+ * Con una sola lista, quien lleva Facturas se bajaba un boceto y quien lleva
+ * Clientes se bajaba una factura: los dos tenían «alguna» de las secciones que
+ * abren archivos, y el archivo no decía de cuál era. Acá lo dice el camino.
+ */
+const PARA_FACTURAS: readonly ["facturas"] = ["facturas"];
+const PARA_TRABAJO: readonly ["clientes", "tablero"] = ["clientes", "tablero"];
+
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/archivo/[fileId]">) {
   const { fileId } = await ctx.params;
 
@@ -37,13 +63,24 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/archivo/[fil
   // puerta —la del cliente o la de la agencia— no se sirve un solo byte. Y lo
   // que se sirve depende de quién sea: el cliente ve lo suyo y nada más; la
   // agencia ve todo lo que el robot ve.
-  const quien = await quienPide(await cookies());
+  const galletas = await cookies();
+  const quien = await quienPideEn(galletas, PUERTA);
   if (!quien) return sinDetalle("No encontrado", 404);
 
   // Si el archivo no cuelga de su carpeta, se responde igual que si no
   // existiera: no confirmamos ni desmentimos que exista.
   const archivo = await archivoAutorizado(fileId, quien);
   if (!archivo) return sinDetalle("No encontrado", 404);
+
+  // Y del lado de la agencia, además, que la sección sea la del archivo. Al
+  // cliente no le toca esta pregunta: «Facturas» ya le corta el camino en
+  // `archivoAutorizado`, así que lo que llega hasta acá es trabajo suyo.
+  if (quien.tipo === "agencia") {
+    const suyas = (await pasaPorFacturas(fileId)) ? PARA_FACTURAS : PARA_TRABAJO;
+    if (!suyas.some((s) => quien.secciones.includes(s))) {
+      return sinDetalle("No encontrado", 404);
+    }
+  }
 
   try {
     const deDrive = await abrirArchivo(fileId);

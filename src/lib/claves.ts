@@ -27,6 +27,15 @@ const derivar = promisify(scrypt) as (
 /** Cuánto ocupa la huella. 32 bytes es lo que recomienda la propia función. */
 const LARGO = 32;
 
+/**
+ * La sal contra la que se deriva cuando no hay nadie.
+ *
+ * Es de esta corrida y no una constante escrita en el código: no protege nada
+ * —lo que se busca es que tarde, no que sea secreta— pero tampoco hace falta
+ * que sea la misma para siempre.
+ */
+const SAL_DE_MENTIRA = randomBytes(16);
+
 // El largo mínimo vive en el dominio porque además lo necesita el campo donde
 // se escribe, que corre en el navegador. Se reexporta para no obligar a nadie a
 // cambiar de puerta.
@@ -94,7 +103,15 @@ export async function hayAlguienConClave(): Promise<boolean> {
  */
 export async function claveCorrecta(personaId: string, clave: string): Promise<boolean> {
   const guardado = await almacen.uno(personaId);
-  if (!guardado) return false;
+  // **Sin huella se deriva igual, contra una de mentira.** Salir por acá sin
+  // derivar nada tarda microsegundos; derivar tarda decenas de milisegundos a
+  // propósito. Esa diferencia se mide desde afuera, y convierte la pantalla de
+  // entrar en la forma cómoda de averiguar qué correos existen —justo lo que
+  // el mensaje único de la puerta viene a evitar—.
+  if (!guardado) {
+    await derivar(clave, SAL_DE_MENTIRA, LARGO);
+    return false;
+  }
 
   const [metodo, salEnTexto, huellaEnTexto] = guardado.split("$");
   if (metodo !== "scrypt" || !salEnTexto || !huellaEnTexto) return false;

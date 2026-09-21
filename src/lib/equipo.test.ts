@@ -6,20 +6,12 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const guardado: Record<string, unknown> = {};
+const { memoriaDePruebas } = await import("@/lib/almacen/enMemoria");
+const guardado = memoriaDePruebas.ver("equipo");
 
-vi.mock("@/lib/almacen", () => ({
-  coleccion: () => ({
-    todo: async () => guardado,
-    uno: async (id: string) => guardado[id],
-    guardar: async (id: string, v: unknown) => {
-      guardado[id] = v;
-    },
-    borrar: async (id: string) => {
-      delete guardado[id];
-    },
-  }),
-}));
+// El doble del almacén es el compartido: cumple el contrato entero —`cambiar`
+// incluido— así que lo que pasa acá dice algo de lo que va a pasar de verdad.
+vi.mock("@/lib/almacen", async () => (await import("@/lib/almacen/enMemoria")).memoriaDePruebas);
 
 const {
   borrarCodigoDeAlta,

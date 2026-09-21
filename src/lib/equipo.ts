@@ -210,6 +210,18 @@ export async function elEquipo(): Promise<Persona[]> {
   return Object.values(await almacen.todo()).map(completar);
 }
 
+/**
+ * Cómo se llama cada una, por identificador, **en una sola lectura**.
+ *
+ * `personaPorId` es un documento por llamada, y el árbol la llamaba una vez por
+ * carpeta y otra por pieza para poner el nombre de quien la lleva: en Supabase
+ * eso es un viaje de red por renglón de la lista.
+ */
+export async function nombresDelEquipo(): Promise<Map<string, string>> {
+  const todos = await almacen.todo();
+  return new Map(Object.entries(todos).map(([id, p]) => [id, completar(p).nombre]));
+}
+
 /** Qué secciones ve una persona: las de su rol más las sueltas. */
 export const seccionesDePersona = (p: Persona): Seccion[] => seccionesDe(p.rol, p.sueltas);
 
@@ -256,18 +268,16 @@ export async function sumarAlEquipo(datos: {
  * antes de que existieran los códigos.
  */
 export async function renovarCodigoDeAlta(id: string): Promise<string | null> {
-  const actual = await almacen.uno(id);
-  if (!actual) return null;
   const codigo = nuevoCodigoDeAlta();
-  await almacen.guardar(id, completarGuardada({ ...actual, codigoDeAlta: codigo }));
-  return codigo;
+  const quedo = await almacen.cambiar(id, (habia) =>
+    habia ? completarGuardada({ ...habia, codigoDeAlta: codigo }) : undefined
+  );
+  return quedo ? codigo : null;
 }
 
 /** Ya eligió su contraseña: el código cumplió y se va. */
 export async function borrarCodigoDeAlta(id: string): Promise<void> {
-  const actual = await almacen.uno(id);
-  if (!actual) return;
-  await almacen.guardar(id, completar(actual));
+  await almacen.cambiar(id, (habia) => (habia ? completar(habia) : undefined));
 }
 
 /**
@@ -282,9 +292,6 @@ export async function cambiarPersona(
   id: string,
   cambios: Partial<Omit<Persona, "id">>
 ): Promise<void> {
-  const actual = await almacen.uno(id);
-  if (!actual) return;
-
   const recortado: Partial<Persona> = { ...cambios };
   if (typeof recortado.nombre === "string") recortado.nombre = recortado.nombre.trim().slice(0, 60);
   if (typeof recortado.correo === "string") recortado.correo = recortado.correo.trim().slice(0, 120);
@@ -294,7 +301,11 @@ export async function cambiarPersona(
   if (recortado.sueltas) recortado.sueltas = recortado.sueltas.filter(esSeccion);
   if ("clientes" in recortado && !esAlcance(recortado.clientes)) delete recortado.clientes;
 
-  await almacen.guardar(id, completarGuardada({ ...actual, ...recortado }));
+  // En un solo paso: cambiar el rol desde una pantalla y el nombre desde otra,
+  // a la vez, perdía uno de los dos.
+  await almacen.cambiar(id, (habia) =>
+    habia ? completarGuardada({ ...habia, ...recortado }) : undefined
+  );
 }
 
 /**

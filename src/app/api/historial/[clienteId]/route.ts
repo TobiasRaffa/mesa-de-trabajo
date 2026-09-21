@@ -10,10 +10,21 @@ import { cookies } from "next/headers";
 import { comoCsv, historialDelCliente } from "@/admin/datos/historial";
 import { cabeceraDeDescarga } from "@/lib/descargas";
 import { datosDeCarpeta } from "@/lib/google";
-import { quienPide } from "@/lib/permisos";
+import { quienPideDe, type Puerta } from "@/lib/permisos";
 
 const sinDetalle = (mensaje: string, codigo: number) =>
   new Response(mensaje, { status: codigo, headers: { "Content-Type": "text/plain" } });
+
+/**
+ * A quién sirve esta ruta.
+ *
+ * **Solo Clientes**, que es la sección donde vive el trabajo que este archivo
+ * cuenta: qué se entregó, cuántas vueltas llevó, quién hizo cada cosa y qué
+ * pidió cambiar el cliente. Pedía nada más que «sesión de gestión», así que
+ * alguien dado de alta para facturar se bajaba todo eso con escribir la
+ * dirección. El cliente no entra: lo suyo ya lo ve en su portal.
+ */
+const PUERTA: Puerta = { agencia: ["clientes"], cliente: false };
 
 export async function GET(
   _req: Request,
@@ -21,8 +32,7 @@ export async function GET(
 ) {
   const { clienteId } = await ctx.params;
 
-  const quien = await quienPide(await cookies());
-  if (!quien || quien.tipo !== "agencia" || !quien.raices.includes(clienteId)) {
+  if (!(await quienPideDe(clienteId, await cookies(), PUERTA))) {
     return sinDetalle("No encontrado", 404);
   }
 

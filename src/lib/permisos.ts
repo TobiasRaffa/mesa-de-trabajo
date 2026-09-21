@@ -32,13 +32,13 @@
 // exista un camino limpio hasta el cliente: negar por un camino sucio cuando
 // hay otro bueno sería esconder algo que la agencia dejó a la vista.
 
-import { entradaDe } from "@/lib/acceso";
+import { entradaDe, entroAlCliente } from "@/lib/acceso";
 import { esCarpetaDeFacturas, escondidosEntre } from "@/lib/ajustes";
 import { GALLETA_DE_GESTION } from "@/lib/contrasena";
 import { quienLleva } from "@/lib/sesion";
-import { recortaA } from "@/dominio/roles";
+import { recortaA, type Seccion } from "@/dominio/roles";
 import { clientesHabilitados } from "@/lib/clientes";
-import { metadatosArchivo, type MetadatosArchivo } from "@/lib/google";
+import { alOlvidarDrive, metadatosArchivo, type MetadatosArchivo } from "@/lib/google";
 
 /**
  * Hasta dónde se sube buscando una carpeta administrada.
@@ -82,10 +82,21 @@ export async function carpetasAdministradas(): Promise<string[]> {
   }
 }
 
-/** Olvida lo aprendido del árbol. Existe para las pruebas. */
+/** Olvida lo aprendido del árbol. */
 export function olvidarElArbol(): void {
   madresDe.clear();
 }
+
+/**
+ * **Y se olvida junto con lo demás cuando la aplicación toca Drive.**
+ *
+ * Esto existía solo para las pruebas, y era un agujero: `olvidarDrive()`
+ * limpiaba la memoria de `google.ts` y dejaba esta intacta cinco minutos. Como
+ * es la que dice qué carpeta cuelga de cuál, esconder una carpeta o devolver
+ * un archivo desde «Entregas finales» seguía dejando pasar al cliente por el
+ * camino viejo, y el aviso le llegaba a quien llevaba la carpeta anterior.
+ */
+alOlvidarDrive(olvidarElArbol);
 
 async function nodo(carpetaId: string): Promise<{ padres: string[]; nombre: string }> {
   const ahora = Date.now();
@@ -167,7 +178,21 @@ async function hayCamino(
  */
 export type QuienPide =
   | { tipo: "cliente"; raiz: string }
-  | { tipo: "agencia"; raices: string[] };
+  | {
+      tipo: "agencia";
+      raices: string[];
+      /**
+       * A qué partes de la gestión entra.
+       *
+       * **Estaba solo en las pantallas y en las acciones, no acá**, y esa era
+       * la única puerta de la aplicación por la que los roles no pasaban: el
+       * `proxy` separa por sección mirando la ruta y su matcher nunca incluyó
+       * `/api`, así que cualquier sesión de gestión valía lo mismo en las
+       * rutas. Alguien de Facturación se bajaba el historial entero de piezas,
+       * entregas y aprobaciones de un cliente con escribir la dirección.
+       */
+      secciones: Seccion[];
+    };
 
 /**
  * Autoriza un archivo **para quien lo pide**, y de paso devuelve sus datos.
@@ -226,9 +251,7 @@ export async function archivoAutorizado(
  * respuesta que no sirve para abrir nada, y es la de alguien que escribió una
  * dirección sin haber entrado por ninguna puerta.
  */
-export async function quienPide(galletas: {
-  get(nombre: string): { value: string } | undefined;
-}): Promise<QuienPide | null> {
+async function quienPide(galletas: Galletas): Promise<QuienPide | null> {
   // Primero la agencia: es una firma y no toca Drive. Buscar el cliente
   // recorre sus carpetas, y sería trabajo tirado cuando quien mira es el equipo.
   const sesion = await quienLleva(galletas.get(GALLETA_DE_GESTION)?.value);
@@ -242,6 +265,7 @@ export async function quienPide(galletas: {
         sesion.clientes,
         administradas.map((id) => ({ id }))
       ).map((c) => c.id),
+      secciones: sesion.secciones,
     };
   }
 
@@ -249,6 +273,125 @@ export async function quienPide(galletas: {
   // carpeta, no el cliente entero.
   const entrada = await entradaDe(galletas);
   return entrada ? { tipo: "cliente", raiz: entrada.carpeta ?? entrada.cliente.id } : null;
+}
+
+/** Lo que hace falta para leer una galleta, sin depender de cómo se leyó. */
+type Galletas = { get(nombre: string): { value: string } | undefined };
+
+/**
+ * Quién sirve cada ruta de `/api`.
+ *
+ * **Se declara por ruta y en su propio archivo, al lado de lo que protege.**
+ * Es la forma de que la separación por sección alcance también a las rutas:
+ * el `proxy` la aplica mirando la dirección, y su matcher cubre `/gestion` y
+ * `/diagnostico` pero no `/api`, así que ahí la decisión tiene que viajar con
+ * la ruta.
+ *
+ * Las dos mitades se escriben aparte porque son dos preguntas distintas y
+ * ninguna se puede deducir de la otra: hay rutas que sirven a los dos lados
+ * —un archivo lo baja el cliente y también la agencia—, una que es solo de la
+ * agencia —el historial en CSV— y una que es solo del cliente —el sondeo de la
+ * conversación, que del lado de la agencia va por una acción—.
+ */
+export type Puerta = {
+  /**
+   * Qué secciones de gestión entran. `null` es «la agencia no entra por acá».
+   *
+   * Nunca es «todas»: una lista vacía o un `null` son decisiones, y escribir la
+   * lista obliga a pensar de qué sección es lo que esta ruta devuelve.
+   */
+  agencia: readonly Seccion[] | null;
+  /** Si entra quien vino por el link del portal. */
+  cliente: boolean;
+};
+
+/**
+ * Quién pide, **ya comprobado contra la puerta de esta ruta**.
+ *
+ * `null` es «acá no entra»: no hay galleta de ninguno de los dos lados, o la
+ * hay y esa ruta no es para esa sección. Quien la llama contesta 404 sin
+ * distinguir los casos, que es lo que evita contarle a alguien qué existe del
+ * otro lado de una puerta que no puede abrir.
+ *
+ * **Es la única forma de saber quién pide.** `quienPide` quedó adentro de este
+ * módulo a propósito: mientras fue pública, una ruta podía preguntar «¿quién
+ * es?» y olvidarse de «¿le toca?» —y las cuatro se olvidaron—. Ahora no hay
+ * manera de preguntar lo primero sin contestar lo segundo, porque la sección es
+ * un argumento y no una llamada aparte que alguien tiene que acordarse de
+ * escribir.
+ */
+export async function quienPideEn(
+  galletas: Galletas,
+  puerta: Puerta
+): Promise<QuienPide | null> {
+  const quien = await quienPide(galletas);
+  if (!quien) return null;
+
+  if (quien.tipo === "cliente") return puerta.cliente ? quien : null;
+
+  if (!puerta.agencia) return null;
+  return puerta.agencia.some((s) => quien.secciones.includes(s)) ? quien : null;
+}
+
+/**
+ * Lo mismo, para una ruta que sirve los datos de **un** cliente.
+ *
+ * Junta las dos preguntas que si no habría que acordarse de hacer por separado
+ * en cada ruta: **¿esta puerta es para vos?** y **¿este cliente es tuyo?**. La
+ * segunda se contestaba a mano y distinto en cada lado —una comparaba contra
+ * las raíces, la otra leía la galleta del portal—, que es la forma en que dos
+ * respuestas a la misma pregunta se separan con el tiempo.
+ */
+export async function quienPideDe(
+  clienteId: string,
+  galletas: Galletas,
+  puerta: Puerta
+): Promise<QuienPide | null> {
+  const quien = await quienPideEn(galletas, puerta);
+  if (!quien) return null;
+
+  if (quien.tipo === "agencia") {
+    return quien.raices.includes(clienteId) ? quien : null;
+  }
+  return (await entroAlCliente(clienteId, galletas)) ? quien : null;
+}
+
+/**
+ * Si el camino hasta esto pasa por «Facturas».
+ *
+ * **Lo que se cobra es una sección aparte, y eso tiene que valer también para
+ * los bytes.** Sin esto, la ruta del archivo dejaba que alguien de Facturación
+ * se bajara un boceto, y que alguien de Diseño se bajara una factura: los dos
+ * tenían «alguna» sección de las que abren archivos, y el archivo no decía de
+ * cuál era.
+ *
+ * Sube por las mismas carpetas que ya recorrió la autorización, y esas
+ * respuestas están recordadas, así que no cuesta un viaje nuevo a Google.
+ */
+export async function pasaPorFacturas(fileId: string): Promise<boolean> {
+  try {
+    const { parents } = await metadatosArchivo(fileId);
+    let frontera = parents ?? [];
+    const vistas = new Set<string>();
+
+    for (let nivel = 0; nivel < NIVELES && frontera.length > 0; nivel++) {
+      const siguiente: string[] = [];
+      for (const id of frontera) {
+        if (vistas.has(id)) continue;
+        vistas.add(id);
+
+        const { padres, nombre } = await nodo(id);
+        if (esCarpetaDeFacturas(nombre)) return true;
+        siguiente.push(...padres);
+      }
+      frontera = siguiente;
+    }
+    return false;
+  } catch {
+    // Sin poder saberlo, se trata como factura: es la respuesta que cierra en
+    // vez de abrir.
+    return true;
+  }
 }
 
 /**

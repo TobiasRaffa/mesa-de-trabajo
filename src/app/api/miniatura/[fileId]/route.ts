@@ -13,10 +13,21 @@ import { cookies } from "next/headers";
 
 import { bytesDeMiniatura } from "@/lib/google";
 import { tamanoPermitido } from "@/lib/miniaturas";
-import { archivoAutorizado, quienPide } from "@/lib/permisos";
+import {
+  archivoAutorizado,
+  pasaPorFacturas,
+  quienPideEn,
+  type Puerta,
+} from "@/lib/permisos";
 
 const sinDetalle = (mensaje: string, codigo: number) =>
   new Response(mensaje, { status: codigo, headers: { "Content-Type": "text/plain" } });
+
+/** A quién sirve esta ruta. La misma que la del archivo: es su vista previa. */
+const PUERTA: Puerta = { agencia: ["clientes", "tablero", "facturas"], cliente: true };
+
+const PARA_FACTURAS: readonly ["facturas"] = ["facturas"];
+const PARA_TRABAJO: readonly ["clientes", "tablero"] = ["clientes", "tablero"];
 
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/miniatura/[fileId]">) {
   const { fileId } = await ctx.params;
@@ -27,11 +38,19 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/miniatura/[f
   // puerta —la del cliente o la de la agencia— no se sirve un solo byte. Y lo
   // que se sirve depende de quién sea: el cliente ve lo suyo y nada más; la
   // agencia ve todo lo que el robot ve.
-  const quien = await quienPide(await cookies());
+  const quien = await quienPideEn(await cookies(), PUERTA);
   if (!quien) return sinDetalle("No encontrado", 404);
 
   const archivo = await archivoAutorizado(fileId, quien);
   if (!archivo) return sinDetalle("No encontrado", 404);
+
+  // La miniatura de una factura es la factura: se mira igual que el original.
+  if (quien.tipo === "agencia") {
+    const suyas = (await pasaPorFacturas(fileId)) ? PARA_FACTURAS : PARA_TRABAJO;
+    if (!suyas.some((s) => quien.secciones.includes(s))) {
+      return sinDetalle("No encontrado", 404);
+    }
+  }
 
   if (!archivo.thumbnailLink) return sinDetalle("El archivo no tiene miniatura", 415);
 
@@ -42,7 +61,13 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/miniatura/[f
     // reemplaza el archivo en Drive sin cambiarle el nombre, la fecha cambia,
     // la URL cambia y el navegador pide la imagen nueva. Sin ese parámetro no
     // se puede confiar en una caché larga: el cliente vería el boceto viejo.
-    const versionada = req.nextUrl.searchParams.has("v");
+    //
+    // **Que el parámetro exista no alcanza: tiene que valer algo.** Con
+    // `has("v")`, un `?v=` vacío —que es lo que sale cuando el archivo no trae
+    // fecha de modificación— pedía un día de caché `immutable` sobre una
+    // dirección que ya no se puede invalidar: el boceto viejo se quedaba
+    // pegado en el navegador sin forma de sacarlo.
+    const versionada = Boolean(req.nextUrl.searchParams.get("v"));
 
     return new Response(bytes, {
       headers: {

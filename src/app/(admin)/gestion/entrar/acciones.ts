@@ -114,32 +114,6 @@ function aDondeVa(volver: string, secciones: readonly Seccion[]): string {
   return seccion && secciones.includes(seccion) ? volver : propia;
 }
 
-/**
- * Paso uno: de quién es este correo.
- *
- * Contesta solo «pedile la contraseña» o «que elija una», nunca «ese correo no
- * existe». Un correo desconocido cae en la primera, igual que uno conocido que
- * ya tiene contraseña: el que prueba correos ajenos se lleva siempre la misma
- * pantalla.
- */
-export async function mirarCorreo(_previo: unknown, formulario: FormData) {
-  const correo = leerCorreo(formulario);
-  if (!correo) return { ok: false as const, motivo: "Escribí tu correo." };
-  if (await frenado(paraQuien(correo), LIMITE)) {
-    return { ok: false as const, motivo: DEMASIADOS };
-  }
-
-  // Mirar un correo cuenta como un intento: sin esto, esta pantalla era la
-  // forma cómoda de listar quiénes trabajan en la agencia, sin freno alguno.
-  // Entrar bien pone la cuenta en cero.
-  await anotarError(paraQuien(correo), LIMITE);
-
-  const persona = await personaPorCorreo(correo);
-  const primeraVez = Boolean(persona) && !(await tieneClave(persona!.id));
-
-  return { ok: true as const, correo, primeraVez };
-}
-
 export async function entrar(_previo: unknown, formulario: FormData) {
   const correo = leerCorreo(formulario);
   const clave = String(formulario.get("clave") ?? "");
@@ -171,10 +145,29 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   // tendría que poder entrar. Y se pide **el código de alta**: sin él, saber
   // el correo de alguien alcanzaba para quedarse con su cuenta.
   if (persona && !(await tieneClave(persona.id))) {
+    // **La pantalla es una sola y acá se decide cuál mostrar.** Antes había un
+    // paso previo que preguntaba solo el correo para saber a quién le tocaba
+    // cuál: eso son dos pantallas, dos clics y una espera al servidor **cada
+    // vez que alguien entra**, para un caso que le pasa a cada persona una sola
+    // vez en la vida. Ahora el correo y la contraseña se escriben juntos —que
+    // además es lo que un administrador de contraseñas sabe completar— y si
+    // resulta ser la primera vez, la pantalla se abre acá.
+    //
+    // No cuenta nada que no contara antes: `primeraVez` sale solo para alguien
+    // que existe y todavía no eligió contraseña, que es exactamente lo que
+    // contestaba el paso que se fue.
+    if (!codigo) {
+      return {
+        ok: false as const,
+        primeraVez: true as const,
+        motivo: "Es tu primera vez: elegí tu contraseña.",
+      };
+    }
     if (!(await codigoDeAltaCorrecto(persona.id, codigo))) {
       await anotarError(quien, LIMITE);
       return {
         ok: false as const,
+        primeraVez: true as const,
         motivo: (await codigoDeAltaDe(persona.id))
           ? "Ese código de alta no es. Te lo pasa quien te dio de alta: lo ve en Admin."
           : "Tu cuenta todavía no tiene código de alta. Pedile a quien administra " +
@@ -184,11 +177,16 @@ export async function entrar(_previo: unknown, formulario: FormData) {
     if (clave.length < LARGO_MINIMO_DE_CLAVE) {
       return {
         ok: false as const,
+        primeraVez: true as const,
         motivo: `La contraseña tiene que tener al menos ${LARGO_MINIMO_DE_CLAVE} caracteres.`,
       };
     }
     if (clave !== repetida) {
-      return { ok: false as const, motivo: "Las dos contraseñas no son iguales." };
+      return {
+        ok: false as const,
+        primeraVez: true as const,
+        motivo: "Las dos contraseñas no son iguales.",
+      };
     }
 
     await ponerClave(persona.id, clave);

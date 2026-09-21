@@ -23,6 +23,7 @@
 // quitarle el acceso a alguien no haría efecto hasta que volviera a entrar, y
 // «le saqué el acceso» tiene que querer decir ahora.
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 import {
   contrasenaCorrecta,
@@ -31,6 +32,7 @@ import {
   SIN_PERSONA,
 } from "@/lib/contrasena";
 import { claveCorrecta, claveDesde, hayAlguienConClave } from "@/lib/claves";
+import { anotarError, frenado, olvidarErrores, type Limite } from "@/lib/frenos";
 import {
   alcanceDePersona,
   personaPorId,
@@ -42,6 +44,14 @@ import { NOMBRE_DE_LA_AGENCIA } from "@/dominio/agencia";
 
 /** Cómo se firma lo que no lo manda una persona identificada. */
 export const LA_AGENCIA = "El equipo";
+
+/**
+ * Cuántas veces se puede errar la contraseña propia antes de esperar.
+ *
+ * Más holgado que el de la puerta: acá ya entró, y equivocarse escribiendo la
+ * suya es normal. Lo que corta es probar de a cientos.
+ */
+const LIMITE_PROPIO: Limite = { tope: 10, espera: 15 * 60 * 1000 };
 
 export type Sesion = {
   /** Quién es. `null` con la llave del equipo, que no es de nadie. */
@@ -81,8 +91,19 @@ export async function quienLleva(galleta: string | undefined): Promise<Sesion | 
   // Sin contraseña no hay sesión: se la reiniciaron, y hasta que elija otra no
   // entra nadie con su nombre. Y una galleta de antes de la contraseña actual
   // es de la contraseña anterior, que ya no existe.
+  //
+  // **Las dos fechas se comparan en segundos, y por eso.** La galleta guarda
+  // el segundo en que se emitió; la contraseña, el milisegundo en que se puso.
+  // Comparar `emitida * 1000` contra los milisegundos truncaba la galleta hacia
+  // abajo y la dejaba siempre por detrás: elegir la contraseña y entrar pasan
+  // en el mismo segundo, así que la sesión recién abierta se rechazaba a sí
+  // misma y quien estrenaba contraseña rebotaba a la puerta.
+  //
+  // Redondear las dos al segundo le da el beneficio de la duda a la galleta
+  // emitida dentro del mismo segundo. Lo que se pierde es echar a una sesión
+  // abierta en ese segundo; lo que se gana es que estrenar contraseña funcione.
   const desde = await claveDesde(persona.id);
-  if (desde === null || emitida * 1000 < desde) return null;
+  if (desde === null || emitida < Math.floor(desde / 1000)) return null;
 
   return {
     persona,
@@ -91,10 +112,21 @@ export async function quienLleva(galleta: string | undefined): Promise<Sesion | 
   };
 }
 
-/** Lo mismo, desde una pantalla o una acción. */
-export async function miSesion(): Promise<Sesion | null> {
+/**
+ * Lo mismo, desde una pantalla o una acción.
+ *
+ * **Se resuelve una sola vez por pedido.** Contestarla no es gratis: lee la
+ * galleta, busca a la persona y busca desde cuándo vale su contraseña, y las
+ * dos últimas son viajes a la base. Una acción cualquiera la pregunta cuatro o
+ * cinco veces —el cerrojo de sección, el alcance de clientes, la firma con la
+ * que queda anotado lo que hace— más las de la puerta, así que eran diez
+ * viajes por clic donde alcanza con dos. `cache` de React memoriza por pedido:
+ * dentro del mismo, la respuesta es la misma; entre pedidos, no se recuerda
+ * nada, que es lo que hace que quitarle el acceso a alguien valga **ahora**.
+ */
+export const miSesion = cache(async (): Promise<Sesion | null> => {
   return quienLleva((await cookies()).get(GALLETA_DE_GESTION)?.value);
-}
+});
 
 /**
  * Quién está usando esto, o `null` si no se sabe.
@@ -120,6 +152,26 @@ export async function quienSoy(): Promise<Persona | null> {
  */
 export async function puedoVer(seccion: Seccion): Promise<boolean> {
   return (await miSesion())?.secciones.includes(seccion) ?? false;
+}
+
+/**
+ * Si quien está usando esto entra a **alguna** de estas secciones.
+ *
+ * **Es el mismo segundo cerrojo, para las acciones que no son de Admin.** Una
+ * server action es invocable desde cualquier dirección: el `Next-Action` la
+ * encuentra por su identificador, no por la ruta a la que llega el POST, así
+ * que la separación por sección de la puerta —que mira la ruta— no la alcanza.
+ * Se comprobó: las acciones de la pantalla de Clientes se ejecutan igual
+ * posteadas a `/gestion/facturas`. Sin esto, quien solo factura podía leer y
+ * tocar los clientes, los chats y las piezas con solo mandar el POST.
+ *
+ * Recibe **varias** porque una misma acción se dibuja en más de una sección:
+ * entregar y reabrir viven en Clientes y en la ventana del Tablero, el chat en
+ * Conversaciones y en la ficha del cliente. Alcanza con entrar a una de ellas.
+ */
+export async function puedoAlgunaDe(secciones: readonly Seccion[]): Promise<boolean> {
+  const mias = (await miSesion())?.secciones ?? [];
+  return secciones.some((s) => mias.includes(s));
 }
 
 /**
@@ -173,6 +225,22 @@ export async function comoMePresentoEnElChat(): Promise<string> {
 export async function contrasenaDeQuienEsta(clave: string): Promise<boolean> {
   const sesion = await miSesion();
   if (!sesion) return false;
-  if (!sesion.persona) return contrasenaCorrecta(clave);
-  return claveCorrecta(sesion.persona.id, clave);
+
+  // **Con freno, que era el único lugar donde se comparaba una contraseña sin
+  // ninguno.** Lo que protege es concreto: alguien se sienta en una máquina con
+  // la sesión de una compañera abierta y prueba contraseñas para ver la clave
+  // con la que entra un cliente. El daño está acotado —ya está adentro— pero
+  // dejar un contador de intentos sin tope al lado de lo más delicado de la
+  // pantalla no tiene ninguna ventaja.
+  const quien = `propia:${sesion.persona?.id ?? SIN_PERSONA}`;
+  if (await frenado(quien, LIMITE_PROPIO)) return false;
+
+  const correcta = sesion.persona
+    ? await claveCorrecta(sesion.persona.id, clave)
+    : contrasenaCorrecta(clave);
+
+  if (correcta) await olvidarErrores(quien);
+  else await anotarError(quien, LIMITE_PROPIO);
+
+  return correcta;
 }
