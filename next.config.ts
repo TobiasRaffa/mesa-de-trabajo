@@ -86,6 +86,20 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
 
   /**
+   * Desde qué direcciones se puede abrir mientras se programa.
+   *
+   * Next bloquea sus recursos de desarrollo —el websocket que recarga la
+   * pantalla, el detalle de un error— cuando la petición no viene de
+   * `localhost`. Probar desde el teléfono, que es la única forma de ver de
+   * verdad cómo queda en un teléfono, entra por la dirección de la red de
+   * casa: la aplicación anda igual, pero la consola se llena de errores y el
+   * cartel de error de Next no se puede abrir.
+   *
+   * Es **solo de desarrollo**: `next start` no mira esto.
+   */
+  allowedDevOrigins: ["192.168.0.*"],
+
+  /**
    * Direcciones que se mudaron.
    *
    * **Un link que alguien guardó no se puede morir en silencio.** Las dos de
