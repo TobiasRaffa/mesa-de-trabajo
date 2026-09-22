@@ -59,6 +59,35 @@ const diaEnPalabras = enPalabrasElDiaLargo;
  * donde el día no había cambiado —repitiendo la misma fecha del de arriba— y
  * faltaba donde sí. Es el agujero que `tiempo.ts` vino a cerrar.
  */
+/**
+ * Junta lo que había en pantalla con lo que acaba de llegar, **sin perder nada**.
+ *
+ * Es lo que usan los dos lados —gestión y portal— cada vez que llega una lista
+ * de mensajes: del sondeo, de mandar uno, de «ver lo anterior». Reemplazar la
+ * lista entera perdía cosas en tres casos:
+ *
+ *   - **Un sondeo que llega tarde.** Salió antes de mandar un mensaje y volvió
+ *     después: traía la lista sin ese mensaje y lo borraba de la pantalla.
+ *   - **La mudanza a un tramo.** Cuando el hilo vivo pasa el techo, lo viejo se
+ *     guarda aparte y el hilo se achica de 400 a 300. Un candado que rechazaba
+ *     «listas más cortas» —puesto para el caso de arriba— dejaba de aceptar
+ *     sondeos hasta que se juntaran cien mensajes más: la conversación se
+ *     congelaba en pantalla.
+ *   - **Mandar con «ver lo anterior» abierto.** La respuesta trae solo el hilo
+ *     vivo, y lo viejo que se había pedido desaparecía.
+ *
+ * Unir por identificador cubre los tres: lo que ya estaba se queda, lo nuevo
+ * entra, y un mensaje no se repite. La conversación no se edita ni se borra, así
+ * que nunca hay nada que sacar. Se ordena por cuándo se dijo, igual que la
+ * conversación entera.
+ */
+export function juntarMensajes(previos: Mensaje[], llegados: Mensaje[]): Mensaje[] {
+  const porId = new Map<string, Mensaje>();
+  for (const m of previos) porId.set(m.id, m);
+  for (const m of llegados) porId.set(m.id, m);
+  return [...porId.values()].sort((a, b) => a.cuando.localeCompare(b.cuando));
+}
+
 export function cambiaElDia(anterior: Mensaje | undefined, mensaje: Mensaje): boolean {
   if (!anterior) return true;
   const a = new Date(anterior.cuando);

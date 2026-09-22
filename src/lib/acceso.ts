@@ -20,13 +20,7 @@
 // guarda el tag, guarda «este navegador ya acertó el de este link»: leerla no
 // sirve para entrar a otro lado, y fabricarla necesita la llave del servidor.
 
-import {
-  anotarError,
-  frenado,
-  intentarYFrenar,
-  olvidarErrores,
-  type Limite,
-} from "@/lib/frenos";
+import { intentarYFrenar, olvidarErrores, type Limite } from "@/lib/frenos";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { documento } from "@/lib/almacen";
 import { ajustesDe, carpetasConLink } from "@/lib/ajustes";
@@ -183,19 +177,16 @@ const LIMITE: Limite = { tope: 8, espera: 10 * 60 * 1000 };
 
 const porLink = (token: string) => `portal:${token}`;
 
-export const estaFrenado = (token: string): Promise<boolean> =>
-  frenado(porLink(token), LIMITE);
-
 /**
  * Cuenta el intento y dice si con este ya hay que frenar, **en un solo paso**.
- * Reemplaza al par `estaFrenado` + `anotarIntentoFallido`, que entre los dos
- * dejaba pasar una ráfaga: todos preguntaban antes de que ninguno sumara.
+ *
+ * Reemplaza al par «¿está frenado?» + «anotá el error», que entre los dos
+ * dejaba pasar una ráfaga: todos preguntaban antes de que ninguno sumara. Ese
+ * par ya no existe acá, a propósito: dejarlo exportado era invitar a volver a
+ * usarlo.
  */
 export const intentarConFreno = (token: string): Promise<boolean> =>
   intentarYFrenar(porLink(token), LIMITE);
-
-export const anotarIntentoFallido = (token: string): Promise<void> =>
-  anotarError(porLink(token), LIMITE);
 
 export const olvidarIntentos = (token: string): Promise<void> =>
   olvidarErrores(porLink(token));

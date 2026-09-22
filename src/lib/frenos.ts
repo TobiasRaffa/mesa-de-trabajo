@@ -90,10 +90,21 @@ export async function anotarError(quien: string, limite: Limite): Promise<void> 
  */
 export async function intentarYFrenar(quien: string, limite: Limite): Promise<boolean> {
   const ahora = Date.now();
-  const cuenta = await almacen.cambiar(quien, (actual) => ({
-    cuantos: actual && actual.hasta >= ahora ? actual.cuantos + 1 : 1,
-    hasta: ahora + limite.espera,
-  }));
+  let cuenta: Cuenta | undefined;
+  try {
+    cuenta = await almacen.cambiar(quien, (actual) => ({
+      cuantos: actual && actual.hasta >= ahora ? actual.cuantos + 1 : 1,
+      hasta: ahora + limite.espera,
+    }));
+  } catch (error) {
+    // **Si no se pudo contar, se frena.** Pasa cuando llegan tantos intentos
+    // juntos sobre la misma cuenta que el almacén no logra ordenarlos —se vio
+    // con una ráfaga de veinte: trece reventaban con un error 500—. Eso ya es
+    // una ráfaga, y la respuesta correcta a una ráfaga es «esperá», no dejarla
+    // pasar ni tirar la pantalla abajo.
+    console.warn("[frenos] no se pudo contar el intento, se frena:", quien, error);
+    return true;
+  }
   await barrerVencidas(ahora);
   return (cuenta?.cuantos ?? 1) > limite.tope;
 }
@@ -112,18 +123,24 @@ export async function olvidarErrores(quien: string): Promise<void> {
  * hay ninguna razón para conservarla—.
  */
 async function barrerVencidas(ahora: number): Promise<void> {
-  const todas = await almacen.todo();
-  const vencidas = Object.keys(todas).filter((quien) => todas[quien].hasta < ahora);
-  if (vencidas.length === 0) return;
+  // **Es limpieza, y la limpieza no puede tirar abajo un intento de entrar.**
+  // Si varios pedidos barren a la vez la misma cuenta vencida, `cambiar` puede
+  // rendirse; eso no cambia nada importante —la cuenta ya no frena a nadie y la
+  // barre el próximo—, así que un fallo acá se ignora.
+  try {
+    const todas = await almacen.todo();
+    const vencidas = Object.keys(todas).filter((quien) => todas[quien].hasta < ahora);
 
-  // **Con `cambiar`, no con un borrado ciego.** Entre leer `todo()` y borrar,
-  // alguien pudo volver a errar y renovar su cuenta: el borrado a secas la
-  // resetearía justo cuando el freno tiene que estar puesto, regalándole al que
-  // prueba una ventana limpia. Se vuelve a mirar adentro de `cambiar` y solo se
-  // borra la que sigue vencida.
-  for (const quien of vencidas) {
-    await almacen.cambiar(quien, (actual) =>
-      actual && actual.hasta < ahora ? undefined : actual
-    );
+    // **Con `cambiar`, no con un borrado ciego.** Entre leer `todo()` y borrar,
+    // alguien pudo volver a errar y renovar su cuenta: el borrado a secas la
+    // resetearía justo cuando el freno tiene que estar puesto. Se vuelve a
+    // mirar adentro de `cambiar` y solo se borra la que sigue vencida.
+    for (const quien of vencidas) {
+      await almacen
+        .cambiar(quien, (actual) => (actual && actual.hasta < ahora ? undefined : actual))
+        .catch(() => undefined);
+    }
+  } catch {
+    // Ver arriba: limpieza de mejor esfuerzo.
   }
 }

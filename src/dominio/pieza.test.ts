@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aplicar,
   deQuienEsLaPelota,
+  esperaAlCliente,
   estaBloqueada,
   hayAlgoParaEntregar,
   piezaNueva,
@@ -550,6 +551,22 @@ describe("un evento que no existe no rompe nada", () => {
       const r = aplicar(piezaNueva(), { tipo } as unknown as Evento);
       expect(r, `tipo «${tipo}»`).toBeDefined();
       expect(r.ok).toBe(false);
+    }
+  });
+});
+
+describe("esperaAlCliente", () => {
+  it("los cambios que el cliente escribió y no mandó siguen siendo suyos", () => {
+    // El caso que caía en «Aprobado» en el tablero.
+    expect(esperaAlCliente({ estado: "cambios_marcados", enviada: false })).toBe(true);
+    expect(esperaAlCliente({ estado: "cambios_marcados", enviada: true })).toBe(false);
+  });
+
+  it("entregada y en revisión esperan al cliente; lo nuestro y lo cerrado, no", () => {
+    expect(esperaAlCliente({ estado: "entregada", enviada: false })).toBe(true);
+    expect(esperaAlCliente({ estado: "en_revision", enviada: false })).toBe(true);
+    for (const estado of ["en_curso", "extra_pedida", "final", "cancelada"] as const) {
+      expect(esperaAlCliente({ estado, enviada: false })).toBe(false);
     }
   });
 });

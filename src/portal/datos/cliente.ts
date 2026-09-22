@@ -323,7 +323,24 @@ export async function portalDelCliente(
         enlaceDrive: siDrive(carpeta.webViewLink),
         vista,
         piezas: aLaVista.map(({ pieza, suya }) => {
-          const versiones = pieza.versiones.map((v) => ({
+          const guardado = estados[suya];
+
+          // **El cliente ve hasta la vuelta que se le entregó, no la última que
+          // hay en Drive.** Entregar es el acto que decide qué ve el cliente, y
+          // esto lo salteaba: si el equipo subía la V3 mientras el cliente
+          // revisaba la V2, el portal le mostraba la V3 —a medio hacer, sin que
+          // nadie la entregara— como si fuera la pieza, y era la que aprobaba.
+          // La vuelta nueva aparece cuando alguien la entrega. En «Entregas
+          // finales» no hay nada que filtrar: lo que está ahí, está.
+          const tope = entregas ? undefined : guardado.versionEntregada;
+          const entregadas =
+            tope === undefined ? pieza.versiones : pieza.versiones.filter((v) => v.numero <= tope);
+          // Si la vuelta entregada ya no está en Drive y todo lo que queda es
+          // más nuevo —un caso raro—, se muestra lo que hay antes que dejar la
+          // pieza sin archivo.
+          const aMostrar = entregadas.length > 0 ? entregadas : pieza.versiones;
+
+          const versiones = aMostrar.map((v) => ({
             // **El número que dice el archivo.** Se renumeraban de corrido
             // para que el cliente no viera huecos, y el precio era peor que el
             // hueco: veía «V4» sobre un archivo llamado «V5_stickers.jpeg», y
@@ -340,8 +357,6 @@ export async function portalDelCliente(
           }));
           const ultima = versiones[versiones.length - 1];
 
-          const guardado = estados[suya];
-
           return {
             estado: guardado.estado,
             rondasExtra: guardado.rondasExtra,
@@ -354,7 +369,7 @@ export async function portalDelCliente(
               guardado.estado === "final" && !guardado.enviada ? [] : guardado.cambios,
             id: suya,
             esPdf:
-              pieza.versiones[pieza.versiones.length - 1].archivo.mimeType ===
+              aMostrar[aMostrar.length - 1].archivo.mimeType ===
               "application/pdf",
             nombre: pieza.titulo,
             driveFileId: ultima.driveFileId,
@@ -390,8 +405,18 @@ export async function portalDelCliente(
     })
   );
 
+  // **Con el link de una carpeta, «Ver en Drive» lleva a esa carpeta.** Llevaba
+  // siempre a la del cliente entero: quien había recibido «solo esta carpeta»
+  // tocaba el botón de arriba y, si tenía permiso en Drive, recorría todos los
+  // trabajos del cliente —justo lo que ese link promete no mostrar—; y si no lo
+  // tenía, aterrizaba en el «pedí acceso» de Google, que es peor que no tener
+  // botón.
+  const enlaceDeArriba = soloEsta
+    ? todas.find((c) => c.id === soloEsta)?.webViewLink
+    : cliente.webViewLink;
+
   return {
-    cliente: { id: raiz, nombre: cliente.name, enlaceDrive: siDrive(cliente.webViewLink) },
+    cliente: { id: raiz, nombre: cliente.name, enlaceDrive: siDrive(enlaceDeArriba) },
     // Una carpeta vacía no se muestra: no hay nada que revisar adentro.
     //
     // «Entregas finales» va al final de la lista, siempre. Es lo terminado, y

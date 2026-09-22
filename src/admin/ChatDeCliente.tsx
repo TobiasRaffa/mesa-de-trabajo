@@ -23,7 +23,7 @@ import {
   traerConversacion,
 } from "@/app/(admin)/gestion/acciones";
 import type { Mensaje } from "@/lib/conversaciones";
-import { Conversacion } from "@/ui/Conversacion";
+import { Conversacion, juntarMensajes } from "@/ui/Conversacion";
 
 export function ChatDeCliente({
   clienteId,
@@ -90,16 +90,8 @@ export function ChatDeCliente({
         const r = await traerConversacion(clienteId, entera);
         if (!vivo) return;
         if (r.ok) {
-          // **Un sondeo que llega tarde no borra lo recién mandado.** El reloj
-          // pide la conversación cada seis segundos; si una de esas lecturas
-          // sale **antes** de que alguien mande un mensaje y su respuesta llega
-          // **después**, traía la lista sin ese mensaje y lo hacía desaparecer
-          // de la pantalla hasta la vuelta siguiente. La conversación solo
-          // crece —acá no se borra nada—, así que una respuesta con menos
-          // mensajes que los que ya hay es vieja: se descarta.
-          setMensajes((previos) =>
-            r.mensajes.length >= previos.length ? r.mensajes : previos
-          );
+          // Se junta con lo que había, no se reemplaza: ver `juntarMensajes`.
+          setMensajes((previos) => juntarMensajes(previos, r.mensajes));
           setHayAnteriores(r.hayAnteriores);
           setNoSePudoLeer(null);
         } else {
@@ -130,7 +122,7 @@ export function ChatDeCliente({
     try {
       const r = await traerConversacion(clienteId, true);
       if (r.ok) {
-        setMensajes(r.mensajes);
+        setMensajes((previos) => juntarMensajes(previos, r.mensajes));
         setHayAnteriores(false);
         setEntera(true);
         setNoSePudoLeer(null);
@@ -147,7 +139,7 @@ export function ChatDeCliente({
     try {
       const r = await escribirComoAgencia(clienteId, texto);
       if (r.ok) {
-        setMensajes(r.mensajes);
+        setMensajes((previos) => juntarMensajes(previos, r.mensajes));
         setFallo(null);
         return true;
       }

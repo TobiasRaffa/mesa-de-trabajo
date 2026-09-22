@@ -1,7 +1,7 @@
 // Dónde arranca la conversación al abrirla: en el primero sin leer.
 
 import { describe, expect, it } from "vitest";
-import { indiceDelPrimerSinLeer, sigueALaAnterior, type Mensaje } from "@/ui/Conversacion";
+import { indiceDelPrimerSinLeer, juntarMensajes, sigueALaAnterior, type Mensaje } from "@/ui/Conversacion";
 
 const m = (
   id: string,
@@ -78,5 +78,29 @@ describe("el primero sin leer", () => {
   it("si faltan más de los que hay a la vista, arranca por el principio", () => {
     const hilo = [m("1", "agencia"), m("2", "cliente")];
     expect(indiceDelPrimerSinLeer(hilo, "agencia", 5)).toBe(0);
+  });
+});
+
+describe("juntarMensajes no pierde nada de lo que había en pantalla", () => {
+  const m = (id: string, cuando: string) =>
+    ({ id, de: "cliente", quien: "Cliente", texto: id, cuando }) as Mensaje;
+
+  it("un sondeo que llega tarde no borra lo recién mandado", () => {
+    const pantalla = [m("a", "2026-01-01T10:00:00Z"), m("nuevo", "2026-01-01T10:05:00Z")];
+    const sondeoViejo = [m("a", "2026-01-01T10:00:00Z")];
+    expect(juntarMensajes(pantalla, sondeoViejo).map((x) => x.id)).toEqual(["a", "nuevo"]);
+  });
+
+  it("la mudanza a un tramo achica el hilo y aun así entra lo nuevo", () => {
+    // En pantalla, cuatro; el hilo vivo se mudó y ahora trae los dos últimos
+    // más uno nuevo. Con un candado por largo, este sondeo se descartaba.
+    const pantalla = ["1", "2", "3", "4"].map((id, i) => m(id, `2026-01-01T10:0${i}:00Z`));
+    const hiloMudado = [m("3", "2026-01-01T10:02:00Z"), m("4", "2026-01-01T10:03:00Z"), m("5", "2026-01-01T10:04:00Z")];
+    expect(juntarMensajes(pantalla, hiloMudado).map((x) => x.id)).toEqual(["1", "2", "3", "4", "5"]);
+  });
+
+  it("no repite y deja todo en orden de cuándo se dijo", () => {
+    const r = juntarMensajes([m("b", "2026-01-01T10:01:00Z")], [m("a", "2026-01-01T10:00:00Z"), m("b", "2026-01-01T10:01:00Z")]);
+    expect(r.map((x) => x.id)).toEqual(["a", "b"]);
   });
 });

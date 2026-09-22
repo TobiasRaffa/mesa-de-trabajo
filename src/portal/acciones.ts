@@ -39,6 +39,7 @@ import {
 import {
   anotar,
   cambiarPieza,
+  estadoDe,
   estadosDe,
   piezasDeLaCarpeta,
   type Cambio,
@@ -163,7 +164,9 @@ async function piezaDeLaCarpeta(
     const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
     for (const pieza of agrupadas) {
       if (`${carpetaId}::${pieza.base}` !== piezaId) continue;
-      return laQueMira(pieza);
+      // La vuelta que el cliente tiene delante es la que se le entregó, no la
+      // última que hay en Drive: el portal le muestra hasta esa.
+      return laQueMira(pieza, (await estadoDe(carpetaId, piezaId)).versionEntregada);
     }
     return null;
   } catch {
@@ -171,7 +174,14 @@ async function piezaDeLaCarpeta(
   }
 }
 
-/** La vuelta que el cliente tiene delante: la última que hay en Drive. */
+/**
+ * La vuelta que el cliente tiene delante: **la última que se le entregó**.
+ *
+ * Era «la última que hay en Drive», y eso nombraba una vuelta que el cliente no
+ * veía: si el equipo subía la V3 mientras el cliente revisaba la V2, el aviso
+ * al equipo decía «aprobó la v3». El portal le muestra hasta la vuelta
+ * entregada, y el aviso tiene que nombrar esa misma.
+ */
 type LaQueMira = {
   /** El archivo de Drive: es el que se muda al aprobar. La pieza no es un
    *  archivo, así que su identificador no sirve para ir a buscarlo. */
@@ -189,10 +199,19 @@ type LaQueMira = {
   version: number;
 };
 
-function laQueMira<T extends { name: string; id: string }>(pieza: {
-  versiones: Array<{ numero: number; archivo: T }>;
-}): LaQueMira {
-  const ultima = pieza.versiones[pieza.versiones.length - 1];
+function laQueMira<T extends { name: string; id: string }>(
+  pieza: { versiones: Array<{ numero: number; archivo: T }> },
+  /** La vuelta que se le entregó. Sin ella, la última que hay. */
+  entregada?: number
+): LaQueMira {
+  const hasta =
+    entregada === undefined
+      ? pieza.versiones
+      : pieza.versiones.filter((v) => v.numero <= entregada);
+  // Mismo criterio que el portal: si la entregada ya no está y solo quedan
+  // vueltas más nuevas, se nombra la que hay antes que ninguna.
+  const lista = hasta.length > 0 ? hasta : pieza.versiones;
+  const ultima = lista[lista.length - 1];
   return {
     archivoActual: ultima.archivo.id,
     nombre: ultima.archivo.name,
@@ -410,25 +429,26 @@ export async function enviarRevision(
   const donde = await quienEntro(carpetaId);
   if (!donde) return { ok: false, motivo: "No encontramos esa carpeta." };
 
-  let piezas: Array<{ id: string; archivos: string[]; masVieja?: string }>;
-  // Cómo se llama y en qué vuelta va cada una, según el archivo que hay en
-  // Drive: es lo que el cliente tiene delante, y lo que el aviso tiene que
-  // nombrar.
-  let laVuelta: Record<string, { nombre: string; version: number }> = {};
+  let agrupadas;
   try {
-    const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
-    piezas = conSusArchivos(carpetaId, agrupadas);
-    laVuelta = Object.fromEntries(
-      agrupadas.map((pieza) => {
-        const { nombre, version } = laQueMira(pieza);
-        return [`${carpetaId}::${pieza.base}`, { nombre, version }];
-      })
-    );
+    agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
   } catch {
     return { ok: false, motivo: "No pudimos leer la carpeta. Probá de nuevo." };
   }
+  const piezas = conSusArchivos(carpetaId, agrupadas);
 
   const estados = await estadosDe(carpetaId, piezas);
+
+  // Cómo se llama y en qué vuelta va cada una: **la que se le entregó**, que
+  // es lo que el cliente tiene delante y lo que el aviso tiene que nombrar. Se
+  // arma después de leer los estados porque de ahí sale la vuelta entregada.
+  const laVuelta: Record<string, { nombre: string; version: number }> = Object.fromEntries(
+    agrupadas.map((pieza) => {
+      const id = `${carpetaId}::${pieza.base}`;
+      const { nombre, version } = laQueMira(pieza, estados[id]?.versionEntregada);
+      return [id, { nombre, version }];
+    })
+  );
   const aGuardar: Record<string, EstadoDePieza> = {};
   // Que revisó, para el aviso. Se junta acá adentro y no después: la versión
   // es la que miraba **antes** de cerrar la vuelta, y guardada ya no la tiene.

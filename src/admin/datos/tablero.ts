@@ -24,6 +24,7 @@ import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
 import {
   diasConNosotros,
+  esperaAlCliente,
   hayAlgoParaEntregar,
   sigueEnJuego,
   yaSeEntrego,
@@ -342,8 +343,7 @@ async function ramaDelTablero(
     const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
     const espera = diasConNosotros(estado.estado, estado.historia.at(-1)?.cuando, ahora);
     const vence = venceLaPieza(estado.entregadaEl, propios[suya], dias);
-    const esperandoAlCliente =
-      estado.estado === "entregada" || estado.estado === "en_revision";
+    const esperandoAlCliente = esperaAlCliente(estado);
 
     return [
       {
@@ -378,9 +378,7 @@ async function ramaDelTablero(
           entregadaEl: estado.entregadaEl,
           dias: plazoQueCorre(propios[suya], dias, undefined),
           vence: venceLaPieza(estado.entregadaEl, propios[suya], dias),
-          esperandoAlCliente:
-            !estado.enviada &&
-            (estado.estado === "entregada" || estado.estado === "en_revision"),
+          esperandoAlCliente: !estado.enviada && esperaAlCliente(estado),
         },
         {
           clienteId: cliente.id,
@@ -399,9 +397,7 @@ async function ramaDelTablero(
   const entregadas = yaEntregadas.size + seFueron + suma(hijas, (h) => h.entregadas);
 
   // Lo que espera al cliente: se la entregamos y todavía no decidió.
-  const sinRevisar =
-    piezas.filter((p) => p.estado === "entregada" || p.estado === "en_revision").length +
-    suma(hijas, (h) => h.sinRevisar);
+  const sinRevisar = piezas.filter(esperaAlCliente).length + suma(hijas, (h) => h.sinRevisar);
 
   // Lo que espera a la agencia: el cliente ya habló y falta hacerlo.
   // «extra_pedida» también es nuestra: el cliente pidió una revisión adicional

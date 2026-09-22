@@ -84,12 +84,27 @@ const esChoque = (e: unknown) => (e as { estado?: number })?.estado === 409;
 /**
  * Cuántas veces se vuelve a intentar un `cambiar` que perdió la carrera.
  *
- * Cinco. Cada reintento pasa porque **otro** guardó, así que cinco seguidas
- * quiere decir que hay una tormenta de escrituras sobre el mismo documento, y
- * eso ya no se arregla insistiendo: se avisa. Fallar es correcto; lo que no se
- * puede es guardar pisando lo del otro.
+ * Cada reintento pasa porque **otro** guardó, así que agotarlos quiere decir
+ * que hay una tormenta de escrituras sobre el mismo documento, y eso ya no se
+ * arregla insistiendo: se avisa. Fallar es correcto; lo que no se puede es
+ * guardar pisando lo del otro.
  */
-const INTENTOS = 5;
+const INTENTOS = 8;
+
+/**
+ * Espera antes de volver a intentar, **creciendo y con algo de azar**.
+ *
+ * Sin esto los reintentos salían todos en el mismo instante: los que habían
+ * chocado volvían a leer juntos, volvían a chocar juntos, y cinco vueltas se
+ * gastaban en milisegundos. Se vio en una ráfaga de veinte intentos contra la
+ * puerta de entrar: trece terminaron en un error 500 en vez de en «probá en un
+ * minuto». Esperar un poco más cada vez, y no lo mismo que el de al lado, hace
+ * que los que chocaron se ordenen solos.
+ */
+function esperarUnPoco(intento: number): Promise<void> {
+  const ms = 15 * 2 ** intento + Math.random() * 25;
+  return new Promise((listo) => setTimeout(listo, ms));
+}
 
 /**
  * ¿El error es «esa función no existe en la base»?
@@ -249,6 +264,11 @@ export const enSupabase: Almacen = {
         const suya = `${filtro}&id=eq.${encodeURIComponent(id)}`;
 
         for (let intento = 0; intento < INTENTOS; intento++) {
+          // Desde el segundo intento se espera un poco antes de volver a leer:
+          // ver `esperarUnPoco`. Al principio y no al final, así el último
+          // fracaso no paga una espera que no sirve para nada.
+          if (intento > 0) await esperarUnPoco(intento - 1);
+
           const filas = (await pedir(`${TABLA}?${suya}&select=datos,version&limit=1`)) as
             | Array<{ datos: unknown; version: number }>
             | null;

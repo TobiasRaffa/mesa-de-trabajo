@@ -255,6 +255,33 @@ export function diasConNosotros(
   return Math.max(0, diasDeDiferencia(desde, ahora));
 }
 
+/**
+ * ¿La pieza está esperando al cliente?
+ *
+ * **Incluye la que tiene cambios escritos que todavía no mandó.** Se contaba a
+ * mano en tres lugares como «entregada o en revisión», y `cambios_marcados` sin
+ * enviar no entraba en ninguna cuenta: no era del cliente ni de la agencia. El
+ * tablero ponía ese trabajo en «Aprobado» —«mové el archivo a Entregas finales
+ * para cerrarlo»— mientras el cliente estaba escribiendo cambios, y su plazo no
+ * se marcaba nunca como vencido. La pelota la tiene el cliente hasta que manda.
+ *
+ * Mandados (`enviada`), los cambios ya son de la agencia.
+ */
+export function esperaAlCliente(p: { estado: Estado; enviada: boolean }): boolean {
+  switch (p.estado) {
+    case "entregada":
+    case "en_revision":
+      return true;
+    case "cambios_marcados":
+      return !p.enviada;
+    case "en_curso":
+    case "extra_pedida":
+    case "final":
+    case "cancelada":
+      return false;
+  }
+}
+
 /** ¿De quién se está esperando algo? Es la pregunta que contesta el tablero. */
 export function deQuienEsLaPelota(p: Pieza): "agencia" | "cliente" | "nadie" {
   switch (p.estado) {

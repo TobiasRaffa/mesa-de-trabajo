@@ -30,7 +30,7 @@ import {
   IconoEnviar,
   IconoFlecha,
 } from "@/ui/Icono";
-import { Conversacion } from "@/ui/Conversacion";
+import { Conversacion, juntarMensajes } from "@/ui/Conversacion";
 import type { Mensaje } from "@/lib/conversaciones";
 import type { Cambio, EstadoDePieza } from "@/lib/piezas";
 import {
@@ -267,15 +267,8 @@ function Revision({
         };
         // Si la pantalla ya se desmontó, guardar sería escribir en el aire.
         if (vivo) {
-          // **Un sondeo que llega tarde no borra lo recién mandado.** Si esta
-          // lectura salió antes de mandar un mensaje y su respuesta llega
-          // después, traía la lista sin ese mensaje y lo hacía desaparecer
-          // hasta la vuelta siguiente. La conversación solo crece, así que una
-          // respuesta con menos mensajes que los que ya hay es vieja: se
-          // descarta.
-          setMensajes((previos) =>
-            llegado.mensajes.length >= previos.length ? llegado.mensajes : previos
-          );
+          // Se junta con lo que había, no se reemplaza: ver `juntarMensajes`.
+          setMensajes((previos) => juntarMensajes(previos, llegado.mensajes));
           setHayAnteriores(llegado.hayAnteriores === true);
         }
       } catch {
@@ -303,7 +296,7 @@ function Revision({
       });
       if (!r.ok) return;
       const { mensajes: llegaron } = (await r.json()) as { mensajes: Mensaje[] };
-      setMensajes(llegaron);
+      setMensajes((previos) => juntarMensajes(previos, llegaron));
       setHayAnteriores(false);
       setConversacionEntera(true);
     } catch {
@@ -357,7 +350,7 @@ function Revision({
     try {
       const r = await escribirComoCliente(carpeta.id, texto);
       if (r.ok) {
-        setMensajes(r.mensajes);
+        setMensajes((previos) => juntarMensajes(previos, r.mensajes));
         return true;
       }
       setRechazo(r.motivo);

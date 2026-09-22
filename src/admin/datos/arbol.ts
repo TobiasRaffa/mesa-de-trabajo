@@ -37,7 +37,12 @@ import {
 import { diaDe, publicacionesDe } from "@/lib/publicaciones";
 import { calcularVencimiento } from "@/lib/fechas";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
-import { hayAlgoParaEntregar, sigueEnJuego, type Estado } from "@/dominio/pieza";
+import {
+  esperaAlCliente,
+  hayAlgoParaEntregar,
+  sigueEnJuego,
+  type Estado,
+} from "@/dominio/pieza";
 
 export type NodoCarpeta = {
   id: string;
@@ -301,9 +306,9 @@ async function subcarpetasDeCarpeta(
         ...base,
         piezas: agrupadas.length,
         enJuego: agrupadas.length - terminadas,
-        sinRevisar: suyas.filter(
-          (p) => p.estado === "entregada" || p.estado === "en_revision"
-        ).length,
+        // Con el cliente, incluidos los cambios que escribió y no mandó: ver
+        // `esperaAlCliente`.
+        sinRevisar: suyas.filter(esperaAlCliente).length,
         terminadas,
         sinEntregar: suyasConArchivos.filter(({ id, version }) =>
           hayAlgoParaEntregar(estados[id].estado, version, estados[id].versionEntregada)
