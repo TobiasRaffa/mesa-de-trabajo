@@ -48,3 +48,8 @@ next-env.d.ts
 # `datos/` tapa TAMBIEN src/admin/datos y src/portal/datos, que son
 # codigo fuente. Paso: asi se perdio un archivo sin que nada avisara.
 /datos/
+
+# Copias de trabajo temporales que crean las herramientas (git worktree) para
+# trabajar en paralelo sin pisarse. Son copias enteras del repositorio: si se
+# subieran, o si el chequeo de tipos las mirara, todo aparecería repetido.
+/.claude/worktrees/

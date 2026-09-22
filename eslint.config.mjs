@@ -149,7 +149,9 @@ const eslintConfig = defineConfig([
   ...nextTs,
   ...nombresSinUsar,
   ...frontera,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  // `.claude/worktrees`: copias temporales del repositorio que crean las
+  // herramientas para trabajar en paralelo; mirarlas sería revisar todo dos veces.
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", ".claude/worktrees/**"]),
 ]);
 
 export default eslintConfig;
