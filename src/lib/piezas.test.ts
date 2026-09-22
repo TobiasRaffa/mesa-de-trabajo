@@ -10,7 +10,7 @@ const guardado = memoriaDePruebas.ver("piezas");
 // incluido— así que lo que pasa acá dice algo de lo que va a pasar de verdad.
 vi.mock("@/lib/almacen", async () => (await import("@/lib/almacen/enMemoria")).memoriaDePruebas);
 
-const { estadosDe } = await import("@/lib/piezas");
+const { estadosDe, cambiarPieza, estadoDe } = await import("@/lib/piezas");
 import type { EstadoDePieza } from "@/lib/piezas";
 
 const CARPETA = "carpeta1";
@@ -278,3 +278,53 @@ describe("la ficha sigue a la pieza cuando le cambia el nombre", () => {
     expect(r[CON_JPG].ronda).toBe(0);
   });
 });
+
+describe("cambiarPieza no pisa lo que otro guardó en el medio", () => {
+  it("dos transiciones a la vez sobre la misma pieza: ninguna se pierde", async () => {
+    // El estado de partida: en curso, sin rondas gastadas.
+    guardado[PIEZA] = {
+      carpetaId: CARPETA,
+      estado: "en_curso",
+      ronda: 0,
+      rondasExtra: 0,
+      cambios: [],
+      enviada: false,
+      mudada: false,
+      historia: [],
+    };
+
+    // Diez sumas concurrentes a la ronda, cada una partiendo de lo que haya
+    // **ahora**. Con `guardar` a secas (leer-calcular-guardar) el resultado
+    // sería 1: todas leen 0 y la última pisa. Con `cambiar`, es 10.
+    await Promise.all(
+      Array.from({ length: 10 }, () =>
+        cambiarPieza(CARPETA, PIEZA, (actual) => ({
+          commit: { ...actual, ronda: actual.ronda + 1 },
+        }))
+      )
+    );
+
+    const final = await estadoDe(CARPETA, PIEZA);
+    expect(final.ronda).toBe(10);
+  });
+
+  it("abort no toca nada y cuenta por qué", async () => {
+    guardado[PIEZA] = {
+      carpetaId: CARPETA,
+      estado: "final",
+      ronda: 3,
+      rondasExtra: 0,
+      cambios: [],
+      enviada: true,
+      mudada: false,
+      historia: [],
+    };
+
+    const r = await cambiarPieza(CARPETA, PIEZA, () => ({ abort: "no se puede" as const }));
+    expect(r).toEqual({ abort: "no se puede" });
+
+    const final = await estadoDe(CARPETA, PIEZA);
+    expect(final.ronda).toBe(3);
+    expect(final.estado).toBe("final");
+  });
+})

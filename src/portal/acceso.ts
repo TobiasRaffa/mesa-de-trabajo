@@ -15,8 +15,7 @@
 
 import { cookies } from "next/headers";
 import {
-  anotarIntentoFallido,
-  estaFrenado,
+  intentarConFreno,
   nombreDeGalleta,
   normalizarTag,
   olvidarIntentos,
@@ -36,7 +35,12 @@ export async function entrarConTag(
   const token = String(formulario.get("token") ?? "");
   const escrito = String(formulario.get("tag") ?? "");
 
-  if (await estaFrenado(token)) {
+  // **Se cuenta el intento y se frena en un solo paso.** Antes eran dos
+  // —preguntar si estaba frenado y, más abajo, anotar el error—, y entre los
+  // dos una ráfaga de pedidos a la vez pasaba entera. Contar acá también suma
+  // el intento que acierta; por eso se borra la cuenta al final con
+  // `olvidarIntentos`.
+  if (await intentarConFreno(token)) {
     return {
       ok: false,
       motivo: "Probaste muchas veces. Esperá unos minutos y volvé a intentar.",
@@ -49,7 +53,7 @@ export async function entrarConTag(
   const tagDelCliente = puerta ? normalizarTag(puerta.cliente.tag) : "";
 
   if (!puerta || !tagDelCliente || normalizarTag(escrito) !== tagDelCliente) {
-    await anotarIntentoFallido(token);
+    // Ya quedó contado arriba: no se suma de nuevo.
     return { ok: false, motivo: "Esa clave no es. Fijate con el equipo." };
   }
 

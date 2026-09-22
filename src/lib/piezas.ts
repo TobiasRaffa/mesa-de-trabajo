@@ -525,6 +525,59 @@ export async function guardarPiezas(
   await escribir(cambios);
 }
 
+/**
+ * Aplica un cambio a una pieza **sin pisar lo que otro guardó en el medio**.
+ *
+ * **Es la forma correcta de mover una pieza, y `guardarPieza` no lo era.** Una
+ * transición —aprobar, entregar, reabrir, cerrar la vuelta— se hacía leyendo el
+ * estado, calculando el nuevo y guardándolo en tres pasos: si entre el primero
+ * y el tercero alguien más movía la misma pieza, su cambio desaparecía sin
+ * error y sin rastro. El cliente aprueba en el teléfono mientras la agencia
+ * reabre desde la computadora, y una de las dos cosas no pasó nunca. Es la peor
+ * clase de falla que puede tener esto, porque lo que se pierde es una decisión
+ * que alguien tomó. El propio almacén construyó `cambiar` justo para esto.
+ *
+ * `transform` recibe el estado que hay **ahora** en la base —no una foto vieja—
+ * y devuelve `{ commit }` con el estado nuevo, o `{ abort }` para no tocar nada
+ * y contar por qué. **Puede correr más de una vez** (si alguien ganó la carrera
+ * se vuelve a leer y se vuelve a llamar con lo nuevo), así que no puede tener
+ * efectos: avisar, mandar correos o mover archivos va después, con lo que esto
+ * devuelve.
+ */
+export async function cambiarPieza<E>(
+  carpetaId: string,
+  piezaId: string,
+  transform: (actual: EstadoDePieza) => { commit: EstadoDePieza } | { abort: E }
+): Promise<{ pieza: EstadoDePieza } | { abort: E }> {
+  let salida: { pieza: EstadoDePieza } | { abort: E } | null = null;
+  let comprometida: EstadoDePieza | null = null;
+
+  await almacen.cambiar(piezaId, (crudo) => {
+    const actual = crudo ? normalizar(crudo) : sinTocar(carpetaId);
+    const r = transform(actual);
+    if ("abort" in r) {
+      salida = { abort: r.abort };
+      comprometida = null;
+      // No se toca: se devuelve lo que había, sin pisar a nadie.
+      return actual;
+    }
+    salida = { pieza: r.commit };
+    comprometida = r.commit;
+    return r.commit;
+  });
+
+  // Se le anota encima al recuerdo por-pedido, igual que `escribir`: leer la
+  // carpeta después de esto tiene que ver lo que esto acaba de guardar.
+  const caja = cajaDePiezas();
+  if (caja.pedido && comprometida) {
+    (await caja.pedido)[piezaId] = comprometida;
+  }
+
+  // `salida` siempre queda seteada: `almacen.cambiar` llama a `transform` al
+  // menos una vez antes de devolver.
+  return salida!;
+}
+
 export function anotar(
   pieza: EstadoDePieza,
   que: Hito,

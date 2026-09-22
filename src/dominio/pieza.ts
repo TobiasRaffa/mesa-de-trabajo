@@ -390,5 +390,14 @@ export function aplicar(pieza: Pieza, evento: Evento): Resultado {
       }
       // Vuelve a manos del cliente, que va a tener que aprobarla de nuevo.
       return si({ ...pieza, estado: "entregada" });
+
+    // **Nunca cae acá con un `Evento` de verdad**: el `switch` los cubre a
+    // todos y el tipo lo garantiza. Está por lo que llega cuando el tipo
+    // miente —un evento armado a mano con un `tipo` que no es ninguno de
+    // estos—. Sin este caso, la función devolvía `undefined` en silencio y
+    // quien la llama reventaba al leer `resultado.ok`. Devolver un «no» es el
+    // lado seguro del error.
+    default:
+      return no("Esa acción no existe.");
   }
 }

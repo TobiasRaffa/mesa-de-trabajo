@@ -267,7 +267,15 @@ function Revision({
         };
         // Si la pantalla ya se desmontó, guardar sería escribir en el aire.
         if (vivo) {
-          setMensajes(llegado.mensajes);
+          // **Un sondeo que llega tarde no borra lo recién mandado.** Si esta
+          // lectura salió antes de mandar un mensaje y su respuesta llega
+          // después, traía la lista sin ese mensaje y lo hacía desaparecer
+          // hasta la vuelta siguiente. La conversación solo crece, así que una
+          // respuesta con menos mensajes que los que ya hay es vieja: se
+          // descarta.
+          setMensajes((previos) =>
+            llegado.mensajes.length >= previos.length ? llegado.mensajes : previos
+          );
           setHayAnteriores(llegado.hayAnteriores === true);
         }
       } catch {

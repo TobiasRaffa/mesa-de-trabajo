@@ -36,11 +36,24 @@ async function mapaDeCarpetas(): Promise<Map<string, Cliente>> {
   const clientes = await clientesHabilitados();
   // En paralelo: son pocas carpetas y esperar una por una haría que cada
   // guardado tarde la suma de todas.
-  const porCliente = await Promise.all(clientes.map((c) => subcarpetasDe(c.id)));
+  //
+  // **`allSettled` y no `all`, y la diferencia es quién se cae cuando Drive
+  // falla para uno.** Con `all`, que la carpeta de un solo cliente no se pueda
+  // leer —se dejó de compartir, Drive contesta un error puntual— rechaza la
+  // promesa entera: `mapaDeCarpetas` tira, y como todos sus llamadores tratan
+  // el error como «de nadie / no es mía», el portal y la gestión enteros
+  // dejaban de reconocer **cualquier** carpeta de **cualquier** cliente. Un
+  // problema de una cuenta apagaba el acceso de todas. Es la misma regla que
+  // ya respetan `entradaDe` y `puertaDe`: un cliente cuya carpeta no se puede
+  // leer no invalida a los demás; contribuye con cero carpetas y las suyas se
+  // tratan como no reconocidas —cerrado, no abierto— hasta que Drive conteste.
+  const porCliente = await Promise.allSettled(clientes.map((c) => subcarpetasDe(c.id)));
 
   const de = new Map<string, Cliente>();
   clientes.forEach((cliente, i) => {
-    for (const carpeta of porCliente[i]) de.set(carpeta.id, cliente);
+    const suyas = porCliente[i];
+    if (suyas.status !== "fulfilled") return;
+    for (const carpeta of suyas.value) de.set(carpeta.id, cliente);
   });
 
   cache = { de, vence: ahora + RECUERDO_MS };

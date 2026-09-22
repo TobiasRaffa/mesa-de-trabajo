@@ -707,12 +707,26 @@ describe("las puertas", () => {
     // Se corta el archivo en bloques, uno por función exportada, y se revisa
     // cada bloque por separado: que el archivo mencione la comprobación en
     // algún lado no dice nada sobre la función que se agregó ayer.
-    const partes = fuente.split(/^export async function /m).slice(1);
-    expect(partes.length, "No encontré ninguna acción exportada.").toBeGreaterThan(0);
+    //
+    // **Las dos formas de escribir una acción, como el guardián de gestión.**
+    // Partía solo por `export async function`, así que una acción escrita
+    // `export const foo = async (...) => {}` ni siquiera aparecía en la lista:
+    // no fallaba, directamente no se la contaba. Es el mismo agujero que ese
+    // otro guardián ya había tapado, acá seguía abierto.
+    const cuerpo = sinImports(fuente);
+    const declara = /^export\s+(?:async\s+function\s+(\w+)|const\s+(\w+)\s*=\s*async)/gm;
+    const encontradas: Array<{ nombre: string; desde: number }> = [];
+    for (const m of cuerpo.matchAll(declara)) {
+      encontradas.push({ nombre: m[1] ?? m[2], desde: m.index! });
+    }
+    expect(encontradas.length, "No encontré ninguna acción exportada.").toBeGreaterThan(0);
 
-    const sinPuerta = partes
-      .filter((bloque) => !bloque.includes("quienEntro("))
-      .map((bloque) => bloque.slice(0, bloque.indexOf("(")));
+    const sinPuerta = encontradas
+      .filter(({ desde }, i) => {
+        const hasta = encontradas[i + 1]?.desde ?? cuerpo.length;
+        return !cuerpo.slice(desde, hasta).includes("quienEntro(");
+      })
+      .map(({ nombre }) => nombre);
 
     expect(
       sinPuerta,

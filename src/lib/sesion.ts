@@ -32,7 +32,7 @@ import {
   SIN_PERSONA,
 } from "@/lib/contrasena";
 import { claveCorrecta, claveDesde, hayAlguienConClave } from "@/lib/claves";
-import { anotarError, frenado, olvidarErrores, type Limite } from "@/lib/frenos";
+import { intentarYFrenar, olvidarErrores, type Limite } from "@/lib/frenos";
 import {
   alcanceDePersona,
   personaPorId,
@@ -232,15 +232,19 @@ export async function contrasenaDeQuienEsta(clave: string): Promise<boolean> {
   // con la que entra un cliente. El daño está acotado —ya está adentro— pero
   // dejar un contador de intentos sin tope al lado de lo más delicado de la
   // pantalla no tiene ninguna ventaja.
+  // **Se cuenta el intento y se frena en un solo paso**, para que una ráfaga a
+  // la vez no se cuele entre el «¿estoy frenado?» y el «anotá el error». Contar
+  // acá también suma el intento que acierta; por eso, si acierta, se borra la
+  // cuenta enseguida.
   const quien = `propia:${sesion.persona?.id ?? SIN_PERSONA}`;
-  if (await frenado(quien, LIMITE_PROPIO)) return false;
+  if (await intentarYFrenar(quien, LIMITE_PROPIO)) return false;
 
   const correcta = sesion.persona
     ? await claveCorrecta(sesion.persona.id, clave)
     : contrasenaCorrecta(clave);
 
+  // Acertó: la cuenta se va. Erró: ya quedó contado arriba, no se suma de nuevo.
   if (correcta) await olvidarErrores(quien);
-  else await anotarError(quien, LIMITE_PROPIO);
 
   return correcta;
 }

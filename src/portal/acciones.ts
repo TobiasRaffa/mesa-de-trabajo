@@ -38,10 +38,8 @@ import {
 
 import {
   anotar,
-  estadoDe,
+  cambiarPieza,
   estadosDe,
-  guardarPieza,
-  guardarPiezas,
   piezasDeLaCarpeta,
   type Cambio,
   type EstadoDePieza,
@@ -222,11 +220,18 @@ export async function moverPieza(
   const cual = await piezaDeLaCarpeta(carpetaId, piezaId);
   if (!cual) return { ok: false, motivo: "No encontramos esa pieza." };
 
-  if (!(evento?.tipo in DESDE_EL_PORTAL)) {
+  // **`hasOwnProperty` y no `in`.** `in` mira también la cadena de prototipos,
+  // así que un evento armado a mano con `tipo: "constructor"` —o `"toString"`,
+  // `"valueOf"`, cualquier cosa que herede de `Object.prototype`— pasaba este
+  // filtro. `aplicar()` no tiene esos casos en su `switch` y devolvía
+  // `undefined`, y la línea siguiente —`if (!resultado.ok)`— reventaba con un
+  // TypeError no controlado: un 500 desde el portal, con solo una sesión de
+  // cliente y un pedido a mano. Preguntar solo por las claves propias del
+  // objeto cierra el paso.
+  if (!Object.prototype.hasOwnProperty.call(DESDE_EL_PORTAL, evento?.tipo)) {
     return { ok: false, motivo: "Esa acción no se puede hacer desde el portal." };
   }
 
-  const guardada = await estadoDe(carpetaId, piezaId);
   const rondasIncluidas = RONDAS_INCLUIDAS_POR_DEFECTO;
 
   // Quién firma. Del otro lado hay «Cliente»; al aprobar puede decir su
@@ -234,57 +239,53 @@ export async function moverPieza(
   const firma =
     evento.tipo === "aprobar" ? comoFirmaElCliente(CLIENTE, evento.por) : CLIENTE;
 
-  const resultado = aplicar(
-    {
-      estado: guardada.estado,
-      ronda: guardada.ronda,
-      rondasIncluidas,
-      rondasExtra: guardada.rondasExtra,
-    },
-    // Aprobar lleva quién: la firma la pone el servidor, no el navegador.
-    evento.tipo === "aprobar" ? { tipo: "aprobar", por: firma } : evento
-  );
-
-  if (!resultado.ok) return { ok: false, motivo: resultado.motivo };
-
-  let pieza: EstadoDePieza = {
-    ...guardada,
-    carpetaId,
-    estado: resultado.pieza.estado,
-    ronda: resultado.pieza.ronda,
-    rondasExtra: resultado.pieza.rondasExtra,
-    // Descartar los cambios los borra de verdad: dejar la lista escrita debajo
-    // de una pieza sin decidir sería mentir sobre lo que va a recibir la agencia.
-    //
-    // **Aprobar también los borra.** Aprobada es «sale tal cual está», y lo que
-    // se había anotado antes de decidirlo no es un pedido: quedaba guardado y
-    // la agencia veía una pieza aprobada con cambios «que el cliente está
-    // escribiendo», las dos cosas a la vez. Nada salió todavía —la ronda no se
-    // mandó—, así que no hay nada que perder.
-    cambios:
-      evento.tipo === "descartar_cambios" || evento.tipo === "aprobar"
-        ? []
-        : guardada.cambios,
-  };
-
-  const hito = DESDE_EL_PORTAL[evento.tipo];
-  if (hito) pieza = anotar(pieza, hito, firma);
-
-  // **Aprobar ya no muda el archivo a «Entregas finales».**
+  // **La transición se calcula sobre el estado que hay ahora, no sobre una
+  // foto.** Con `cambiarPieza`, aprobar mientras la agencia reabre —o al revés—
+  // no pisa la decisión del otro: el que pierde la carrera vuelve a leer y
+  // recalcula. Antes se leía, se calculaba y se guardaba en tres pasos, y una
+  // de las dos decisiones desaparecía sin dejar rastro.
   //
-  // Lo hacía, y estaba mal entendido de este lado: se creía que el archivo
-  // aprobado *era* la entrega final. No lo es. La entrega final es otro
-  // archivo —el mismo trabajo ya terminado de verdad, en el formato que va a
-  // usarse: el PDF de imprenta, el empaquetado— y lo sube una persona del
-  // equipo, aparte, cuando está.
-  //
-  // Mover el aprobado dejaba la misma pieza en dos lugares, sacaba el archivo
-  // de la carpeta donde el equipo trabaja, y obligaba a un viaje de vuelta
-  // cada vez que algo se reabría. Ahora la pieza aprobada se queda donde está,
-  // marcada aprobada, y «Entregas finales» es lo que su nombre dice: donde el
-  // equipo deja lo terminado.
+  // **Aprobar ya no muda el archivo a «Entregas finales».** Eso está mal
+  // entendido de este lado: la entrega final es otro archivo —el PDF de
+  // imprenta, el empaquetado— que sube una persona del equipo, aparte. La pieza
+  // aprobada se queda donde está, marcada aprobada.
+  const cambio = await cambiarPieza<string>(carpetaId, piezaId, (actual) => {
+    const resultado = aplicar(
+      {
+        estado: actual.estado,
+        ronda: actual.ronda,
+        rondasIncluidas,
+        rondasExtra: actual.rondasExtra,
+      },
+      // Aprobar lleva quién: la firma la pone el servidor, no el navegador.
+      evento.tipo === "aprobar" ? { tipo: "aprobar", por: firma } : evento
+    );
+    if (!resultado.ok) return { abort: resultado.motivo };
 
-  await guardarPieza(piezaId, pieza);
+    let pieza: EstadoDePieza = {
+      ...actual,
+      carpetaId,
+      estado: resultado.pieza.estado,
+      ronda: resultado.pieza.ronda,
+      rondasExtra: resultado.pieza.rondasExtra,
+      // Descartar los cambios los borra de verdad: dejar la lista escrita
+      // debajo de una pieza sin decidir sería mentir sobre lo que va a recibir
+      // la agencia. **Aprobar también los borra**: aprobada es «sale tal cual
+      // está», y lo anotado antes de decidirlo no es un pedido. Nada salió
+      // todavía —la ronda no se mandó—, así que no hay nada que perder.
+      cambios:
+        evento.tipo === "descartar_cambios" || evento.tipo === "aprobar"
+          ? []
+          : actual.cambios,
+    };
+
+    const hito = DESDE_EL_PORTAL[evento.tipo];
+    if (hito) pieza = anotar(pieza, hito, firma);
+    return { commit: pieza };
+  });
+
+  if ("abort" in cambio) return { ok: false, motivo: cambio.abort };
+  const pieza = cambio.pieza;
 
   // Se le avisa al equipo. Es el bucle que este proyecto vino a cerrar: hasta
   // hoy, nadie se enteraba salvo que entrara a mirar.
@@ -348,38 +349,43 @@ export async function guardarCambiosDePieza(
     limpios.push({ id, texto: texto.slice(0, LARGO_MAXIMO) });
   }
 
-  const guardada = await estadoDe(carpetaId, piezaId);
-  if (guardada.enviada) {
-    return { ok: false, motivo: "Esta pieza ya se envió: lo escrito queda firme." };
-  }
+  // Se reescribe sobre el estado que hay ahora, no sobre una foto: si la
+  // agencia entregó una vuelta nueva mientras el cliente escribía, la carrera
+  // no borra ni lo uno ni lo otro.
+  const cambio = await cambiarPieza<string>(carpetaId, piezaId, (guardada) => {
+    if (guardada.enviada) {
+      return { abort: "Esta pieza ya se envió: lo escrito queda firme." };
+    }
 
-  let estado = guardada.estado;
-  let ronda = guardada.ronda;
+    let estado = guardada.estado;
+    let ronda = guardada.ronda;
 
-  const quiereMarcar = limpios.length > 0 && guardada.estado !== "cambios_marcados";
-  const quiereSoltar = limpios.length === 0 && guardada.estado === "cambios_marcados";
+    const quiereMarcar = limpios.length > 0 && guardada.estado !== "cambios_marcados";
+    const quiereSoltar = limpios.length === 0 && guardada.estado === "cambios_marcados";
 
-  if (quiereMarcar || quiereSoltar) {
-    const r = aplicar(
-      {
-        estado: guardada.estado,
-        ronda: guardada.ronda,
-        rondasIncluidas: RONDAS_INCLUIDAS_POR_DEFECTO,
-        rondasExtra: guardada.rondasExtra,
-      },
-      { tipo: quiereMarcar ? "pedir_cambios" : "descartar_cambios" }
-    );
-    if (!r.ok) return { ok: false, motivo: r.motivo };
-    estado = r.pieza.estado;
-    ronda = r.pieza.ronda;
-  }
+    if (quiereMarcar || quiereSoltar) {
+      const r = aplicar(
+        {
+          estado: guardada.estado,
+          ronda: guardada.ronda,
+          rondasIncluidas: RONDAS_INCLUIDAS_POR_DEFECTO,
+          rondasExtra: guardada.rondasExtra,
+        },
+        { tipo: quiereMarcar ? "pedir_cambios" : "descartar_cambios" }
+      );
+      if (!r.ok) return { abort: r.motivo };
+      estado = r.pieza.estado;
+      ronda = r.pieza.ronda;
+    }
 
-  let pieza: EstadoDePieza = { ...guardada, carpetaId, estado, ronda, cambios: limpios };
-  if (quiereMarcar) pieza = anotar(pieza, "cambios_pedidos", CLIENTE);
-  if (quiereSoltar) pieza = anotar(pieza, "cambios_descartados", CLIENTE);
+    let pieza: EstadoDePieza = { ...guardada, carpetaId, estado, ronda, cambios: limpios };
+    if (quiereMarcar) pieza = anotar(pieza, "cambios_pedidos", CLIENTE);
+    if (quiereSoltar) pieza = anotar(pieza, "cambios_descartados", CLIENTE);
+    return { commit: pieza };
+  });
 
-  await guardarPieza(piezaId, pieza);
-  return { ok: true, pieza };
+  if ("abort" in cambio) return { ok: false, motivo: cambio.abort };
+  return { ok: true, pieza: cambio.pieza };
 }
 
 /**
@@ -428,58 +434,64 @@ export async function enviarRevision(
   // es la que miraba **antes** de cerrar la vuelta, y guardada ya no la tiene.
   const revisadas: Array<{ nombre: string; version: number }> = [];
 
-  for (const [id, guardada] of Object.entries(estados)) {
+  // Cada pieza se cierra por separado y **con `cambiar`**: sobre el estado que
+  // hay ahora, no sobre la foto que leyó `estadosDe`. Si la agencia entregó una
+  // vuelta nueva mientras el cliente cerraba la revisión, ninguna de las dos
+  // cosas se pierde. La versión de Drive —`laVuelta`— es un dato estable que se
+  // leyó antes y vale como constante adentro de la transición.
+  for (const id of Object.keys(estados)) {
     if (soloEsta && id !== soloEsta) continue;
-    if (guardada.enviada) continue;
 
-    const r = aplicar(
-      {
-        estado: guardada.estado,
-        ronda: guardada.ronda,
-        rondasIncluidas: RONDAS_INCLUIDAS_POR_DEFECTO,
-        rondasExtra: guardada.rondasExtra,
-      },
-      { tipo: "cerrar_revision" }
-    );
-    if (!r.ok) continue;
+    const cambio = await cambiarPieza<string>(carpetaId, id, (guardada) => {
+      if (guardada.enviada) return { abort: "ya-enviada" };
 
-    // **Solo se cierra lo que de verdad cambia de estado.**
-    //
-    // El dominio contesta que sí para una pieza aprobada o esperando una
-    // revisión adicional —cerrar la ronda no las toca—, y acá eso se tomaba
-    // como «se envió»: la pieza quedaba marcada `enviada` sin haber mandado
-    // nada. Para una aprobada da igual; para una que espera la revisión
-    // adicional era un callejón sin salida: la agencia se la habilitaba, y el
-    // cliente encontraba «ya se lo mandamos al equipo» y ningún botón para
-    // usar la vuelta que acababa de pedir.
-    if (r.pieza.estado === guardada.estado && r.pieza.ronda === guardada.ronda) {
-      continue;
+      const r = aplicar(
+        {
+          estado: guardada.estado,
+          ronda: guardada.ronda,
+          rondasIncluidas: RONDAS_INCLUIDAS_POR_DEFECTO,
+          rondasExtra: guardada.rondasExtra,
+        },
+        { tipo: "cerrar_revision" }
+      );
+      if (!r.ok) return { abort: "no-aplica" };
+
+      // **Solo se cierra lo que de verdad cambia de estado.** El dominio
+      // contesta que sí para una pieza aprobada o esperando una revisión
+      // adicional —cerrar la ronda no las toca—, y acá eso se tomaba como «se
+      // envió»: quedaba marcada `enviada` sin haber mandado nada. Para una que
+      // espera la revisión adicional era un callejón sin salida.
+      if (r.pieza.estado === guardada.estado && r.pieza.ronda === guardada.ronda) {
+        return { abort: "sin-cambio" };
+      }
+
+      return {
+        commit: anotar(
+          {
+            ...guardada,
+            carpetaId,
+            estado: r.pieza.estado,
+            ronda: r.pieza.ronda,
+            rondasExtra: r.pieza.rondasExtra,
+            enviada: true,
+          },
+          "revision_enviada",
+          CLIENTE,
+          // **Qué pidió, y sobre qué versión.** Sin esto lo pedido se perdía al
+          // entregar la vuelta siguiente: la lista se vacía —es correcto, la
+          // revisión nueva empieza limpia— y solo quedaba un renglón diciendo
+          // que hubo cambios, sin decir cuáles.
+          cambiosEnPalabras(laVuelta[id]?.version ?? guardada.ronda + 1, guardada.cambios)
+        ),
+      };
+    });
+
+    if ("pieza" in cambio) {
+      aGuardar[id] = cambio.pieza;
+      const suya = laVuelta[id];
+      if (suya) revisadas.push(suya);
     }
-
-    aGuardar[id] = anotar(
-      {
-        ...guardada,
-        carpetaId,
-        estado: r.pieza.estado,
-        ronda: r.pieza.ronda,
-        rondasExtra: r.pieza.rondasExtra,
-        enviada: true,
-      },
-      "revision_enviada",
-      CLIENTE,
-      // **Qué pidió, y sobre qué versión.** Sin esto lo pedido se perdía al
-      // entregar la vuelta siguiente: la lista se vacía —es lo correcto, la
-      // revisión nueva empieza limpia— y lo único que quedaba era un renglón
-      // diciendo que hubo cambios, sin decir cuáles. Dentro de un mes, «¿por
-      // qué la v2 salió así?» no tenía respuesta.
-      cambiosEnPalabras(laVuelta[id]?.version ?? guardada.ronda + 1, guardada.cambios)
-    );
-
-    const suya = laVuelta[id];
-    if (suya) revisadas.push(suya);
   }
-
-  await guardarPiezas(aGuardar);
 
   if (revisadas.length > 0) {
     await anotarHito(

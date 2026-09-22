@@ -23,9 +23,8 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  ajustesDe,
+  cambiarAjustesDe,
   esCarpetaReservada,
-  guardarAjustesDe,
   linkDeCarpeta,
   type Vista,
   mostrarUOcultar,
@@ -70,10 +69,9 @@ import { avisar } from "@/lib/avisar";
 import { devolverDesdeFinales } from "@/lib/entregasFinales";
 import {
   anotar,
+  cambiarPieza,
   estadoDe,
   estadosDe,
-  guardarPieza,
-  guardarPiezas,
   piezasDeLaCarpeta,
   type EstadoDePieza,
 } from "@/lib/piezas";
@@ -204,14 +202,13 @@ export async function guardarCarpeta(_previo: unknown, formulario: FormData) {
 
   const vista: Vista = vistaCruda === "calendario" ? "calendario" : "lista";
 
-  // Lo que no viene en el formulario se conserva: el link de la carpeta, quién
-  // la lleva y hasta cuándo. Pisarlos con vacío sería perderlos cada vez que
-  // alguien toca «ocultar».
-  const previos = await ajustesDe(carpetaId);
-  // La visibilidad no se toca acá: la maneja `cambiarVisibilidad`, y mandarla
-  // de nuevo desde una pantalla que quedó vieja podía pisar lo que alguien
-  // acababa de apagar.
-  await guardarAjustesDe(carpetaId, { ...previos, vista });
+  // Se toca **solo** la vista y se deja el resto como está —el link de la
+  // carpeta y su visibilidad— con `cambiar`, en un solo paso. Leyendo primero y
+  // escribiendo después, dos cosas se perdían: el link que `linkDeCarpeta`
+  // acababa de generar (pisado por la foto vieja), y lo que alguien acababa de
+  // apagar (la visibilidad, mandada de nuevo desde una pantalla que quedó
+  // vieja). `cambiarAjustesDe` parte de lo que hay ahora, no de la foto.
+  await cambiarAjustesDe(carpetaId, { vista });
 
   // La pantalla se vuelve a dibujar con lo guardado, en el mismo viaje.
   revalidatePath("/gestion", "layout");
@@ -626,79 +623,77 @@ export async function entregarCarpeta(
   // Quién lo hizo. Hoy dice «El equipo»; el día que haya login dirá el nombre
   // de quien apretó el botón, sin tocar nada de acá.
   const firma = await firmaDeAgencia();
-  const cambios: Record<string, EstadoDePieza> = {};
 
-  for (const [id, guardada] of Object.entries(estados)) {
+  // Cada pieza se entrega por separado y **con `cambiar`**: sobre el estado que
+  // hay ahora, no sobre la foto que leyó `estadosDe`. Si el cliente aprobó o
+  // devolvió una pieza mientras se armaba la tanda, la carrera no pisa su
+  // decisión. La versión de Drive —`versionDe`— y la fecha de entrega son datos
+  // estables que se leyeron antes y valen como constantes adentro.
+  let cuantas = 0;
+
+  for (const id of Object.keys(estados)) {
     // Entregar de a una: el resto de la carpeta se queda donde está.
     if (soloEsta && id !== soloEsta) continue;
 
-    // **Entregar la tanda no arrastra lo que no tiene nada nuevo.** Una pieza
-    // que el cliente devolvió con cambios está de nuestro lado, pero hasta que
-    // no aparezca la vuelta nueva entregarla le manda el mismo archivo que
-    // acaba de devolver. Se saltea, como cualquier otra que no se pueda.
-    //
-    // Entregando de a una sí se deja: ahí alguien está mirando esa pieza y
-    // decidiendo sobre ella. La pantalla se lo avisa antes.
-    if (
-      !soloEsta &&
-      !hayAlgoParaEntregar(
-        guardada.estado,
-        versionDe.get(id) ?? 0,
-        guardada.versionEntregada
-      )
-    ) {
-      continue;
-    }
+    const cambio = await cambiarPieza<string>(carpetaId, id, (guardada) => {
+      // **Entregar la tanda no arrastra lo que no tiene nada nuevo.** Una pieza
+      // que el cliente devolvió con cambios está de nuestro lado, pero hasta
+      // que no aparezca la vuelta nueva entregarla le manda el mismo archivo
+      // que acaba de devolver. Se saltea. Entregando de a una sí se deja: ahí
+      // alguien está mirando esa pieza y decidiendo sobre ella.
+      if (
+        !soloEsta &&
+        !hayAlgoParaEntregar(guardada.estado, versionDe.get(id) ?? 0, guardada.versionEntregada)
+      ) {
+        return { abort: "sin-nada-nuevo" };
+      }
 
-    // Las reglas de qué se puede entregar **no están acá**: salen de
-    // `aplicar()`, la misma función que corre en el navegador.
-    const r = aplicar(
-      {
-        estado: guardada.estado,
-        ronda: guardada.ronda,
-        rondasIncluidas: RONDAS_INCLUIDAS,
-        rondasExtra: guardada.rondasExtra,
-      },
-      { tipo: "entregar" }
-    );
-    // Una pieza que ya estaba entregada no es un error: se saltea y se sigue.
-    if (!r.ok) continue;
+      // Las reglas de qué se puede entregar **no están acá**: salen de
+      // `aplicar()`, la misma función que corre en el navegador. Una pieza que
+      // ya estaba entregada no es un error: se saltea y se sigue.
+      const r = aplicar(
+        {
+          estado: guardada.estado,
+          ronda: guardada.ronda,
+          rondasIncluidas: RONDAS_INCLUIDAS,
+          rondasExtra: guardada.rondasExtra,
+        },
+        { tipo: "entregar" }
+      );
+      if (!r.ok) return { abort: "no-aplica" };
 
-    // **La vuelta nueva abre la revisión de cero.**
-    //
-    // Sin esto, entregar la V2 le llegaba al cliente con la lista de cambios
-    // de la V1 todavía marcada como enviada, y el portal no le dejaba ni
-    // aprobar ni pedir cambios: le mostraba «ya se lo mandamos al equipo»
-    // encima de un archivo nuevo que nadie podía decidir. Quedaba trabado,
-    // sin salida y sin decir por qué.
-    //
-    // Lo pedido no se pierde: se guarda en la historia, junto a la entrega que
-    // lo contesta. Es la única forma de poder decir dentro de un mes «esta
-    // vuelta salió por esto».
-    const pedidos = guardada.cambios;
+      // **La vuelta nueva abre la revisión de cero.** Sin esto, entregar la V2
+      // le llegaba al cliente con la lista de cambios de la V1 todavía marcada
+      // como enviada, y el portal no le dejaba ni aprobar ni pedir cambios. Lo
+      // pedido no se pierde: se guarda en la historia, junto a la entrega que
+      // lo contesta.
+      const pedidos = guardada.cambios;
+      return {
+        commit: anotar(
+          {
+            ...guardada,
+            estado: r.pieza.estado,
+            entregadaEl: ahora,
+            // **Qué vuelta se le entregó.** Es lo único que después contesta si
+            // hay algo nuevo para mandarle: sin esto se deducía de la ronda, y
+            // con una versión de más el tablero ofrecía entregarle el mismo
+            // archivo que acababa de devolver.
+            versionEntregada: versionDe.get(id),
+            cambios: [],
+            enviada: false,
+          },
+          "entregada",
+          firma,
+          pedidos.length > 0
+            ? `Responde a: ${pedidos.map((c, i) => `${i + 1}) ${c.texto}`).join("  ")}`
+            : undefined
+        ),
+      };
+    });
 
-    cambios[id] = anotar(
-      {
-        ...guardada,
-        estado: r.pieza.estado,
-        entregadaEl: ahora,
-        // **Qué vuelta se le entregó.** Es lo único que después contesta si
-        // hay algo nuevo para mandarle: sin esto se deducía de la ronda, y con
-        // una versión de más el tablero ofrecía entregarle el mismo archivo
-        // que acababa de devolver.
-        versionEntregada: versionDe.get(id),
-        cambios: [],
-        enviada: false,
-      },
-      "entregada",
-      firma,
-      pedidos.length > 0
-        ? `Responde a: ${pedidos.map((c, i) => `${i + 1}) ${c.texto}`).join("  ")}`
-        : undefined
-    );
+    if ("pieza" in cambio) cuantas += 1;
   }
 
-  const cuantas = Object.keys(cambios).length;
   if (cuantas === 0) {
     return {
       ok: false,
@@ -707,8 +702,6 @@ export async function entregarCarpeta(
         : "No hay nada sin entregar en esta carpeta.",
     };
   }
-
-  await guardarPiezas(cambios);
 
   // El aviso va después de guardar: si el correo falla, la entrega vale igual.
   const cliente = await clienteDeMiCarpeta(carpetaId);
@@ -820,25 +813,31 @@ export async function reabrirPieza(
   if (!cual) return { ok: false, motivo: "No encontré esa pieza." };
 
   const firma = await firmaDeAgencia();
-  const r = aplicar(
-    {
-      estado: cual.estado.estado,
-      ronda: cual.estado.ronda,
-      rondasIncluidas: RONDAS_INCLUIDAS,
-      rondasExtra: cual.estado.rondasExtra,
-    },
-    { tipo: "reabrir", por: firma }
-  );
-  if (!r.ok) return { ok: false, motivo: r.motivo };
 
-  let pieza = anotar(
-    { ...cual.estado, estado: r.pieza.estado },
-    "reabierta_por_agencia",
-    firma
-  );
+  // La reapertura se aplica **sobre el estado que hay ahora, con `cambiar`**:
+  // si el cliente estaba aprobando o pidiendo cambios en el mismo instante, la
+  // carrera no borra la decisión de nadie.
+  const cambio = await cambiarPieza<string>(carpetaId, piezaId, (actual) => {
+    const r = aplicar(
+      {
+        estado: actual.estado,
+        ronda: actual.ronda,
+        rondasIncluidas: RONDAS_INCLUIDAS,
+        rondasExtra: actual.rondasExtra,
+      },
+      { tipo: "reabrir", por: firma }
+    );
+    if (!r.ok) return { abort: r.motivo };
+    return { commit: anotar({ ...actual, estado: r.pieza.estado }, "reabierta_por_agencia", firma) };
+  });
+  if ("abort" in cambio) return { ok: false, motivo: cambio.abort };
+  let pieza = cambio.pieza;
 
   // La vuelta del archivo es una consecuencia, no una condición: si Drive no
   // contesta, la pieza queda reabierta igual y se anota que no se pudo mover.
+  // El resultado del movimiento se guarda en un segundo `cambiar`, para no
+  // meter una llamada a Drive —que tiene efecto— adentro de la transición, que
+  // puede reintentarse.
   const cliente = await clienteDeMiCarpeta(carpetaId);
   if (pieza.mudada && cliente) {
     const vuelta = await devolverDesdeFinales(
@@ -846,16 +845,18 @@ export async function reabrirPieza(
       pieza.archivoMudado ?? cual.archivoActual,
       carpetaId
     );
-    pieza = vuelta.movida
-      ? anotar(
-          { ...pieza, mudada: false, archivoMudado: undefined },
-          "devuelta_a_su_carpeta",
-          "La aplicación"
-        )
-      : anotar(pieza, "no_se_pudo_devolver", "La aplicación", vuelta.motivo);
+    const anotado = await cambiarPieza<never>(carpetaId, piezaId, (actual) => ({
+      commit: vuelta.movida
+        ? anotar(
+            { ...actual, mudada: false, archivoMudado: undefined },
+            "devuelta_a_su_carpeta",
+            "La aplicación"
+          )
+        : anotar(actual, "no_se_pudo_devolver", "La aplicación", vuelta.motivo),
+    }));
+    if ("pieza" in anotado) pieza = anotado.pieza;
   }
 
-  await guardarPieza(piezaId, pieza);
   revalidatePath("/gestion", "layout");
   return { ok: true, motivo: "La pieza volvió a manos del cliente." };
 }
@@ -875,25 +876,31 @@ export async function habilitarExtraDePieza(
   const cual = await laPieza(carpetaId, piezaId);
   if (!cual) return { ok: false, motivo: "No encontré esa pieza." };
 
-  const r = aplicar(
-    {
-      estado: cual.estado.estado,
-      ronda: cual.estado.ronda,
-      rondasIncluidas: RONDAS_INCLUIDAS,
-      rondasExtra: cual.estado.rondasExtra,
-    },
-    { tipo: "habilitar_extra" }
-  );
-  if (!r.ok) return { ok: false, motivo: r.motivo };
+  const firma = await firmaDeAgencia();
 
-  await guardarPieza(
-    piezaId,
-    anotar(
-      { ...cual.estado, estado: r.pieza.estado, rondasExtra: r.pieza.rondasExtra },
-      "extra_habilitada",
-      await firmaDeAgencia()
-    )
-  );
+  // Sobre el estado que hay ahora, con `cambiar`: habilitar la revisión no
+  // puede pisar lo que el cliente hizo mientras tanto.
+  const cambio = await cambiarPieza<string>(carpetaId, piezaId, (actual) => {
+    const r = aplicar(
+      {
+        estado: actual.estado,
+        ronda: actual.ronda,
+        rondasIncluidas: RONDAS_INCLUIDAS,
+        rondasExtra: actual.rondasExtra,
+      },
+      { tipo: "habilitar_extra" }
+    );
+    if (!r.ok) return { abort: r.motivo };
+    return {
+      commit: anotar(
+        { ...actual, estado: r.pieza.estado, rondasExtra: r.pieza.rondasExtra },
+        "extra_habilitada",
+        firma
+      ),
+    };
+  });
+  if ("abort" in cambio) return { ok: false, motivo: cambio.abort };
+
   revalidatePath("/gestion", "layout");
   return { ok: true, motivo: "El cliente ya puede pedir los cambios." };
 }

@@ -73,6 +73,31 @@ export async function anotarError(quien: string, limite: Limite): Promise<void> 
   await barrerVencidas(ahora);
 }
 
+/**
+ * Cuenta un intento y contesta si con este ya hay que frenar. **En un solo
+ * paso atómico**, y ahí está todo el punto.
+ *
+ * `frenado` + `anotarError` eran dos: preguntar «¿estoy frenado?» y, más tarde,
+ * sumar el error. Entre las dos, una ráfaga de pedidos a la vez pasaba entera
+ * —todos leían la misma cuenta baja antes de que ninguno sumara—, y ocho
+ * intentos por minuto se convertían en cuantos entraran de golpe. Sumar y
+ * comparar juntos, adentro de `cambiar`, cierra esa ventana: cada pedido ve la
+ * cuenta que dejaron los anteriores, aunque lleguen todos en el mismo instante.
+ *
+ * Cuenta **antes** de validar, así que un intento correcto también suma; por
+ * eso quien acierta llama después a `olvidarErrores`, que borra la cuenta. Un
+ * intento fallido no llama a nadie: ya quedó contado acá.
+ */
+export async function intentarYFrenar(quien: string, limite: Limite): Promise<boolean> {
+  const ahora = Date.now();
+  const cuenta = await almacen.cambiar(quien, (actual) => ({
+    cuantos: actual && actual.hasta >= ahora ? actual.cuantos + 1 : 1,
+    hasta: ahora + limite.espera,
+  }));
+  await barrerVencidas(ahora);
+  return (cuenta?.cuantos ?? 1) > limite.tope;
+}
+
 /** Entró bien: la cuenta se va. */
 export async function olvidarErrores(quien: string): Promise<void> {
   await almacen.borrar(quien);
@@ -88,10 +113,17 @@ export async function olvidarErrores(quien: string): Promise<void> {
  */
 async function barrerVencidas(ahora: number): Promise<void> {
   const todas = await almacen.todo();
-  const vencidas = Object.entries(todas).filter(([, c]) => c.hasta < ahora);
+  const vencidas = Object.keys(todas).filter((quien) => todas[quien].hasta < ahora);
   if (vencidas.length === 0) return;
 
-  await almacen.guardarVarios(
-    Object.fromEntries(vencidas.map(([quien]) => [quien, undefined]))
-  );
+  // **Con `cambiar`, no con un borrado ciego.** Entre leer `todo()` y borrar,
+  // alguien pudo volver a errar y renovar su cuenta: el borrado a secas la
+  // resetearía justo cuando el freno tiene que estar puesto, regalándole al que
+  // prueba una ventana limpia. Se vuelve a mirar adentro de `cambiar` y solo se
+  // borra la que sigue vencida.
+  for (const quien of vencidas) {
+    await almacen.cambiar(quien, (actual) =>
+      actual && actual.hasta < ahora ? undefined : actual
+    );
+  }
 }

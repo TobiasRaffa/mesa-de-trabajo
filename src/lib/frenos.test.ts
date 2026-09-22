@@ -49,7 +49,7 @@ vi.mock("@/lib/almacen", () => {
   };
 });
 
-const { anotarError, frenado, olvidarErrores } = await import("@/lib/frenos");
+const { anotarError, frenado, olvidarErrores, intentarYFrenar } = await import("@/lib/frenos");
 
 const LIMITE = { tope: 3, espera: 60_000 };
 const QUIEN = "puerta:marina@cafe.test";
@@ -165,3 +165,25 @@ describe("cada uno tiene su cuenta", () => {
     expect(await frenado("puerta:otra@prueba.test", LIMITE)).toBe(false);
   });
 });
+
+describe("intentarYFrenar cuenta y frena en un solo paso", () => {
+  it("una ráfaga concurrente no supera el tope", async () => {
+    // Diez intentos a la vez sobre un tope de tres. Con `frenado` + `anotarError`
+    // por separado, los diez leían la cuenta en cero y pasaban todos. Con la
+    // suma y la comprobación juntas, solo los primeros tres no frenan.
+    const frenos = await Promise.all(
+      Array.from({ length: 10 }, () => intentarYFrenar(QUIEN, LIMITE))
+    );
+    const dejaronPasar = frenos.filter((f) => f === false).length;
+    expect(dejaronPasar).toBe(LIMITE.tope);
+    expect((guardado[QUIEN] as { cuantos: number }).cuantos).toBe(10);
+  });
+
+  it("acertar y olvidar deja la cuenta limpia", async () => {
+    await intentarYFrenar(QUIEN, LIMITE);
+    await intentarYFrenar(QUIEN, LIMITE);
+    await olvidarErrores(QUIEN);
+    expect(await frenado(QUIEN, LIMITE)).toBe(false);
+    expect(guardado[QUIEN]).toBeUndefined();
+  });
+})

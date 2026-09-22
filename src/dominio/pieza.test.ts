@@ -538,3 +538,18 @@ describe("ya se entregó", () => {
     for (const estado of otros) expect(yaSeEntrego(estado, 6, 4)).toBe(false);
   });
 });
+
+describe("un evento que no existe no rompe nada", () => {
+  it("un tipo desconocido devuelve un «no», no undefined", () => {
+    // **Defensa contra el tipo que miente.** El `switch` cubre todos los
+    // `Evento` de verdad, pero acá llega lo que arma un pedido a mano: un
+    // `tipo` heredado de `Object.prototype` —«constructor», «toString»— o
+    // cualquier string suelto. Sin el `default`, `aplicar` devolvía `undefined`
+    // y quien la llama reventaba al leer `.ok`. Ahora contesta que no.
+    for (const tipo of ["constructor", "toString", "__proto__", "valueOf", "xyz", ""]) {
+      const r = aplicar(piezaNueva(), { tipo } as unknown as Evento);
+      expect(r, `tipo «${tipo}»`).toBeDefined();
+      expect(r.ok).toBe(false);
+    }
+  });
+});

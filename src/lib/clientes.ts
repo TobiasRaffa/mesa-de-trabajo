@@ -132,27 +132,30 @@ export async function todosLosClientes(): Promise<Cliente[]> {
   const carpetas = await carpetasCompartidas();
   const guardado = await leerGuardado();
 
-  // Los clientes recién descubiertos se guardan juntos: es una carpeta nueva
-  // compartida, o cinco de una, y de a uno serían cinco escrituras.
-  const nuevos: Record<string, AjustesDeCliente> = {};
-  const clientes: Cliente[] = carpetas.map((carpeta: CarpetaDrive) => {
-    let ajustes = guardado[carpeta.id];
-    if (!ajustes) {
-      ajustes = clienteNuevo();
-      guardado[carpeta.id] = ajustes;
-      nuevos[carpeta.id] = ajustes;
-    }
-    return {
-      id: carpeta.id,
-      nombre: carpeta.name,
-      enlaceDrive: carpeta.webViewLink,
-      ...ajustes,
-    };
-  });
+  // Los clientes recién descubiertos: los que Drive comparte y todavía no
+  // tienen ficha guardada. Se les genera el link una sola vez.
+  const nuevas = carpetas.filter((c) => !guardado[c.id]);
 
-  // El link se genera una sola vez y se recuerda: si cambiara en cada lectura,
-  // el que el cliente tiene guardado dejaría de funcionar.
-  if (Object.keys(nuevos).length > 0) await almacen.guardarVarios(nuevos);
+  // **Cada uno se guarda con `cambiar`, no con un escritura ciega.** El link se
+  // genera la primera vez que se ve el cliente, y si dos pedidos lo descubren a
+  // la vez —abrir la app en dos pestañas al compartir la carpeta— cada uno
+  // fabricaba un token distinto y el segundo pisaba al primero. `cambiar` con
+  // `?? clienteNuevo()` crea solo si no había, así que el token que gana es uno
+  // y ese es el que se devuelve: se lee el que quedó de verdad en la base, no
+  // el que este pedido acababa de inventar.
+  await Promise.all(
+    nuevas.map(async (carpeta) => {
+      const quedo = await almacen.cambiar(carpeta.id, (habia) => habia ?? clienteNuevo());
+      if (quedo) guardado[carpeta.id] = quedo;
+    })
+  );
+
+  const clientes: Cliente[] = carpetas.map((carpeta: CarpetaDrive) => ({
+    id: carpeta.id,
+    nombre: carpeta.name,
+    enlaceDrive: carpeta.webViewLink,
+    ...(guardado[carpeta.id] ?? clienteNuevo()),
+  }));
 
   return clientes.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 }

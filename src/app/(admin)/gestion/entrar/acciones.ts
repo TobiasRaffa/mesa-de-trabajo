@@ -54,7 +54,7 @@ import {
 } from "@/lib/equipo";
 import { dondeEmpieza, seccionDeLaRuta, type Seccion } from "@/dominio/roles";
 import { pedirOtraClave } from "@/lib/olvidos";
-import { anotarError, frenado, olvidarErrores, type Limite } from "@/lib/frenos";
+import { frenado, intentarYFrenar, olvidarErrores, type Limite } from "@/lib/frenos";
 
 export type Rechazo = { ok: false; motivo: string };
 
@@ -163,8 +163,13 @@ export async function entrar(_previo: unknown, formulario: FormData) {
         motivo: "Es tu primera vez: elegí tu contraseña.",
       };
     }
+    // Desde acá es un intento de verdad: se cuenta y se frena en un solo paso,
+    // así una ráfaga de pedidos a la vez no se cuela toda entre el chequeo de
+    // arriba y el conteo. Ya contado, los errores de abajo no vuelven a sumar.
+    if (await intentarYFrenar(quien, LIMITE)) {
+      return { ok: false as const, primeraVez: true as const, motivo: DEMASIADOS };
+    }
     if (!(await codigoDeAltaCorrecto(persona.id, codigo))) {
-      await anotarError(quien, LIMITE);
       return {
         ok: false as const,
         primeraVez: true as const,
@@ -206,8 +211,11 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   // poder dar de alta a la primera persona. Se cierra solo en cuanto alguien
   // tiene la suya: desde ahí, esta llave no abre nada.
   if (!(await hayAlguienConClave())) {
+    // Se cuenta y se frena en un solo paso, como en los otros caminos.
+    if (await intentarYFrenar(quien, LIMITE)) {
+      return { ok: false as const, motivo: DEMASIADOS };
+    }
     if (!contrasenaCorrecta(clave)) {
-      await anotarError(quien, LIMITE);
       return {
         ok: false as const,
         motivo:
@@ -215,6 +223,7 @@ export async function entrar(_previo: unknown, formulario: FormData) {
           "equipo y dá de alta a la primera persona en Admin.",
       };
     }
+    await olvidarErrores(quien);
     await abrir(SIN_PERSONA);
     redirect(volver.startsWith("/gestion") ? volver : "/gestion");
   }
@@ -222,8 +231,27 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   // **Mismo mensaje para «ese correo no existe» y «esa contraseña no es».**
   // Distinguirlos le dice a quien prueba cuáles correos existen, que es la
   // mitad del trabajo de adivinar.
-  if (!persona || !(await claveCorrecta(persona.id, clave))) {
-    await anotarError(quien, LIMITE);
+  //
+  // **Y el mismo tiempo.** Con `!persona || !(await claveCorrecta(...))`, un
+  // correo que no existe salía sin derivar nada —microsegundos— y uno real con
+  // contraseña pagaba el `scrypt`, que tarda decenas de milisegundos a
+  // propósito. Esa diferencia se mide desde afuera y convierte esta pantalla
+  // en la forma cómoda de averiguar qué correos están cargados —lo mismo que
+  // el mensaje único viene a evitar—. Por eso se deriva **siempre**: contra un
+  // correo que no existe, contra una huella de mentira. Es la misma defensa que
+  // ya hace `claveCorrecta` cuando la persona existe pero no tiene clave.
+  // Se cuenta y se frena en un solo paso, antes de validar: solo `tope` intentos
+  // por ventana llegan a comparar la contraseña, aunque lleguen todos juntos.
+  if (await intentarYFrenar(quien, LIMITE)) {
+    return { ok: false as const, motivo: DEMASIADOS };
+  }
+
+  const correcta = persona
+    ? await claveCorrecta(persona.id, clave)
+    : await claveCorrecta("", clave);
+  // `|| !persona` es redundante en tiempo de ejecución —sin persona, `correcta`
+  // ya es falso— pero le dice al compilador que más abajo `persona` no es nula.
+  if (!correcta || !persona) {
     return { ok: false as const, motivo: NO_ES };
   }
 
@@ -246,15 +274,17 @@ export async function entrar(_previo: unknown, formulario: FormData) {
 export async function olvide(_previo: unknown, formulario: FormData) {
   const correo = leerCorreo(formulario);
   if (!correo) return { ok: false as const, motivo: "Escribí tu correo." };
-  if (await frenado(paraQuien(correo), LIMITE)) {
+
+  // Se cuenta el pedido y se frena en un solo paso. Cuenta siempre —exista o no
+  // el correo— porque si no, esto sería una forma de probar correos sin gastar
+  // el freno de la contraseña; y contar y frenar juntos cierra la ventana por
+  // la que una ráfaga se colaba entre el chequeo y el conteo.
+  if (await intentarYFrenar(paraQuien(correo), LIMITE)) {
     return { ok: false as const, motivo: DEMASIADOS };
   }
 
   const persona = await personaPorCorreo(correo);
   if (persona) await pedirOtraClave(persona.id);
-  // Se cuenta como intento igual: si no, esto sería una forma de probar
-  // correos sin gastar el freno de la contraseña.
-  await anotarError(paraQuien(correo), LIMITE);
 
   return {
     ok: true as const,

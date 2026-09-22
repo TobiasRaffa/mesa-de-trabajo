@@ -134,6 +134,28 @@ export async function guardarAjustesDe(
 }
 
 /**
+ * Cambia **solo** lo que se le pasa y deja el resto como está, en un solo paso.
+ *
+ * **Es lo que evita que apagar una carpeta se lleve puesto su link.** El token
+ * lo crea `linkDeCarpeta` con `cambiar` justamente para que dos visitas a la
+ * vez no fabriquen dos y el que ya tiene el cliente deje de abrir. Pero
+ * `guardarAjustesDe` pisa el documento entero con lo que trae quien llama, y
+ * quien llama parte de una foto que leyó antes: si entre esa lectura y la
+ * escritura alguien generó el link, la escritura lo borra —y el link que ya se
+ * mandó deja de funcionar, sin un error—. Mismo problema al revés con la
+ * visibilidad, que una pantalla vieja podía volver a prender.
+ *
+ * Leyendo y escribiendo adentro del mismo `cambiar`, lo que no se nombra en el
+ * parche sale de lo que hay **ahora** en la base, no de la foto vieja.
+ */
+export async function cambiarAjustesDe(
+  carpetaId: string,
+  parche: Partial<AjustesDeCarpeta>
+): Promise<void> {
+  await almacen.cambiar(carpetaId, (habia) => ({ ...normalizar(habia), ...parche }));
+}
+
+/**
  * El link propio de una carpeta, generándolo si todavía no tiene.
  *
  * Se genera cuando alguien lo pide y no antes: una carpeta que nadie va a
@@ -211,5 +233,7 @@ export async function soloLoVisible<T extends { id: string; name?: string }>(
 
 /** Prende o apaga cualquier cosa, sin tocar el resto de sus ajustes. */
 export async function mostrarUOcultar(id: string, visible: boolean): Promise<void> {
-  await guardarAjustesDe(id, { ...(await ajustesDe(id)), visible });
+  // Con `cambiar` y no leer+escribir: apagar una carpeta no puede pisar el
+  // link que se le acaba de generar ni la vista que otra pantalla guardó.
+  await cambiarAjustesDe(id, { visible });
 }

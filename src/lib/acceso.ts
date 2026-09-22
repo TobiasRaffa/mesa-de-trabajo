@@ -20,7 +20,13 @@
 // guarda el tag, guarda «este navegador ya acertó el de este link»: leerla no
 // sirve para entrar a otro lado, y fabricarla necesita la llave del servidor.
 
-import { anotarError, frenado, olvidarErrores, type Limite } from "@/lib/frenos";
+import {
+  anotarError,
+  frenado,
+  intentarYFrenar,
+  olvidarErrores,
+  type Limite,
+} from "@/lib/frenos";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { documento } from "@/lib/almacen";
 import { ajustesDe, carpetasConLink } from "@/lib/ajustes";
@@ -179,6 +185,14 @@ const porLink = (token: string) => `portal:${token}`;
 
 export const estaFrenado = (token: string): Promise<boolean> =>
   frenado(porLink(token), LIMITE);
+
+/**
+ * Cuenta el intento y dice si con este ya hay que frenar, **en un solo paso**.
+ * Reemplaza al par `estaFrenado` + `anotarIntentoFallido`, que entre los dos
+ * dejaba pasar una ráfaga: todos preguntaban antes de que ninguno sumara.
+ */
+export const intentarConFreno = (token: string): Promise<boolean> =>
+  intentarYFrenar(porLink(token), LIMITE);
 
 export const anotarIntentoFallido = (token: string): Promise<void> =>
   anotarError(porLink(token), LIMITE);
