@@ -145,8 +145,16 @@ export async function hayAnteriores(clienteId: string): Promise<boolean> {
   // **También cuando todavía no hay hilo.** Se anotaba solo `if (hilo)`, o sea
   // que un cliente sin conversación empezada repetía el escaneo entero en cada
   // vuelta del reloj, para siempre, para contestar que no hay nada.
+  //
+  // **Un `true` ya anotado no se pisa.** Entre la búsqueda y esta escritura
+  // pudo correr una mudanza que lo dejó en `true`; escribir lo que vio la
+  // búsqueda —nada— lo bajaba a `false` para siempre, porque de ahí en más la
+  // marca ya no se vuelve a averiguar.
   await almacen
-    .cambiar(clienteId, (actual) => ({ ...(actual ?? { mensajes: [] }), tieneAnteriores: hay }))
+    .cambiar(clienteId, (actual) => ({
+      ...(actual ?? { mensajes: [] }),
+      tieneAnteriores: actual?.tieneAnteriores === true || hay,
+    }))
     .catch(() => undefined);
 
   return hay;
@@ -259,7 +267,18 @@ async function mudarLoViejo(clienteId: string, mensajes: Mensaje[]): Promise<Men
   if (viejos.length === 0) return mensajes;
 
   try {
-    await tramos.guardar(nombreDeTramo(clienteId, viejos[0]), { mensajes: viejos });
+    // **Se une con lo que ya haya, no se reemplaza.** Dos mensajes que cruzan
+    // el techo a la vez arman tramos con el mismo primer mensaje —el mismo
+    // nombre— y distinto largo. Con un reemplazo, si el corto llegaba último
+    // pisaba al largo, y el mensaje que solo estaba en el largo ya había salido
+    // del hilo vivo: quedaba en ningún lado.
+    await tramos.cambiar(nombreDeTramo(clienteId, viejos[0]), (actual) => ({
+      mensajes: [
+        ...new Map(
+          [...(actual?.mensajes ?? []), ...viejos].filter(esMensaje).map((m) => [m.id, m])
+        ).values(),
+      ],
+    }));
 
     const mudados = new Set(viejos.map((m) => m.id));
     const quedo = await almacen.cambiar(clienteId, (actual) => ({
