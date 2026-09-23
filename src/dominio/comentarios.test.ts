@@ -21,6 +21,14 @@ describe("de quién es un comentario de Drive", () => {
     expect(esDelEquipo({ quien: "  nARI " }, EQUIPO)).toBe(true);
   });
 
+  it("tampoco con acentos ni con espacios de más en el medio", () => {
+    // Es común cargar «Martin Lopez» en la aplicación y que Google muestre
+    // «Martín López». Sin igualarlos, la nota del diseñador entraba como
+    // pedido del cliente.
+    expect(esDelEquipo({ quien: "Martín López" }, ["Martin Lopez"])).toBe(true);
+    expect(esDelEquipo({ quien: "Ana Perez" }, ["Ana  Perez"])).toBe(true);
+  });
+
   it("lo que escribe el cliente no es del equipo", () => {
     expect(esDelEquipo({ quien: "Marina · Cafe Otoño" }, EQUIPO)).toBe(false);
   });

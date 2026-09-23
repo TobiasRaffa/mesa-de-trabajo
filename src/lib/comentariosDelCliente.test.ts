@@ -7,14 +7,60 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/**
+ * La base, en memoria.
+ *
+ * `cambiarPieza` se imita de verdad —lee lo que hay **ahora**, llama a la
+ * transformación y guarda lo que devuelve— porque lo que se prueba incluye
+ * que la escritura no pise lo que otro guardó mientras Drive contestaba.
+ */
+const { base } = vi.hoisted(() => ({
+  base: new Map<string, import("@/lib/piezas").EstadoDePieza>(),
+}));
+
 vi.mock("@/lib/google", () => ({ comentariosDeArchivo: vi.fn(async () => []) }));
 vi.mock("@/lib/equipo", () => ({ comoFirmaElEquipo: vi.fn(async () => ["Nari"]) }));
-vi.mock("@/lib/piezas", () => ({ guardarPiezas: vi.fn(async () => {}) }));
+vi.mock("@/lib/piezas", () => ({
+  cambiarPieza: vi.fn(
+    async (
+      _carpetaId: string,
+      id: string,
+      transform: (
+        actual: import("@/lib/piezas").EstadoDePieza
+      ) => { commit: import("@/lib/piezas").EstadoDePieza } | { abort: unknown }
+    ) => {
+      const r = transform(base.get(id)!);
+      if ("abort" in r) return { abort: r.abort };
+      base.set(id, r.commit);
+      return { pieza: r.commit };
+    }
+  ),
+  anotar: (
+    p: import("@/lib/piezas").EstadoDePieza,
+    que: import("@/lib/piezas").EntradaDeHistoria["que"],
+    quien: string,
+    detalle?: string
+  ) => ({
+    ...p,
+    historia: [...p.historia, { id: `h${p.historia.length}`, que, quien, cuando: "", detalle }],
+  }),
+}));
 
 import { comentariosDeArchivo, type ComentarioDeDrive } from "@/lib/google";
-import { guardarPiezas, type EstadoDePieza } from "@/lib/piezas";
+import { cambiarPieza, type EstadoDePieza } from "@/lib/piezas";
 import type { Estado } from "@/dominio/pieza";
-import { conLosComentariosDelCliente } from "@/lib/comentariosDelCliente";
+import { conLosComentariosDelCliente as deVerdad } from "@/lib/comentariosDelCliente";
+
+/**
+ * Lo mismo, pero con la base sembrada con la foto que se pasa.
+ *
+ * Es el caso de todos los días: lo que se leyó es lo que hay. Las pruebas de
+ * carreras siembran la base antes, con otra cosa, y esto no la pisa.
+ */
+const conLosComentariosDelCliente: typeof deVerdad = (piezas, estados) => {
+  for (const [id, e] of Object.entries(estados)) if (!base.has(id)) base.set(id, e);
+  return deVerdad(piezas, estados);
+};
 
 const comentario = (x: Partial<ComentarioDeDrive> & { id: string }): ComentarioDeDrive => ({
   quien: "Marina · Cafe Otoño",
@@ -56,7 +102,10 @@ const CON_TRES_VUELTAS = [
 const conDrive = (...cs: ComentarioDeDrive[]) =>
   vi.mocked(comentariosDeArchivo).mockResolvedValue(cs);
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  base.clear();
+});
 
 describe("lo que escribe el cliente pasa a sus cambios pedidos", () => {
   it("entra con la hoja adelante", async () => {
@@ -86,7 +135,8 @@ describe("lo que escribe el cliente pasa a sus cambios pedidos", () => {
 
   it("no cierra la vuelta ni la marca enviada", async () => {
     // Un comentario suelto no es una devolución: la devolución es cuando el
-    // cliente decide que terminó de escribir y toca «Enviar revisión».
+    // cliente decide que terminó de escribir y toca «Enviar revisión». Queda
+    // como un cambio anotado en el portal: marcado, sin mandar.
     conDrive(comentario({ id: "c1" }));
 
     const { estados } = await conLosComentariosDelCliente(LA_PIEZA, {
@@ -95,7 +145,7 @@ describe("lo que escribe el cliente pasa a sus cambios pedidos", () => {
 
     const p = estados["carpeta::logo.pdf"];
     expect({ estado: p.estado, ronda: p.ronda, enviada: p.enviada }).toEqual({
-      estado: "entregada",
+      estado: "cambios_marcados",
       ronda: 0,
       enviada: false,
     });
@@ -177,7 +227,7 @@ describe("no se copia dos veces", () => {
       "carpeta::logo.pdf": pieza({ comentariosCopiados: ["c1"] }),
     });
 
-    expect(guardarPiezas).not.toHaveBeenCalled();
+    expect(cambiarPieza).not.toHaveBeenCalled();
   });
 });
 
@@ -314,7 +364,7 @@ describe("mientras la vuelta esté abierta, los dos lados son el mismo", () => {
       "carpeta::logo.pdf": yaCopiado("Hoja 1: el importe mas grande"),
     });
 
-    expect(guardarPiezas).not.toHaveBeenCalled();
+    expect(cambiarPieza).not.toHaveBeenCalled();
   });
 });
 
@@ -413,5 +463,163 @@ describe("los comentarios de las versiones de antes", () => {
     });
 
     expect(estados["carpeta::logo.pdf"].cambios).toEqual([]);
+  });
+});
+
+describe("un pedido copiado de Drive viaja con «Enviar revisión»", () => {
+  // **No viajaba.** Se copiaba a la lista y la pieza quedaba «entregada»: el
+  // portal no la juntaba para mandar, y cerrar la revisión sobre una pieza
+  // entregada no cambia nada, así que el cliente tocaba «Enviar revisión» y
+  // la agencia no recibía el pedido. Queda igual que si lo hubiera escrito en
+  // el portal: con los cambios marcados.
+  const ID = "carpeta::logo.pdf";
+
+  it("sobre una pieza en revisión, también", async () => {
+    conDrive(comentario({ id: "c1" }));
+
+    await conLosComentariosDelCliente(LA_PIEZA, { [ID]: pieza({ estado: "en_revision" }) });
+
+    expect(base.get(ID)?.estado).toBe("cambios_marcados");
+  });
+
+  it("y queda en la historia, como cuando lo anota en el portal", async () => {
+    conDrive(comentario({ id: "c1" }));
+
+    await conLosComentariosDelCliente(LA_PIEZA, { [ID]: pieza() });
+
+    expect(base.get(ID)?.historia.map((h) => h.que)).toEqual(["cambios_pedidos"]);
+  });
+
+  it("sin rondas, se anota el pedido pero la pieza no se mueve", async () => {
+    // Pasarla a «cambios marcados» ahí sería gastar una vuelta que no hay: el
+    // dominio dice que corresponde pedir una revisión adicional.
+    conDrive(comentario({ id: "c1" }));
+
+    await conLosComentariosDelCliente(LA_PIEZA, { [ID]: pieza({ ronda: 2 }) });
+
+    expect(base.get(ID)?.estado).toBe("entregada");
+    expect(base.get(ID)?.cambios.map((c) => c.id)).toEqual(["drive:c1"]);
+  });
+
+  it("si lo único marcado se borra en Drive, la pieza vuelve a quedar sin decidir", async () => {
+    conDrive();
+
+    await conLosComentariosDelCliente(LA_PIEZA, {
+      [ID]: pieza({
+        estado: "cambios_marcados",
+        cambios: [{ id: "drive:c1", texto: "cambiar el verde" }],
+        comentariosCopiados: ["c1"],
+      }),
+    });
+
+    expect(base.get(ID)?.estado).toBe("en_revision");
+    expect(base.get(ID)?.cambios).toEqual([]);
+  });
+});
+
+describe("la escritura no pisa lo que otro guardó mientras Drive contestaba", () => {
+  // Lo que se pasa es una foto leída **antes** de preguntarle a Drive. Se
+  // escribía la pieza entera armada sobre esa foto, y lo que otra acción
+  // guardó en el medio —una revisión enviada, una aprobación, un cambio
+  // anotado— desaparecía sin error.
+  const ID = "carpeta::logo.pdf";
+
+  it("una revisión enviada en el medio no se deshace", async () => {
+    conDrive(comentario({ id: "c1" }));
+    const enviada = pieza({
+      estado: "en_curso",
+      enviada: true,
+      ronda: 1,
+      cambios: [{ id: "p1", texto: "el logo más chico" }],
+      historia: [{ id: "h", que: "revision_enviada", quien: "Cliente", cuando: "" }],
+    });
+    base.set(ID, enviada);
+
+    await conLosComentariosDelCliente(LA_PIEZA, {
+      [ID]: pieza({ estado: "cambios_marcados", cambios: [{ id: "p1", texto: "el logo más chico" }] }),
+    });
+
+    expect(base.get(ID)).toEqual(enviada);
+  });
+
+  it("un cambio anotado en el medio se conserva", async () => {
+    conDrive(comentario({ id: "c1" }));
+    base.set(
+      ID,
+      pieza({ estado: "cambios_marcados", cambios: [{ id: "p1", texto: "el logo más chico" }] })
+    );
+
+    await conLosComentariosDelCliente(LA_PIEZA, { [ID]: pieza() });
+
+    expect(base.get(ID)?.cambios.map((c) => c.id)).toEqual(["p1", "drive:c1"]);
+  });
+});
+
+describe("si Drive falla, no se toca lo ya copiado", () => {
+  // Un tropiezo de Google se leía como «el cliente borró todo en Drive»: los
+  // pedidos copiados se sacaban de la lista y, como seguían anotados como
+  // copiados, no volvían nunca más.
+  const ID = "carpeta::logo.pdf";
+  const yaCopiado = () =>
+    pieza({
+      estado: "cambios_marcados",
+      cambios: [{ id: "drive:c1", texto: "cambiar el verde" }],
+      comentariosCopiados: ["c1"],
+    });
+
+  it("un archivo que no se pudo leer no borra nada", async () => {
+    vi.mocked(comentariosDeArchivo).mockResolvedValue(null);
+
+    const { estados, sinCopiar } = await conLosComentariosDelCliente(LA_PIEZA, {
+      [ID]: yaCopiado(),
+    });
+
+    expect(estados[ID].cambios.map((c) => c.id)).toEqual(["drive:c1"]);
+    expect(sinCopiar[ID]).toEqual([]);
+    expect(cambiarPieza).not.toHaveBeenCalled();
+  });
+
+  it("tampoco si falla una sola de las vueltas", async () => {
+    // El pedido pudo haberse escrito sobre la vuelta que no contestó: no hay
+    // forma de saber que se borró.
+    vi.mocked(comentariosDeArchivo).mockImplementation(async (id) =>
+      id === "archivo1" ? null : []
+    );
+
+    await conLosComentariosDelCliente(CON_TRES_VUELTAS, { [ID]: yaCopiado() });
+
+    expect(cambiarPieza).not.toHaveBeenCalled();
+  });
+});
+
+describe("un comentario resuelto y vuelto a abrir en Drive", () => {
+  // Resolverlo lo saca de la lista. Pero seguía anotado como copiado, y al
+  // reabrirlo no volvía nunca: quedaba abierto en Drive y en ningún lado acá.
+  const ID = "carpeta::logo.pdf";
+
+  it("vuelve a entrar como pedido", async () => {
+    conDrive(comentario({ id: "c1" }));
+    await conLosComentariosDelCliente(LA_PIEZA, { [ID]: pieza() });
+
+    conDrive(comentario({ id: "c1", resuelto: true }));
+    await conLosComentariosDelCliente(LA_PIEZA, { [ID]: base.get(ID)! });
+    expect(base.get(ID)?.cambios).toEqual([]);
+
+    conDrive(comentario({ id: "c1" }));
+    await conLosComentariosDelCliente(LA_PIEZA, { [ID]: base.get(ID)! });
+    expect(base.get(ID)?.cambios.map((c) => c.id)).toEqual(["drive:c1"]);
+  });
+
+  it("pero lo que ya se contestó en una vuelta anterior no resucita", async () => {
+    // La lista se vació al entregar la vuelta siguiente: que la agencia lo
+    // marque resuelto después no lo saca de lo ya copiado.
+    conDrive(comentario({ id: "c1", resuelto: true }));
+    await conLosComentariosDelCliente(LA_PIEZA, {
+      [ID]: pieza({ cambios: [], comentariosCopiados: ["c1"] }),
+    });
+
+    conDrive(comentario({ id: "c1" }));
+    const { estados } = await conLosComentariosDelCliente(LA_PIEZA, { [ID]: base.get(ID)! });
+    expect(estados[ID].cambios).toEqual([]);
   });
 });

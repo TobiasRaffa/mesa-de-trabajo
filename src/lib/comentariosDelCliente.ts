@@ -49,10 +49,10 @@ import {
   vieneDeDrive,
 } from "@/dominio/comentarios";
 import type { Cambio } from "@/lib/piezas";
-import { puedeEscribirCambios } from "@/dominio/pieza";
+import { aplicar, puedeEscribirCambios, RONDAS_INCLUIDAS_POR_DEFECTO } from "@/dominio/pieza";
 import { comoFirmaElEquipo } from "@/lib/equipo";
 import { comentariosDeArchivo, type ComentarioDeDrive } from "@/lib/google";
-import { guardarPiezas, type EstadoDePieza } from "@/lib/piezas";
+import { anotar, cambiarPieza, type EstadoDePieza } from "@/lib/piezas";
 
 /** Una pieza, con todos sus archivos: uno por vuelta. */
 export type PiezaConArchivos = {
@@ -87,8 +87,8 @@ export type ConComentarios = {
  * llamadas distintas es como empiezan a ver cosas distintas.
  *
  * **Nunca rompe.** Una carpeta con diez piezas son diez preguntas a Drive, y
- * ninguna de ellas puede tumbar la pantalla: si Drive no contesta, no hay
- * comentarios y se sigue.
+ * ninguna de ellas puede tumbar la pantalla: si Drive no contesta, esa pieza
+ * se deja como está y se sigue.
  */
 export async function conLosComentariosDelCliente(
   piezas: PiezaConArchivos[],
@@ -99,81 +99,168 @@ export async function conLosComentariosDelCliente(
   const [firmas, porPieza] = await Promise.all([
     comoFirmaElEquipo(),
     Promise.all(
-      piezas.map(async (p) => {
+      piezas.map(async (p): Promise<ComentarioDeDrive[] | null> => {
         // Una pregunta por archivo. Son más que antes —una por vuelta en vez
         // de una por pieza— y es el precio de no perder lo que el cliente
         // escribió sobre las versiones de antes. Salen todas juntas.
         const porArchivo = await Promise.all(
-          p.archivos.map(async (a) =>
-            (await comentariosDeArchivo(a.id)).map((c) => ({ ...c, version: a.version }))
-          )
+          p.archivos.map(async (a) => {
+            const leidos = await comentariosDeArchivo(a.id);
+            return leidos && leidos.map((c) => ({ ...c, version: a.version }));
+          })
         );
-        return porArchivo.flat();
+        // **Si una vuelta no se pudo leer, la pieza entera queda para la
+        // próxima.** Un tropiezo de Google se leía como «no hay comentarios»,
+        // y eso es «el cliente borró todo»: se sacaban de la lista los pedidos
+        // ya copiados y, como seguían anotados como copiados, no volvían más.
+        // No se sabe sobre qué vuelta se escribió cada pedido, así que no hay
+        // forma de salvar solo una parte.
+        const leidos: ComentarioDeDrive[] = [];
+        for (const deUno of porArchivo) {
+          if (!deUno) return null;
+          leidos.push(...deUno);
+        }
+        return leidos;
       })
     ),
   ]);
 
   const salida = { ...estados };
   const sinCopiar: Record<string, ComentarioDeDrive[]> = {};
-  const aGuardar: Record<string, EstadoDePieza> = {};
 
-  piezas.forEach(({ id, archivos }, i) => {
-    const estado = salida[id];
-    if (!estado) return;
-
-    const ultima = archivos[archivos.length - 1]?.version;
-
-    const delCliente = porPieza[i].filter((c) => !esDelEquipo(c, firmas));
-    const yaCopiados = new Set(estado.comentariosCopiados ?? []);
-    const sePuedeEscribir = puedeEscribirCambios(estado.estado, estado.enviada);
-
-    // **Lo ya copiado sigue al comentario mientras la vuelta esté abierta.**
-    // Corregir en Drive lo que uno escribió es lo más común del mundo, y sin
-    // esto la agencia recibía la primera redacción y el cliente veía la
-    // segunda. Lo borrado en Drive se va; lo reescrito se reescribe.
-    const enDrive = new Map(delCliente.map((c) => [c.id, c]));
-    // Quien congela lo ya mandado es la guarda de más abajo, que es la que
-    // decide si esto se guarda: preguntarlo dos veces era código muerto que
-    // parecía la regla.
-    const alDia = estado.cambios.flatMap((cambio) => {
-      if (!vieneDeDrive(cambio.id)) return [cambio];
-      const suyo = enDrive.get(idDeDrive(cambio.id));
-      if (!suyo || suyo.resuelto || !suyo.texto.trim()) return [];
-      return [{ ...cambio, texto: comoPedido(suyo, ultima) }];
-    });
-
-    // Un comentario resuelto en Drive es una conversación terminada: entrarlo
-    // como pedido nuevo sería reabrir algo que alguien ya cerró. Tampoco se
-    // anota como copiado, por si lo vuelven a abrir.
-    const nuevos = delCliente.filter(
-      (c) => !yaCopiados.has(c.id) && !c.resuelto && c.texto.trim()
-    );
-
-    const cambios = [
-      ...alDia,
-      ...(sePuedeEscribir
-        ? nuevos.map((c) => ({ id: idDelComentario(c.id), texto: comoPedido(c, ultima) }))
-        : []),
-    ];
-
-    if (sePuedeEscribir && (nuevos.length > 0 || distintos(estado.cambios, cambios))) {
-      const copiado: EstadoDePieza = {
-        ...estado,
-        cambios,
-        comentariosCopiados: [...yaCopiados, ...nuevos.map((c) => c.id)],
-      };
-      salida[id] = copiado;
-      aGuardar[id] = copiado;
-      for (const c of nuevos) yaCopiados.add(c.id);
+  // De a una y en orden, igual que al enviar la revisión.
+  for (const [i, { id, archivos }] of piezas.entries()) {
+    const foto = salida[id];
+    const leidos = porPieza[i];
+    if (!foto) continue;
+    if (!leidos) {
+      sinCopiar[id] = [];
+      continue;
     }
 
-    sinCopiar[id] = delCliente.filter((c) => !yaCopiados.has(c.id));
-  });
+    const ultima = archivos[archivos.length - 1]?.version;
+    const delCliente = leidos.filter((c) => !esDelEquipo(c, firmas));
 
-  // Se escribe solo cuando de verdad cambió algo, y todo junto.
-  if (Object.keys(aGuardar).length > 0) await guardarPiezas(aGuardar);
+    // Se pregunta primero sobre la foto, para no ir a la base cuando no hay
+    // nada que escribir, que es casi siempre.
+    let final = foto;
+    if (ponerAlDia(foto, delCliente, ultima)) {
+      // **Y se escribe sobre lo que hay ahora, no sobre la foto.** La foto se
+      // leyó antes de esperar a Drive, y escribir la pieza entera armada
+      // encima de ella deshacía lo que otro guardó en el medio: una revisión
+      // enviada, una aprobación, un cambio anotado. Lo leído de Drive es un
+      // dato estable y vale como constante adentro de la transición.
+      const r = await cambiarPieza<EstadoDePieza>(foto.carpetaId, id, (actual) => {
+        const nueva = ponerAlDia(actual, delCliente, ultima);
+        return nueva ? { commit: nueva } : { abort: actual };
+      });
+      final = "pieza" in r ? r.pieza : r.abort;
+      salida[id] = final;
+    }
+
+    const copiados = new Set(final.comentariosCopiados ?? []);
+    sinCopiar[id] = delCliente.filter((c) => !copiados.has(c.id));
+  }
 
   return { estados: salida, sinCopiar };
+}
+
+/**
+ * La pieza con lo que el cliente escribió en Drive, o `null` si no cambia nada.
+ *
+ * No tiene efectos: corre adentro de `cambiarPieza`, que puede llamarla más de
+ * una vez.
+ */
+function ponerAlDia(
+  estado: EstadoDePieza,
+  /** Los comentarios del cliente, ya sin los del equipo. */
+  delCliente: ComentarioDeDrive[],
+  ultima: number | undefined
+): EstadoDePieza | null {
+  // Quien congela lo ya mandado es esta guarda: con la pieza de nuestro lado,
+  // o ya enviada, no se escribe nada.
+  if (!puedeEscribirCambios(estado.estado, estado.enviada)) return null;
+
+  const yaCopiados = new Set(estado.comentariosCopiados ?? []);
+
+  // **Lo ya copiado sigue al comentario mientras la vuelta esté abierta.**
+  // Corregir en Drive lo que uno escribió es lo más común del mundo, y sin
+  // esto la agencia recibía la primera redacción y el cliente veía la
+  // segunda. Lo borrado en Drive se va; lo reescrito se reescribe.
+  const enDrive = new Map(delCliente.map((c) => [c.id, c]));
+  // Los que se sacan por resueltos dejan de contar como copiados: si alguien
+  // los vuelve a abrir en Drive, tienen que poder entrar de nuevo. Solo los
+  // resueltos, y solo los que estaban en la lista: lo contestado en una vuelta
+  // anterior ya no está en ella, y ese no resucita.
+  const resueltos = new Set<string>();
+  const alDia = estado.cambios.flatMap((cambio) => {
+    if (!vieneDeDrive(cambio.id)) return [cambio];
+    const suyo = enDrive.get(idDeDrive(cambio.id));
+    if (suyo?.resuelto) {
+      resueltos.add(suyo.id);
+      return [];
+    }
+    if (!suyo || !suyo.texto.trim()) return [];
+    return [{ ...cambio, texto: comoPedido(suyo, ultima) }];
+  });
+
+  // Un comentario resuelto en Drive es una conversación terminada: entrarlo
+  // como pedido nuevo sería reabrir algo que alguien ya cerró. Tampoco se
+  // anota como copiado, por si lo vuelven a abrir.
+  const nuevos = delCliente.filter(
+    (c) => !yaCopiados.has(c.id) && !c.resuelto && c.texto.trim()
+  );
+
+  const cambios = [
+    ...alDia,
+    ...nuevos.map((c) => ({ id: idDelComentario(c.id), texto: comoPedido(c, ultima) })),
+  ];
+
+  if (nuevos.length === 0 && !distintos(estado.cambios, cambios)) return null;
+
+  let pieza: EstadoDePieza = {
+    ...estado,
+    cambios,
+    comentariosCopiados: [
+      ...[...yaCopiados].filter((c) => !resueltos.has(c)),
+      ...nuevos.map((c) => c.id),
+    ],
+  };
+
+  // **La pieza se mueve igual que cuando el cliente escribe en el portal.**
+  // Anotar el primer pedido la pasa a «cambios marcados», y quedarse sin
+  // ninguno la devuelve a «en revisión». Sin esto el pedido copiado quedaba en
+  // una pieza «entregada»: el portal no la juntaba para mandar, cerrar la
+  // revisión no la movía, y el cliente tocaba «Enviar revisión» sin que nada
+  // llegara a la agencia.
+  const quiereMarcar =
+    cambios.length > 0 && (estado.estado === "entregada" || estado.estado === "en_revision");
+  const quiereSoltar = cambios.length === 0 && estado.estado === "cambios_marcados";
+
+  if (quiereMarcar || quiereSoltar) {
+    const r = aplicar(
+      {
+        estado: estado.estado,
+        ronda: estado.ronda,
+        rondasIncluidas: RONDAS_INCLUIDAS_POR_DEFECTO,
+        rondasExtra: estado.rondasExtra,
+      },
+      { tipo: quiereMarcar ? "pedir_cambios" : "descartar_cambios" }
+    );
+    // Sin rondas, el dominio no deja marcar: lo que corresponde es pedir una
+    // revisión adicional, y eso lo decide el cliente. El pedido queda anotado
+    // en la lista igual —es lo que escribió— pero la pieza no se mueve.
+    if (r.ok) {
+      pieza = anotar(
+        { ...pieza, estado: r.pieza.estado, ronda: r.pieza.ronda },
+        quiereMarcar ? "cambios_pedidos" : "cambios_descartados",
+        "Cliente",
+        "Desde un comentario en Drive"
+      );
+    }
+  }
+
+  return pieza;
 }
 
 /** Si la lista de pedidos quedó distinta de como estaba. */

@@ -475,3 +475,71 @@ describe("una carpeta no se sirve como si fuera un archivo", () => {
     ).resolves.not.toBeNull();
   });
 });
+
+describe("lo que está en la papelera de Drive no se sirve", () => {
+  // Pedido por identificador, Drive contesta igual por lo que está en la
+  // papelera, y con sus carpetas madre intactas. Un archivo subido por error a
+  // la carpeta de otro cliente y tirado a la papelera se seguía bajando con el
+  // link viejo hasta que se vaciara.
+  it("ni para el cliente ni para la agencia", async () => {
+    mock.mockResolvedValue({ ...archivo([CLIENTE]), trashed: true });
+
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
+    await expect(
+      archivoAutorizado("archivo-1", { tipo: "agencia", raices: [CLIENTE], secciones: TODAS })
+    ).resolves.toBeNull();
+  });
+
+  it("y lo que no está en la papelera sigue pasando", async () => {
+    mock.mockResolvedValue({ ...archivo([CLIENTE]), trashed: false });
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
+  });
+});
+
+describe("lo que se mueve o renombra en Drive se ve a tiempo", () => {
+  // El árbol se recordaba cinco minutos, y `google.ts` promete que lo hecho
+  // afuera se ve en medio minuto. Mover una carpeta al cliente correcto dejaba
+  // al equivocado bajando los originales del otro mientras tanto.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("mover una carpeta a otro cliente cambia quién la ve", async () => {
+    vi.useFakeTimers();
+    clientes.mockResolvedValue([cliente(CLIENTE), cliente("otro-cliente")]);
+
+    driveConArbol({ "archivo-1": ["trabajo"], trabajo: [CLIENTE] });
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
+
+    // La agencia se dio cuenta y la movió en Drive.
+    driveConArbol({ "archivo-1": ["trabajo"], trabajo: ["otro-cliente"] });
+    vi.advanceTimersByTime(31 * 1000);
+
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
+    await expect(
+      archivoAutorizado("archivo-1", comoCliente("otro-cliente"))
+    ).resolves.not.toBeNull();
+  });
+});
+
+describe("lo que el portal lista, se sirve", () => {
+  // El portal baja hasta seis niveles de carpetas (`HONDURA` en
+  // portal/datos/cliente.ts) y su comentario promete el mismo tope que el
+  // permiso. El permiso cortaba uno antes: la carpeta del sexto nivel se
+  // listaba con las miniaturas rotas y sin descarga.
+  const seisNiveles = () => {
+    const arbol: Record<string, string[]> = { L1: [CLIENTE] };
+    for (let i = 2; i <= 6; i++) arbol[`L${i}`] = [`L${i - 1}`];
+    return arbol;
+  };
+
+  it("un archivo en una carpeta a seis niveles del cliente", async () => {
+    driveConArbol({ ...seisNiveles(), "archivo-1": ["L6"] });
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.not.toBeNull();
+  });
+
+  it("pero uno más abajo que eso, no", async () => {
+    driveConArbol({ ...seisNiveles(), L7: ["L6"], "archivo-1": ["L7"] });
+    await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
+  });
+});

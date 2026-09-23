@@ -206,10 +206,9 @@ function barrerLoVencido(ahora: number): void {
 /**
  * Lo que hay que olvidar además de esto, cuando algo cambió en Drive.
  *
- * **`permisos.ts` tiene su propia memoria de qué carpeta cuelga de cuál**, con
- * cinco minutos de recuerdo, y `olvidarDrive` no la tocaba: esconder una
- * carpeta o mover un archivo seguía dejando pasar al cliente por el camino
- * viejo hasta cinco minutos después. No se puede importar desde acá —sería un
+ * **`permisos.ts` tiene su propia memoria de qué carpeta cuelga de cuál**, y
+ * `olvidarDrive` no la tocaba: esconder una carpeta o mover un archivo seguía
+ * dejando pasar al cliente por el camino viejo hasta que esa memoria venciera. No se puede importar desde acá —sería un
  * círculo—, así que quien tenga memoria propia la anota en esta lista.
  */
 const otrasMemorias: Array<() => void> = [];
@@ -364,10 +363,17 @@ export async function moverArchivo(fileId: string, desde: string, hacia: string)
   // Lo recordado quedó viejo en el momento en que esto cambia algo.
   olvidarDrive();
   const url = `${DRIVE}/files/${fileId}?addParents=${hacia}&removeParents=${desde}&fields=id,name,parents&supportsAllDrives=true`;
-  const r = await aDrive(url, { method: "PATCH" });
-  const data = await r.json();
-  if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "no pude mover el archivo"));
-  return data;
+  try {
+    const r = await aDrive(url, { method: "PATCH" });
+    const data = await r.json();
+    if (!r.ok) throw new Error("Drive: " + (data.error?.message ?? "no pude mover el archivo"));
+    return data;
+  } finally {
+    // **Y otra vez al terminar.** Lo que otra pantalla leyó mientras el PATCH
+    // viajaba es el estado de antes, y quedaba recordado medio minuto: la
+    // aplicación contradecía lo que acababa de hacer.
+    olvidarDrive();
+  }
 }
 
 
@@ -379,6 +385,14 @@ export type MetadatosArchivo = {
   thumbnailLink?: string;
   modifiedTime?: string;
   webViewLink?: string;
+  /**
+   * Si está en la papelera de Drive.
+   *
+   * Pedido por identificador, Drive contesta igual por lo que está en la
+   * papelera —con sus carpetas madre intactas—, así que sin esto lo tirado se
+   * seguía autorizando y sirviendo hasta que se vaciara.
+   */
+  trashed?: boolean;
 };
 
 // Datos de un archivo puntual, incluidas las carpetas que lo contienen.
@@ -396,17 +410,22 @@ export type MetadatosArchivo = {
 export async function renombrarArchivo(fileId: string, nombre: string): Promise<void> {
   // Lo recordado quedó viejo en el momento en que esto cambia algo.
   olvidarDrive();
-  const r = await aDrive(
-    `${DRIVE}/files/${encodeURIComponent(fileId)}?fields=id,name&supportsAllDrives=true`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: nombre }),
+  try {
+    const r = await aDrive(
+      `${DRIVE}/files/${encodeURIComponent(fileId)}?fields=id,name&supportsAllDrives=true`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nombre }),
+      }
+    );
+    const data = await r.json();
+    if (!r.ok) {
+      throw new Error("Drive: " + (data.error?.message ?? "no pude renombrar el archivo"));
     }
-  );
-  const data = await r.json();
-  if (!r.ok) {
-    throw new Error("Drive: " + (data.error?.message ?? "no pude renombrar el archivo"));
+  } finally {
+    // Lo leído mientras el PATCH viajaba es el nombre viejo: igual que al mover.
+    olvidarDrive();
   }
 }
 
@@ -416,7 +435,7 @@ export async function metadatosArchivo(fileId: string): Promise<MetadatosArchivo
 
 async function pedirMetadatos(fileId: string): Promise<MetadatosArchivo> {
   const fields = encodeURIComponent(
-    "id,name,mimeType,parents,thumbnailLink,modifiedTime,webViewLink"
+    "id,name,mimeType,parents,thumbnailLink,modifiedTime,webViewLink,trashed"
   );
   const url = `${DRIVE}/files/${encodeURIComponent(fileId)}?fields=${fields}&supportsAllDrives=true`;
 
@@ -473,27 +492,28 @@ export type ComentarioDeDrive = {
  * **Se leen, no se escriben.** La aplicación no contesta comentarios: si hay
  * que contestar, contesta una persona, en Drive o por el chat del portal.
  *
- * No se recuerdan: un comentario nuevo aparece en el momento en que alguien
- * lo escribe, y esperar medio minuto para ver lo que el cliente acaba de
- * dejar sería justo lo que esto viene a resolver.
- *
- * Nunca lanza: un archivo sin comentarios, uno que Google no deja leer, o
- * Drive caído, devuelven una lista vacía. Esto acompaña a una pantalla que
- * tiene otras cosas para mostrar.
+ * Nunca lanza, pero **distingue «ninguno» de «no se pudo leer»**: un archivo
+ * sin comentarios da una lista vacía, y uno que Google no deja leer, o Drive
+ * caído, da `null`. Se confundían, y quien copia los pedidos del cliente tomaba
+ * un tropiezo de Google por «el cliente borró todo» y borraba lo ya copiado.
  */
 export async function comentariosDeArchivo(
   fileId: string
-): Promise<ComentarioDeDrive[]> {
+): Promise<ComentarioDeDrive[] | null> {
   // **Con la misma memoria corta que los listados.** Desde que lo escrito en
   // Drive se pasa a la lista de cambios del cliente, esto se pregunta en cada
   // carga del portal y de la gestión, una vez por pieza: una carpeta de diez
   // piezas eran diez viajes a Google por pantalla. Medio minuto es lo mismo
   // que tarda en aparecer un archivo recién subido, así que un comentario
   // recién escrito no tarda más que eso.
+  //
+  // El fallo se lanza **adentro** de la memoria, que es lo único que hace que
+  // no se recuerde: devuelto como valor, quedaba guardado medio minuto.
   return conMemoria(`comentarios:${fileId}`, async () => {
     const r = await leerComentarios(fileId);
-    return r.ok ? r.comentarios : [];
-  });
+    if (!r.ok) throw new Error(r.motivo);
+    return r.comentarios;
+  }).catch(() => null);
 }
 
 /**
@@ -512,7 +532,8 @@ export async function leerComentarios(
   try {
     // Drive v3 obliga a pedir los campos: sin esto contesta comentarios vacíos.
     const fields = encodeURIComponent(
-      "comments(id,content,createdTime,resolved,anchor," +
+      "nextPageToken," +
+        "comments(id,content,createdTime,resolved,anchor," +
         "author(displayName,emailAddress)," +
         "quotedFileContent/value,replies(content,createdTime,author/displayName))"
     );
@@ -520,14 +541,27 @@ export async function leerComentarios(
       `${DRIVE}/files/${encodeURIComponent(fileId)}/comments` +
       `?fields=${fields}&pageSize=100&includeDeleted=false`;
 
-    const r = await aDrive(url);
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      return {
-        ok: false,
-        motivo: String(data?.error?.message ?? `Google contestó ${r.status}`),
-      };
-    }
+    // **Todas las páginas, igual que `todasLasPaginas`.** Cien es el máximo
+    // que Drive da por vez, y un PDF largo y muy comentado perdía en silencio
+    // todo lo que pasara de ahí. Si una página falla, falla todo: media lista
+    // presentada como entera es el mismo silencio que cortar en cien.
+    const juntados: unknown[] = [];
+    let pagina: string | undefined;
+    do {
+      const r = await aDrive(pagina ? `${url}&pageToken=${encodeURIComponent(pagina)}` : url);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        return {
+          ok: false,
+          motivo: String(data?.error?.message ?? `Google contestó ${r.status}`),
+        };
+      }
+      if (Array.isArray(data?.comments)) juntados.push(...data.comments);
+      pagina =
+        typeof data?.nextPageToken === "string" && data.nextPageToken
+          ? data.nextPageToken
+          : undefined;
+    } while (pagina);
 
     // Lo que contesta Google es tan poco confiable como cualquier cosa que
     // llegue por la red: se lee campo por campo y lo que no esté se completa.
@@ -546,7 +580,7 @@ export async function leerComentarios(
     const quienEs = (a?: Autor) =>
       typeof a?.displayName === "string" && a.displayName ? a.displayName : "Alguien";
 
-    const crudos: Crudo[] = Array.isArray(data?.comments) ? data.comments : [];
+    const crudos = juntados as Crudo[];
     const comentarios = crudos.map((x) => ({
       id: String(x.id ?? ""),
       quien: quienEs(x.author),

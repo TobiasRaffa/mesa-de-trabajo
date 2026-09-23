@@ -49,17 +49,27 @@ import { alOlvidarDrive, metadatosArchivo, type MetadatosArchivo } from "@/lib/g
  */
 const NIVELES = 6;
 
-/** Cuánto se recuerda de quién es hija cada carpeta. */
-const RECUERDO_MS = 5 * 60 * 1000;
+/**
+ * Cuánto se recuerda de quién es hija cada carpeta.
+ *
+ * **Lo mismo que `google.ts`, medio minuto.** Eran cinco minutos, y lo que se
+ * hace afuera, en Drive, no avisa: mover una carpeta de un cliente a otro, o
+ * pasarla a «Facturas», dejaba al cliente viejo bajando los archivos cinco
+ * minutos, mientras el nuevo ya la veía listada con las miniaturas rotas. Las
+ * ráfagas de miniaturas caen todas adentro de medio minuto, que es para lo que
+ * esto existe.
+ */
+const RECUERDO_MS = 30 * 1000;
 
 /**
  * Las carpetas madres se consultan muchas veces seguidas: una pantalla con
  * doce miniaturas pregunta doce veces por la misma carpeta. Sin esto, cada
  * imagen cuesta un viaje de red extra por cada nivel del árbol.
  *
- * El recuerdo es corto a propósito. Aun así, el riesgo real es bajo: quitarle
- * el acceso a la aplicación se hace dejando de compartir la carpeta en Drive,
- * y entonces el pedido a Google falla directamente, sin llegar a esta caché.
+ * El recuerdo es corto a propósito. Quitarle el acceso a la aplicación se hace
+ * dejando de compartir la carpeta en Drive, y entonces el pedido a Google falla
+ * directamente, sin llegar a esta caché; mover o renombrar no falla, y por eso
+ * no puede recordarse más que lo que recuerda Drive.
  */
 const madresDe = new Map<string, { padres: string[]; nombre: string; vence: number }>();
 
@@ -163,7 +173,11 @@ async function hayCamino(
     frontera = siguiente;
   }
 
-  return false;
+  // **La última frontera también se mira.** El bucle pedía los padres del
+  // último nivel y salía sin compararlos, así que el tope real quedaba uno
+  // por debajo de `NIVELES`: el portal listaba la carpeta del sexto nivel y
+  // acá se negaban sus archivos.
+  return frontera.some((id) => raices.includes(id));
 }
 
 /**
@@ -230,6 +244,13 @@ export async function archivoAutorizado(
     // fuera de una carpeta del cliente o de cualquier otra cosa, que es una
     // forma de contar qué existe adentro sin mostrarlo.
     if (archivo.mimeType === CARPETA_DE_DRIVE) return null;
+
+    // **Lo que está en la papelera ya no está.** Pedido por identificador,
+    // Drive lo sigue contestando con sus carpetas madre intactas, y se servía
+    // hasta que se vaciara: un archivo subido por error a otro cliente y
+    // tirado seguía bajándose con el link viejo. Tampoco para la agencia: lo
+    // tirado no es trabajo de nadie.
+    if (archivo.trashed) return null;
 
     // El archivo en sí puede estar escondido aunque su carpeta se muestre.
     if (!deLaAgencia && (await escondidosEntre([fileId])).has(fileId)) return null;

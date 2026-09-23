@@ -40,8 +40,8 @@ export type ComentarioParaDecidir = {
  * vuelta del presupuesto.
  *
  * Se compara contra lo que se sepa de cada persona —cómo aparece en Drive, su
- * nombre, su correo—, sin distinguir mayúsculas ni espacios de más, porque
- * nadie escribe dos veces igual.
+ * nombre, su correo—, sin distinguir mayúsculas, acentos ni espacios de más,
+ * porque nadie escribe dos veces igual.
  */
 export function esDelEquipo(
   comentario: Pick<ComentarioParaDecidir, "quien" | "correo">,
@@ -57,7 +57,16 @@ export function esDelEquipo(
     .some((del) => suyas.includes(del));
 }
 
-const parejo = (x?: string) => (x ?? "").trim().toLowerCase();
+// Sin acentos y con los espacios de adentro juntados: es común cargar «Martin
+// Lopez» en la aplicación y que Google muestre «Martín López», y con solo
+// `trim` la nota del diseñador entraba como pedido del cliente.
+const parejo = (x?: string) =>
+  (x ?? "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 
 /**
  * Cómo se lee un comentario de Drive convertido en pedido del cliente.
