@@ -21,7 +21,7 @@ import {
   RONDAS_INCLUIDAS_POR_DEFECTO,
   type Evento,
 } from "@/dominio/pieza";
-import { agruparVersiones, conSusArchivos, hastaLoEntregado } from "@/lib/versiones";
+import { conSusArchivos, hastaLoEntregado } from "@/lib/versiones";
 import { comoFirmaElCliente, enPalabrasLoRevisado } from "@/dominio/historia";
 import { idDeDrive, vieneDeDrive } from "@/dominio/comentarios";
 import { entradaDe } from "@/lib/acceso";
@@ -42,11 +42,11 @@ import {
   cambiarPieza,
   estadoDe,
   estadosDe,
-  piezasDeLaCarpeta,
   type Cambio,
   type EstadoDePieza,
   type Hito,
 } from "@/lib/piezas";
+import { trabajosDeLaCarpeta } from "@/lib/trabajos";
 
 /** Quién figura en la historia. Cuando existan los usuarios, sale de la sesión. */
 const CLIENTE = "Cliente";
@@ -193,7 +193,7 @@ async function piezaDeLaCarpeta(
 ): Promise<LaQueMira | null> {
   if (!(await esCarpetaDelCliente(carpetaId))) return null;
   try {
-    const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+    const agrupadas = (await trabajosDeLaCarpeta(carpetaId)).agrupadas;
     for (const pieza of agrupadas) {
       if (`${carpetaId}::${pieza.base}` !== piezaId) continue;
       // La vuelta que el cliente tiene delante es la que se le entregó, no la
@@ -477,7 +477,7 @@ export async function enviarRevision(
 
   let agrupadas;
   try {
-    agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+    agrupadas = (await trabajosDeLaCarpeta(carpetaId)).agrupadas;
   } catch {
     return { ok: false, motivo: "No pudimos leer la carpeta. Probá de nuevo." };
   }

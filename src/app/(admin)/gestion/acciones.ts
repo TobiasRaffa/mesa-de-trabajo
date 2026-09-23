@@ -72,9 +72,10 @@ import {
   cambiarPieza,
   estadoDe,
   estadosDe,
-  piezasDeLaCarpeta,
   type EstadoDePieza,
 } from "@/lib/piezas";
+import { trabajosDeLaCarpeta } from "@/lib/trabajos";
+import { asignarVuelta } from "@/lib/asignaciones";
 
 /**
  * Cuántas rondas entran en el presupuesto.
@@ -87,8 +88,6 @@ import {
  */
 const RONDAS_INCLUIDAS = RONDAS_INCLUIDAS_POR_DEFECTO;
 import {
-  agruparVersiones,
-  comoVueltaDe,
   conSusArchivos,
   identidadDePieza,
 } from "@/lib/versiones";
@@ -129,7 +128,7 @@ import {
 import { diasValidos, ponerPlazo } from "@/lib/plazos";
 import { ponerResponsable } from "@/lib/responsables";
 import { marcarLeido } from "@/lib/conversaciones";
-import { renombrarArchivo, subcarpetasDe } from "@/lib/google";
+import { subcarpetasDe } from "@/lib/google";
 import {
   esDiaValido,
   guardarPublicaciones,
@@ -438,9 +437,7 @@ export async function guardarCalendario(
   // esto sería una forma de ponerle fecha a cualquier archivo de cualquier
   // cliente.
   const adentro = new Set(
-    agruparVersiones(await piezasDeLaCarpeta(carpetaId)).map((p) =>
-      identidadDePieza(carpetaId, p.versiones[0].archivo.name)
-    )
+    (await trabajosDeLaCarpeta(carpetaId)).agrupadas.map((p) => `${carpetaId}::${p.base}`)
   );
 
   const aGuardar: Record<string, DiaSuelto | null> = {};
@@ -596,7 +593,7 @@ export async function entregarCarpeta(
 
   let agrupadas;
   try {
-    agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+    agrupadas = (await trabajosDeLaCarpeta(carpetaId)).agrupadas;
   } catch {
     return { ok: false, motivo: "No pude leer la carpeta en Drive." };
   }
@@ -782,7 +779,7 @@ async function laPieza(
   if (!(await esCarpetaMia(carpetaId))) return null;
 
   try {
-    const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+    const agrupadas = (await trabajosDeLaCarpeta(carpetaId)).agrupadas;
     for (const pieza of agrupadas) {
       if (identidadDePieza(carpetaId, pieza.versiones[0].archivo.name) !== piezaId) {
         continue;
@@ -961,7 +958,7 @@ type Nivel = "cliente" | "carpeta" | "archivo";
  * borrar lo de abajo no borraba nada.
  */
 async function identidadesDeLaCarpeta(carpetaId: string): Promise<string[]> {
-  const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+  const agrupadas = (await trabajosDeLaCarpeta(carpetaId)).agrupadas;
   return conSusArchivos(carpetaId, agrupadas).map((p) => p.id);
 }
 
@@ -1337,7 +1334,7 @@ export async function unirConLaOtra(
     // Por piezasDeLaCarpeta y no por Drive en crudo: una vuelta que se mudó a
     // «Entregas finales» sigue siendo parte del trabajo, y renombrar sin verla
     // le daría a otra el número que ya tenía.
-    const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+    const agrupadas = (await trabajosDeLaCarpeta(carpetaId)).agrupadas;
     const suelta = agrupadas.find((p) => `${carpetaId}::${p.base}` === piezaId);
     if (!suelta) return { ok: false, motivo: "Ese trabajo ya no está." };
 
@@ -1364,6 +1361,13 @@ export async function unirConLaOtra(
     const tomados = new Set(destino.versiones.map((v) => v.numero));
     let libre = Math.max(...tomados) + 1;
 
+    // **Se anota en la aplicación y no se renombra nada en Drive.** Antes le
+    // ponía la marca de versión a cada archivo, en Drive; desde que las
+    // vueltas se asignan a mano, la marca sola no alcanza —una V2 sin asignar
+    // espera a que alguien diga de qué es—, y lo que decide es la asignación.
+    // Los archivos quedan llamándose como los llamó el equipo.
+    const firma = await firmaDeAgencia();
+    const raices = destino.versiones.map((v) => v.archivo.id);
     // De la vuelta más vieja a la más nueva, para que el orden se conserve.
     for (const v of suelta.versiones) {
       let numero = v.numero;
@@ -1373,21 +1377,84 @@ export async function unirConLaOtra(
       }
       tomados.add(numero);
 
-      await renombrarArchivo(
-        v.archivo.id,
-        comoVueltaDe(v.archivo.name, destino.titulo, numero)
-      );
+      await asignarVuelta(carpetaId, v.archivo.id, { pieza: destino.base, raices, version: numero }, firma);
     }
 
-    olvidarCarpetas();
     revalidatePath("/gestion", "layout");
     return { ok: true };
   } catch (error) {
     return {
       ok: false,
-      motivo: error instanceof Error ? error.message : "No pude renombrar en Drive.",
+      motivo: error instanceof Error ? error.message : "No pude unirlos.",
     };
   }
+}
+
+/**
+ * De qué trabajo es una vuelta que nadie asignó todavía.
+ *
+ * **Una V2, V3 o más no se suma sola a nada**: el nombre sugiere, una persona
+ * decide. `destino` es la identidad del trabajo (`carpeta::nombre`), o `null`
+ * si no es una vuelta de nada —«Hario V60.jpg»—, y entonces el archivo pasa a
+ * ser un trabajo propio. Queda anotado en la aplicación por el id del archivo,
+ * sin tocar su nombre en Drive, y desde ahí se le sigue el rastro.
+ *
+ * Solo asigna lo que está pendiente: lo que ya es parte de un trabajo tiene
+ * cosas anotadas encima, y moverlo de un clic sería moverle la historia.
+ */
+export async function asignarVueltaDeCarpeta(
+  carpetaId: string,
+  archivoId: string,
+  destino: string | null
+): Promise<Resultado> {
+  if (!(await puedoAlgunaDe(EN_CLIENTES_Y_TABLERO))) return NO_ES_TUYO;
+  if (!(await esCarpetaMia(carpetaId))) {
+    return { ok: false, motivo: "Esa carpeta no es de un cliente." };
+  }
+
+  let trabajos;
+  try {
+    trabajos = await trabajosDeLaCarpeta(carpetaId);
+  } catch {
+    return { ok: false, motivo: "No pude leer la carpeta en Drive." };
+  }
+
+  const pendiente = trabajos.pendientes.find((p) => p.archivo.id === archivoId);
+  if (!pendiente) return { ok: false, motivo: "Ese archivo ya no está esperando." };
+
+  const firma = await firmaDeAgencia();
+  if (destino === null) {
+    await asignarVuelta(carpetaId, archivoId, { pieza: null }, firma);
+    revalidatePath("/gestion", "layout");
+    return { ok: true };
+  }
+
+  const trabajo = trabajos.agrupadas.find((p) => `${carpetaId}::${p.base}` === destino);
+  if (!trabajo) return { ok: false, motivo: "Ese trabajo no está en esta carpeta." };
+
+  // **Dos archivos no pueden ser la misma vuelta.** Cuál de los dos vería el
+  // cliente dependería del orden, y eso es lo que esto viene a sacar del
+  // medio. Se dice cuál está, y se arregla renombrando el que corresponda.
+  const choca = trabajo.versiones.find((v) => v.numero === pendiente.numero);
+  if (choca) {
+    return {
+      ok: false,
+      motivo: `«${trabajo.titulo}» ya tiene una V${pendiente.numero}: «${choca.archivo.name}». Si esta es otra vuelta, renombrala con el número que le toca.`,
+    };
+  }
+
+  await asignarVuelta(
+    carpetaId,
+    archivoId,
+    {
+      pieza: trabajo.base,
+      raices: trabajo.versiones.map((v) => v.archivo.id),
+      version: pendiente.numero,
+    },
+    firma
+  );
+  revalidatePath("/gestion", "layout");
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

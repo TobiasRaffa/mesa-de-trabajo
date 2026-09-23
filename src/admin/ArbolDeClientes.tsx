@@ -46,6 +46,7 @@ import { ConfiguracionDeCarpeta } from "@/admin/ConfiguracionDeCarpeta";
 import { ConfiguracionDeArchivo } from "@/admin/ConfiguracionDeArchivo";
 import { Entregar } from "@/admin/Entregar";
 import { RarezasDeNombres } from "@/admin/RarezasDeNombres";
+import { VueltaSinAsignar } from "@/admin/VueltaSinAsignar";
 import { ResumenDeTrabajo, type TrabajoParaMirar } from "@/admin/ResumenDeTrabajo";
 import { Visibilidad } from "@/admin/Visibilidad";
 import { Estado } from "@/ui/Estado";
@@ -713,11 +714,16 @@ function Adentro({
     (c) => coincide(c.nombre, busqueda) || abiertas.has(c.id)
   );
   const archivos = contenido.archivos.filter((a) => coincide(a.nombreCompleto, busqueda));
+  const pendientes = contenido.pendientes.filter((p) => coincide(p.nombre, busqueda));
 
-  if (contenido.carpetas.length === 0 && contenido.archivos.length === 0) {
+  if (
+    contenido.carpetas.length === 0 &&
+    contenido.archivos.length === 0 &&
+    contenido.pendientes.length === 0
+  ) {
     return <p className="px-4 py-3 text-menudo text-apagado">{vacio}</p>;
   }
-  if (carpetas.length === 0 && archivos.length === 0) {
+  if (carpetas.length === 0 && archivos.length === 0 && pendientes.length === 0) {
     return <p className="px-4 py-3 text-menudo text-apagado">Nada acá se llama así.</p>;
   }
 
@@ -742,6 +748,25 @@ function Adentro({
           equipo={equipo}
           alGuardar={alGuardar}
         />
+      ))}
+      {/* Las vueltas que nadie asignó, al final: no son parte de ningún
+          trabajo hasta que alguien diga de cuál. */}
+      {pendientes.map((pendiente) => (
+        <li key={pendiente.id} className="border-t border-linea-tenue">
+          <Fila
+            nivel={nivel}
+            abridor={<Hueco />}
+            drive={<EnDrive href={pendiente.enlaceDrive} que="el archivo" />}
+            config={null}
+          >
+            <VueltaSinAsignar
+              carpetaId={carpetaId}
+              pendiente={pendiente}
+              trabajos={contenido.archivos.map((a) => ({ id: a.id, nombre: a.nombre }))}
+              alAsignar={alGuardar}
+            />
+          </Fila>
+        </li>
       ))}
     </ul>
   );
@@ -1220,8 +1245,8 @@ function FilaArchivo({
         {archivo.comparteNombre && (
           <p className="mt-1 text-micro text-alerta">
             Hay otro trabajo en esta carpeta que también se llama «{archivo.nombre}», en
-            otro formato. Si son el mismo, ponele la marca de versión al que falta
-            —«V2_{archivo.nombre}»— y se juntan solos.
+            otro formato. Si son el mismo, abrí el trabajo y tocá «Es el mismo trabajo:
+            unirlos».
           </p>
         )}
         {archivo.vueltaAtrasada && (

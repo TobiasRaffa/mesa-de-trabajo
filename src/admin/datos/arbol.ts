@@ -27,7 +27,8 @@ import {
 } from "@/lib/ajustes";
 import { nombresDelEquipo } from "@/lib/equipo";
 import { subcarpetasDe } from "@/lib/google";
-import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
+import { estadosDe } from "@/lib/piezas";
+import { trabajosDeLaCarpeta } from "@/lib/trabajos";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
 import {
   responsableDe,
@@ -36,7 +37,7 @@ import {
 } from "@/lib/responsables";
 import { diaDe, publicacionesDe } from "@/lib/publicaciones";
 import { calcularVencimiento } from "@/lib/fechas";
-import { agruparVersiones, conSusArchivos, rarezasDeNombres, type RarezasDeNombres } from "@/lib/versiones";
+import { conSusArchivos, rarezasDeNombres, type RarezasDeNombres } from "@/lib/versiones";
 import {
   esperaAlCliente,
   hayAlgoParaEntregar,
@@ -227,7 +228,27 @@ export async function heredadoDelCliente(clienteId: string): Promise<Heredado> {
   };
 }
 
-export type Contenido = { carpetas: NodoCarpeta[]; archivos: NodoArchivo[] };
+export type Contenido = {
+  carpetas: NodoCarpeta[];
+  archivos: NodoArchivo[];
+  /** Las vueltas que nadie asignó todavía a un trabajo. */
+  pendientes: NodoPendiente[];
+};
+
+/**
+ * Un archivo que dice ser una vuelta —V2, V3— y espera que alguien diga de
+ * qué trabajo es. Hasta entonces no es parte de ninguno: no se entrega y el
+ * cliente no lo ve.
+ */
+export type NodoPendiente = {
+  id: string;
+  nombre: string;
+  /** El número de vuelta que dice el nombre. */
+  numero: number;
+  /** El trabajo con el que coincide el nombre, si alguno: la opción de entrada. */
+  sugerida?: string;
+  enlaceDrive?: string;
+};
 
 /** Lo que se hereda de arriba, ya resuelto. */
 export type Heredado = { dias: number; responsable: string | null };
@@ -242,11 +263,11 @@ export async function contenidoDe(
   carpetaId: string,
   heredado: Heredado
 ): Promise<Contenido> {
-  const [carpetas, archivos] = await Promise.all([
+  const [carpetas, { archivos, pendientes }] = await Promise.all([
     subcarpetasDeCarpeta(carpetaId, heredado),
     archivosDeCarpeta(carpetaId, heredado),
   ]);
-  return { carpetas, archivos };
+  return { carpetas, archivos, pendientes };
 }
 
 async function subcarpetasDeCarpeta(
@@ -308,7 +329,7 @@ async function subcarpetasDeCarpeta(
         };
       }
 
-      const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpeta.id));
+      const { agrupadas, pendientes } = await trabajosDeLaCarpeta(carpeta.id);
       const suyasConArchivos = conSusArchivos(carpeta.id, agrupadas);
       const estados = await estadosDe(carpeta.id, suyasConArchivos);
 
@@ -323,9 +344,12 @@ async function subcarpetasDeCarpeta(
         // `esperaAlCliente`.
         sinRevisar: suyas.filter(esperaAlCliente).length,
         terminadas,
-        sinEntregar: suyasConArchivos.filter(({ id, version }) =>
-          hayAlgoParaEntregar(estados[id].estado, version, estados[id].versionEntregada)
-        ).length,
+        // Una vuelta sin asignar también es algo listo que no le llegó al
+        // cliente: le falta que alguien diga de qué es, y entregarla.
+        sinEntregar:
+          suyasConArchivos.filter(({ id, version }) =>
+            hayAlgoParaEntregar(estados[id].estado, version, estados[id].versionEntregada)
+          ).length + pendientes.length,
         subcarpetas: adentro.length,
       };
     })
@@ -335,8 +359,17 @@ async function subcarpetasDeCarpeta(
 async function archivosDeCarpeta(
   carpetaId: string,
   heredado: Heredado
-): Promise<NodoArchivo[]> {
-  const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpetaId));
+): Promise<{ archivos: NodoArchivo[]; pendientes: NodoPendiente[] }> {
+  const { agrupadas, pendientes: sinAsignar } = await trabajosDeLaCarpeta(carpetaId);
+  const pendientes = sinAsignar.map(
+    (p): NodoPendiente => ({
+      id: p.archivo.id,
+      nombre: p.archivo.name,
+      numero: p.numero,
+      sugerida: p.sugerida ? `${carpetaId}::${p.sugerida}` : undefined,
+      enlaceDrive: p.archivo.webViewLink,
+    })
+  );
 
   // Todo lo que se anota sobre el trabajo —el estado, la fecha de publicación,
   // el plazo, quién lo lleva— va por la identidad de la pieza y no por el
@@ -368,7 +401,7 @@ async function archivosDeCarpeta(
     ? (delEquipo.get(heredado.responsable) ?? null)
     : null;
 
-  return agrupadas.map((pieza, i): NodoArchivo => {
+  const archivos = agrupadas.map((pieza, i): NodoArchivo => {
     const ultima = pieza.versiones[pieza.versiones.length - 1].archivo;
     const suya = identidades[i];
     const estado = estados[suya];
@@ -438,4 +471,6 @@ async function archivosDeCarpeta(
         : null,
     };
   });
+
+  return { archivos, pendientes };
 }

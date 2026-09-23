@@ -20,13 +20,14 @@ import {
 import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 import { conLosComentariosDelCliente } from "@/lib/comentariosDelCliente";
-import { piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
+import { estadosDe } from "@/lib/piezas";
+import { trabajosDeLaCarpeta } from "@/lib/trabajos";
 import { plazosDe } from "@/lib/plazos";
 import { responsablesDe } from "@/lib/responsables";
 import { DIAS_POR_OMISION } from "@/lib/dias";
 import { publicacionesDe, type DiaSuelto } from "@/lib/publicaciones";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
-import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { conSusArchivos } from "@/lib/versiones";
 import { ultimasVisitas } from "@/lib/visitas";
 
 // ---------------------------------------------------------------------------
@@ -78,17 +79,16 @@ export async function carpetaParaFechar(
     throw new Error("Esa carpeta no es de este cliente.");
   }
 
-  const [datos, ajustes, archivos] = await Promise.all([
+  const [datos, ajustes, { agrupadas }] = await Promise.all([
     datosDeCarpeta(carpetaId),
     ajustesDe(carpetaId),
-    piezasDeLaCarpeta(carpetaId),
+    trabajosDeLaCarpeta(carpetaId),
   ]);
 
   // Hay piezas guardadas de cuando aprobar mudaba el archivo a «Entregas
   // finales»: Drive ya no las lista acá. Se las trae por su identificador,
   // porque la historia de una pieza aprobada es justamente la que más se
   // consulta. Lo nuevo no se muda, así que esto solo alcanza a lo de antes.
-  const agrupadas = agruparVersiones(archivos);
   const conArchivos = conSusArchivos(carpetaId, agrupadas);
   const identidades = conArchivos.map((p) => p.id);
   // `estadosDe` primero: si una pieza cambió de nombre, ahí se muda su ficha

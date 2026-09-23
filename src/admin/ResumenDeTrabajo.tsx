@@ -46,6 +46,7 @@ import { ConfigurarPieza } from "@/admin/ConfigurarPieza";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { Entregar } from "@/admin/Entregar";
 import { RarezasDeNombres } from "@/admin/RarezasDeNombres";
+import { VueltaSinAsignar } from "@/admin/VueltaSinAsignar";
 import { Estado } from "@/ui/Estado";
 import { Miniatura } from "@/ui/Miniatura";
 import { Boton, BotonEnlace } from "@/ui/Boton";
@@ -73,7 +74,7 @@ import {
 import { Fondo } from "@/ui/Fondo";
 import { enPalabrasElDia, enPalabrasElDiaDe } from "@/dominio/tiempo";
 import { tonoDeEspera } from "@/ui/tonos";
-import type { NodoArchivo } from "@/admin/datos/arbol";
+import type { NodoArchivo, NodoPendiente } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
 /**
@@ -120,6 +121,8 @@ export function ResumenDeTrabajo({
 }) {
   const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
   const [piezas, setPiezas] = useState<NodoArchivo[] | null>(null);
+  /** Las vueltas que nadie asignó: no se pueden entregar hasta que alguien diga de qué son. */
+  const [pendientes, setPendientes] = useState<NodoPendiente[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Se vuelve a pedir la carpeta cuando algo de acá adentro la cambió —una
@@ -182,8 +185,10 @@ export function ResumenDeTrabajo({
     })
       .then((r) => {
         if (!vivo) return;
-        if (r.ok) setPiezas(r.contenido.archivos);
-        else setError(r.motivo);
+        if (r.ok) {
+          setPiezas(r.contenido.archivos);
+          setPendientes(r.contenido.pendientes);
+        } else setError(r.motivo);
       })
       .catch(() => vivo && setError("No pude leer la carpeta."));
     return () => {
@@ -323,7 +328,24 @@ export function ResumenDeTrabajo({
               <p className="px-5 py-4 text-normal text-apagado">Leyendo la carpeta…</p>
             )}
 
-            {piezas !== null && enOrden.length === 0 && (
+            {/* **Arriba de todo, porque frena la entrega.** Una V2 subida y
+                sin asignar no es parte de ningún trabajo: si no se ve acá,
+                «Entregar» contesta que no hay nada y nadie sabe por qué. */}
+            {pendientes.map((pendiente) => (
+              <div
+                key={pendiente.id}
+                className="mx-5 mt-4 border-l-4 border-alerta bg-alerta-tenue px-4 py-3"
+              >
+                <VueltaSinAsignar
+                  carpetaId={c.carpetaId}
+                  pendiente={pendiente}
+                  trabajos={(piezas ?? []).map((p) => ({ id: p.id, nombre: p.nombre }))}
+                  alAsignar={recargar}
+                />
+              </div>
+            ))}
+
+            {piezas !== null && enOrden.length === 0 && pendientes.length === 0 && (
               <p className="px-5 py-4 text-normal text-apagado">
                 Esta carpeta no tiene piezas.
               </p>
@@ -710,7 +732,7 @@ function Unir({
       if (r.ok) alUnir();
       else setError(r.motivo);
     } catch {
-      setError("No pude renombrar en Drive.");
+      setError("No pude unirlos.");
     } finally {
       setYendo(false);
     }
@@ -735,12 +757,10 @@ function Unir({
       ) : (
         <div className="mt-2">
           <p className="text-menudo text-alerta">
-            Se le va a poner la marca de versión en Drive a{" "}
             {pieza.versiones.length === 1
-              ? "este archivo"
-              : `estos ${pieza.versiones.length} archivos`}
-            , para que pasen a ser las vueltas siguientes del otro. Se deshace
-            renombrando de nuevo.
+              ? "Este archivo va a pasar a ser la vuelta siguiente"
+              : `Estos ${pieza.versiones.length} archivos van a pasar a ser las vueltas siguientes`}{" "}
+            del otro. Queda anotado acá: en Drive no se renombra nada.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button

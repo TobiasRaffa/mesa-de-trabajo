@@ -10,10 +10,12 @@ vi.mock("@/lib/ajustes", () => ({ esCarpetaReservada: () => false }));
 vi.mock("@/lib/piezas", () => ({
   EN_PALABRAS: {},
   piezasDeLaCarpeta: vi.fn(async () => []),
+  archivosAnotadosDe: vi.fn(async () => ({})),
   estadosDe: vi.fn(async () => ({})),
 }));
 vi.mock("@/lib/versiones", () => ({
   agruparVersiones: () => [],
+  armarTrabajos: () => ({ agrupadas: [], pendientes: [] }),
   conSusArchivos: () => [],
 }));
 

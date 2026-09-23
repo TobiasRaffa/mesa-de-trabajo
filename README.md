@@ -5,7 +5,8 @@ Google Drive.
 
 - **La agencia** trabaja en Drive como siempre. Cada cliente es una carpeta
   compartida con el robot de la aplicación; cada subcarpeta es un trabajo; cada
-  archivo es una pieza, y `V2`, `V3` en el nombre son las vueltas.
+  archivo es una pieza, y un `V2`, `V3` en el nombre es una vuelta, que alguien
+  de la agencia asigna al trabajo que corresponde.
 - **El cliente** entra por un link y una clave, ve lo que se le entregó,
   aprueba o pide cambios, y habla con el equipo por un chat.
 - **La aplicación** anota qué pasó con cada pieza, avisa al equipo, cuenta los

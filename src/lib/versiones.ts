@@ -243,11 +243,21 @@ export type Agrupado<T> = {
  * nombre—, tomando el lugar de la primera versión de cada pieza. Así la lista
  * no se reordena sola cuando alguien sube una vuelta nueva.
  */
-export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agrupado<T>> {
+export function agruparVersiones<T extends ConNombre>(
+  archivos: T[],
+  /**
+   * Los archivos cuya marca de versión es parte del nombre, por su id: alguien
+   * dijo que «Hario V60.jpg» es un trabajo y no la vuelta 60 de «Hario». Se
+   * leen enteros, como un archivo sin marca.
+   */
+  enteros: ReadonlySet<string> = new Set()
+): Array<Agrupado<T>> {
   type Leido = { archivo: T; base: string; titulo: string; version: number; marcado: boolean };
 
   const leidos: Leido[] = archivos.map((archivo) => {
-    const { base, version, titulo, marcado } = leerNombre(archivo.name);
+    const id = (archivo as { id?: string }).id;
+    const { base, version, titulo, marcado } =
+      id !== undefined && enteros.has(id) ? leerEntero(archivo.name) : leerNombre(archivo.name);
     return { archivo, base, titulo, version, marcado };
   });
 
@@ -317,7 +327,9 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
 
     // Y recién acá se fija la identidad: la de la vuelta más baja, que es la
     // misma cualquiera sea el orden en que llegaron los archivos.
-    pieza.base = leerNombre(pieza.versiones[0].archivo.name).base;
+    const primera = pieza.versiones[0].archivo;
+    const id = (primera as { id?: string }).id;
+    pieza.base = (id !== undefined && enteros.has(id) ? leerEntero : leerNombre)(primera.name).base;
   }
 
   // Dos piezas con el mismo nombre y distinto formato son casi siempre un
@@ -333,6 +345,131 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
   }
 
   return orden.map((clave) => porBase.get(clave)!);
+}
+
+/** Un nombre leído entero: la marca que tenga es parte del nombre. */
+function leerEntero(nombre: string): NombreDeArchivo {
+  const punto = nombre.lastIndexOf(".");
+  const conExtension = punto > 0 && !colaQueNoEsExtension(nombre);
+  return {
+    base: nombre,
+    version: 1,
+    titulo: conExtension ? nombre.slice(0, punto) : nombre,
+    marcado: false,
+  };
+}
+
+/**
+ * Un archivo que dice ser una vuelta —V2, V3 o más— de algún trabajo.
+ *
+ * **Estos no se suman solos a nada.** Que el nombre coincida es una pista, no
+ * una decisión: «V2 logo final.jpg» puede ser la vuelta dos de «logo», y
+ * «Hario V60.jpg» no es la vuelta sesenta de nadie. Espera a que alguien de la
+ * agencia diga de qué trabajo es, y desde ahí se le sigue el rastro por su id,
+ * aunque después lo renombren.
+ */
+export function esVueltaSuelta(nombre: string): boolean {
+  const leido = leerNombre(nombre);
+  return leido.marcado && leido.version > 1;
+}
+
+/**
+ * De qué trabajo es una vuelta, según lo que decidió una persona.
+ *
+ * - `pieza`: el nombre del trabajo (su identidad, sin la carpeta) cuando se
+ *   decidió. `raices`: los archivos que tenía ese trabajo entonces. Se busca
+ *   primero por los archivos —sobrevive a que alguien renombre la V1— y si ya
+ *   no está ninguno, por el nombre.
+ * - `version`: qué vuelta es. Sin ella, la que dice el nombre.
+ * - `pieza: null`: no es una vuelta de nada; la marca es parte del nombre y el
+ *   archivo es un trabajo propio.
+ */
+export type Asignacion =
+  | { pieza: string; raices: string[]; version?: number }
+  | { pieza: null };
+
+/** Una vuelta que nadie asignó todavía, con el trabajo que sugiere su nombre. */
+export type Pendiente<T> = {
+  archivo: T;
+  /** El número que dice el nombre. */
+  numero: number;
+  /** La identidad del trabajo con el que coincide el nombre, si alguno. */
+  sugerida?: string;
+};
+
+/**
+ * Los trabajos de una carpeta, con las vueltas donde alguien las puso.
+ *
+ * Los archivos sin marca —y los que dicen V1— fundan trabajos, como siempre.
+ * Las vueltas (V2 o más) van al trabajo que se les asignó; las que nadie
+ * asignó quedan **pendientes**: no son parte de ningún trabajo, no se
+ * entregan y el cliente no las ve, hasta que alguien diga de cuál son.
+ *
+ * Un archivo sin marca también puede estar asignado a otro trabajo: es lo que
+ * hace «Es el mismo trabajo: unirlos» con «stickers.jpeg» al lado de
+ * «stickers.pdf». Lo asignado manda sobre lo que diga el nombre.
+ */
+export function armarTrabajos<T extends ConNombre & { id: string }>(
+  archivos: T[],
+  asignaciones: ReadonlyMap<string, Asignacion>
+): { agrupadas: Array<Agrupado<T>>; pendientes: Array<Pendiente<T>> } {
+  const enteros = new Set(
+    archivos
+      .filter((a) => esVueltaSuelta(a.name) && asignaciones.get(a.id)?.pieza === null)
+      .map((a) => a.id)
+  );
+  const vueltas = archivos.filter(
+    (a) =>
+      typeof asignaciones.get(a.id)?.pieza === "string" ||
+      (esVueltaSuelta(a.name) && !enteros.has(a.id))
+  );
+  const agrupadas = agruparVersiones(
+    archivos.filter((a) => !vueltas.includes(a)),
+    enteros
+  );
+
+  const clave = (s: string) => s.normalize("NFC").toLowerCase();
+  // Lo que diría el nombre solo: es la sugerida de cada pendiente.
+  const porNombre = agruparVersiones(archivos);
+  const pendientes: Array<Pendiente<T>> = [];
+  const tocadas = new Set<Agrupado<T>>();
+
+  for (const archivo of vueltas) {
+    const asignada = asignaciones.get(archivo.id);
+    const numero = leerNombre(archivo.name).version;
+
+    if (!asignada || asignada.pieza === null) {
+      const grupo = porNombre.find((g) => g.versiones.some((v) => v.archivo.id === archivo.id));
+      const sugerida = grupo
+        ? agrupadas.find((p) =>
+            p.versiones.some((v) => grupo.versiones.some((g) => g.archivo.id === v.archivo.id))
+          )
+        : undefined;
+      pendientes.push({ archivo, numero, sugerida: sugerida?.base });
+      continue;
+    }
+
+    let destino =
+      agrupadas.find((p) => p.versiones.some((v) => asignada.raices.includes(v.archivo.id))) ??
+      agrupadas.find((p) => clave(p.base) === clave(asignada.pieza));
+    // **El trabajo sigue existiendo aunque ya no quede su V1.** Borraron el
+    // original y quedó la V2: sigue siendo la V2 de «logo», con todo lo que
+    // tenía anotado, y no un trabajo nuevo que arranca de cero.
+    if (!destino) {
+      destino = {
+        titulo: leerNombre(asignada.pieza).titulo,
+        base: asignada.pieza,
+        versiones: [],
+        comparteNombre: false,
+      };
+      agrupadas.push(destino);
+    }
+    destino.versiones.push({ numero: asignada.version ?? numero, archivo });
+    tocadas.add(destino);
+  }
+
+  for (const pieza of tocadas) pieza.versiones.sort((a, b) => a.numero - b.numero);
+  return { agrupadas, pendientes };
 }
 
 /**

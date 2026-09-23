@@ -686,6 +686,22 @@ export function anotar(
  * Por eso `archivosDe` está prohibido fuera de este archivo, y el linter lo
  * verifica: la pregunta correcta tiene que ser también la fácil de escribir.
  */
+/**
+ * Qué archivos tenía anotados cada pieza de la carpeta, la última vez que se
+ * la miró.
+ *
+ * Es lo que hace que las vueltas que ya estaban sumadas a un trabajo —desde
+ * antes de que las vueltas se asignaran a mano— sigan donde estaban: para
+ * `@/lib/trabajos`, estar anotada en una pieza es estar asignada a ella.
+ */
+export async function archivosAnotadosDe(carpetaId: string): Promise<Record<string, string[]>> {
+  const salida: Record<string, string[]> = {};
+  for (const [id, pieza] of Object.entries(await todasLasPiezas())) {
+    if (id.startsWith(`${carpetaId}::`)) salida[id] = normalizar(pieza).archivos ?? [];
+  }
+  return salida;
+}
+
 export async function piezasDeLaCarpeta(carpetaId: string): Promise<ArchivoDrive[]> {
   const presentes = await archivosDe(carpetaId);
   const mudadas = await mudadasDe(carpetaId);

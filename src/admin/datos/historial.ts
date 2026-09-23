@@ -10,8 +10,9 @@
 
 import { esCarpetaReservada } from "@/lib/ajustes";
 import { subcarpetasDe } from "@/lib/google";
-import { EN_PALABRAS, estadosDe, piezasDeLaCarpeta } from "@/lib/piezas";
-import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { EN_PALABRAS, estadosDe } from "@/lib/piezas";
+import { trabajosDeLaCarpeta } from "@/lib/trabajos";
+import { conSusArchivos } from "@/lib/versiones";
 
 export type FilaDeHistorial = {
   carpeta: string;
@@ -59,7 +60,7 @@ async function recorrer(
     const nombre = suCamino.join(" / ");
 
     try {
-      const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpeta.id));
+      const agrupadas = (await trabajosDeLaCarpeta(carpeta.id)).agrupadas;
       const conArchivos = conSusArchivos(carpeta.id, agrupadas);
       const estados = await estadosDe(carpeta.id, conArchivos);
 

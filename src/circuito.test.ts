@@ -1,5 +1,5 @@
 // El circuito entero, de punta a punta: entregar → revisar → pedir cambios →
-// V2 → aprobar.
+// V2 → asignarla → entregarla → aprobar.
 //
 // **Los bugs más caros de la aplicación no estuvieron adentro de un módulo,
 // sino en las uniones**: gestión guardaba una cosa y el portal leía otra, el
@@ -57,6 +57,7 @@ vi.mock("@/lib/google", async (original) => ({
   }),
   comentariosDeArchivo: vi.fn(async () => []),
   carpetasCompartidas: vi.fn(async () => [{ id: CLIENTE.id, name: CLIENTE.nombre }]),
+  renombrarArchivo: vi.fn(async () => {}),
 }));
 
 // Del lado de la agencia: una sesión que puede todo y ve a este cliente.
@@ -169,11 +170,22 @@ describe("una pieza de punta a punta", () => {
     expect(enviada).toMatchObject({ ok: true, cuantas: 1 });
     expect(avisos()).toContain("envio_revision");
 
-    // --- Del lado de la agencia: es nuestra, y hay una V2 para entregar. ---
+    // --- Del lado de la agencia: es nuestra, y hay una V2 esperando. -----
     const deVuelta = await loQueVeLaAgencia();
     expect(["en_curso", "cambios_marcados"]).toContain(deVuelta.estado);
     const [fila] = (await elTablero()).carpetas;
     expect(fila.cancha).toBe("sin_entregar");
+
+    // La V2 no se sumó sola: espera que alguien diga de qué trabajo es, con
+    // «stickers» como sugerencia. Hasta entonces no hay nada que entregar.
+    const abierta = await gestion.abrirCarpeta(CARPETA, { dias: 3, responsable: null });
+    if (!abierta.ok) throw new Error(abierta.motivo);
+    expect(abierta.contenido.pendientes).toEqual([
+      expect.objectContaining({ id: "f-v2", numero: 2, sugerida: PIEZA }),
+    ]);
+    expect(await gestion.entregarCarpeta(CARPETA)).toMatchObject({ ok: false });
+
+    expect(await gestion.asignarVueltaDeCarpeta(CARPETA, "f-v2", PIEZA)).toEqual({ ok: true });
 
     // --- Se entrega la V2: la revisión arranca de cero. -------------------
     const segunda = await gestion.entregarCarpeta(CARPETA);
@@ -192,11 +204,16 @@ describe("una pieza de punta a punta", () => {
     expect(vista.driveFileId).toBe("f-v2");
     expect(vista.versiones.map((v) => v.numero)).toEqual([1, 2]);
 
-    // Alguien sube otro archivo que también dice ser la V2. El cliente sigue
-    // viendo el que se le entregó, y la agencia ve el aviso.
+    // Alguien sube otro archivo que también dice ser la V2: espera, el cliente
+    // sigue viendo el que se le entregó, y no se lo puede sumar como otra V2.
     drive.subir(CARPETA, "f-v2-otra", "V2 stickers.jpg");
     expect((await loQueVeElCliente()).driveFileId).toBe("f-v2");
-    expect((await loQueVeLaAgencia()).vueltaRepetida?.numero).toBe(2);
+    const repetida = await gestion.asignarVueltaDeCarpeta(CARPETA, "f-v2-otra", PIEZA);
+    expect(repetida.ok).toBe(false);
+    if (!repetida.ok) expect(repetida.motivo).toContain("ya tiene una V2");
+    // Mientras esté ahí sin asignar, la carpeta sigue pidiendo atención. La
+    // sacan de Drive, que es lo que corresponde con un duplicado.
+    drive.carpetas[CARPETA] = drive.carpetas[CARPETA].filter((a) => a.id !== "f-v2-otra");
 
     // --- El cliente aprueba. ----------------------------------------------
     const aprobada = await portal.moverPieza(CARPETA, PIEZA, { tipo: "aprobar", por: "Lu" });
@@ -228,6 +245,7 @@ describe("una pieza de punta a punta", () => {
   it("si el archivo entregado desaparece de Drive, la agencia se entera", async () => {
     drive.subir(CARPETA, "f-v1", "stickers.jpg");
     drive.subir(CARPETA, "f-v2", "stickers V2.jpg");
+    await gestion.asignarVueltaDeCarpeta(CARPETA, "f-v2", PIEZA);
     await gestion.entregarCarpeta(CARPETA);
     expect(guardada().archivoEntregado).toBe("f-v2");
 
@@ -236,5 +254,31 @@ describe("una pieza de punta a punta", () => {
     expect((await loQueVeLaAgencia()).entregadoPerdido).toBe(true);
     // Y el cliente, en vez de quedarse sin nada, ve la vuelta que queda.
     expect((await loQueVeElCliente()).driveFileId).toBe("f-v1");
+  });
+
+  it("«no es una vuelta»: el archivo pasa a ser un trabajo propio", async () => {
+    drive.subir(CARPETA, "f-v1", "stickers.jpg");
+    drive.subir(CARPETA, "f-hario", "Hario V60.jpg");
+    expect(await gestion.asignarVueltaDeCarpeta(CARPETA, "f-hario", null)).toEqual({ ok: true });
+
+    const r = await gestion.abrirCarpeta(CARPETA, { dias: 3, responsable: null });
+    if (!r.ok) throw new Error(r.motivo);
+    expect(r.contenido.pendientes).toEqual([]);
+    expect(r.contenido.archivos.map((a) => a.id)).toEqual([PIEZA, `${CARPETA}::Hario V60.jpg`]);
+  });
+
+  it("unir dos trabajos se anota en la aplicación, sin renombrar nada en Drive", async () => {
+    drive.subir(CARPETA, "f-pdf", "stickers.jpg");
+    drive.subir(CARPETA, "f-png", "stickers.png");
+    const { renombrarArchivo } = await import("@/lib/google");
+
+    expect(await gestion.unirConLaOtra(CARPETA, `${CARPETA}::stickers.png`)).toEqual({ ok: true });
+    const pieza = await loQueVeLaAgencia();
+    expect(pieza.versiones.map((v) => [v.id, v.numero])).toEqual([
+      ["f-pdf", 1],
+      ["f-png", 2],
+    ]);
+    expect(drive.carpetas[CARPETA].map((a) => a.name)).toEqual(["stickers.jpg", "stickers.png"]);
+    expect(renombrarArchivo).not.toHaveBeenCalled();
   });
 });

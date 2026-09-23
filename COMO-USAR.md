@@ -191,14 +191,26 @@ pantallas no cambian.
 
 ## Cómo se marca una vuelta nueva de una pieza
 
-Con el nombre del archivo, en Drive. Nada más.
+Se sube a la misma carpeta con `V2`, `V3`… en el nombre, y **alguien de la
+agencia dice de qué trabajo es**.
 
-    9304.jpeg       <- primera version
-    9304 V2.jpeg    <- segunda vuelta de la MISMA pieza
-    9304 V3.jpeg    <- tercera
+    9304.jpeg       <- primera version: es un trabajo, sin preguntar nada
+    9304 V2.jpeg    <- dice ser una segunda vuelta: espera que la asignen
 
-Se juntan en una sola pieza: el cliente ve la última y le aparece el botón para
-compararla con la anterior. Sirve `V2`, `v2`, `_v2` o `-v2`.
+Una V2 recién subida aparece en gestión como **sin asignar**, en el árbol de
+clientes y en la ventana del trabajo, con la pregunta «¿de qué trabajo es?» y
+el que coincide por nombre ya elegido. Se toca «Asignar» y queda: se entrega
+como cualquier vuelta, el cliente la ve después de entregada y le aparece el
+botón para compararla con la anterior. Mientras nadie la asigne no se entrega
+y el cliente no la ve, y la carpeta figura en el tablero como «sin entregar».
+
+La asignación queda guardada en la aplicación, no en el nombre: **el archivo
+no se renombra en Drive**, y si después alguien lo renombra sigue siendo la
+misma vuelta del mismo trabajo. Sirve `V2`, `v2`, `_v2` o `-v2`, adelante o
+atrás del nombre.
+
+Si el número es parte del nombre —«Hario V60.jpg», «V4x4 camioneta.jpg»— se
+elige «No es una vuelta: es un trabajo nuevo».
 
 **La extensión cuenta.** `9304.jpg` y `9304.png` son dos piezas distintas, no
 dos vueltas: entregar el mismo trabajo en dos formatos es común y juntarlos

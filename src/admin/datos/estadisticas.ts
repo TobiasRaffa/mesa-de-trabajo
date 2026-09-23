@@ -7,8 +7,9 @@
 import { esCarpetaReservada } from "@/lib/ajustes";
 import { sigueEnJuego } from "@/dominio/pieza";
 import { subcarpetasDe } from "@/lib/google";
-import { estadosDe, piezasDeLaCarpeta, type EstadoDePieza } from "@/lib/piezas";
-import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { estadosDe, type EstadoDePieza } from "@/lib/piezas";
+import { trabajosDeLaCarpeta } from "@/lib/trabajos";
+import { conSusArchivos } from "@/lib/versiones";
 
 export type Estadisticas = {
   piezas: number;
@@ -49,7 +50,7 @@ async function juntar(
 
   for (const carpeta of carpetas) {
     try {
-      const agrupadas = agruparVersiones(await piezasDeLaCarpeta(carpeta.id));
+      const agrupadas = (await trabajosDeLaCarpeta(carpeta.id)).agrupadas;
       const conArchivos = conSusArchivos(carpeta.id, agrupadas);
       const estados = await estadosDe(carpeta.id, conArchivos);
       agrupadas.forEach((pieza, i) => {

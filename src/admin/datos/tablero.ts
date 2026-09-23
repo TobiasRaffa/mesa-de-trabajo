@@ -16,12 +16,13 @@ import { sinLeerPorCliente } from "@/lib/conversaciones";
 import { personaPorId } from "@/lib/equipo";
 import { responsableDe, responsableQueCorre } from "@/lib/responsables";
 import { subcarpetasDe } from "@/lib/google";
-import { aprobadasQueSeFueron, piezasDeLaCarpeta, estadosDe } from "@/lib/piezas";
+import { aprobadasQueSeFueron, estadosDe } from "@/lib/piezas";
+import { trabajosDeLaCarpeta } from "@/lib/trabajos";
 import { calcularVencimiento, medianocheDeHoy } from "@/lib/fechas";
 import { recordarSiHaceFalta } from "@/lib/recordatorios";
 import { enPalabrasLoRevisado } from "@/dominio/historia";
 import { plazoDe, plazosDe, plazoQueCorre } from "@/lib/plazos";
-import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { conSusArchivos } from "@/lib/versiones";
 import {
   diasConNosotros,
   esperaAlCliente,
@@ -227,7 +228,9 @@ export async function elTablero(): Promise<Tablero> {
     // con las vueltas viejas o sin nada, y en ningún caso es algo que mirar.
     carpetas: porCliente
       .flat()
-      .filter((c) => c.piezas > 0 || (c.hijas.length > 0 && c.entregadas === 0))
+      .filter(
+        (c) => c.piezas > 0 || c.sinEntregar > 0 || (c.hijas.length > 0 && c.entregadas === 0)
+      )
       .sort((a, b) => (b.diasConNosotros ?? -1) - (a.diasConNosotros ?? -1)),
   };
 }
@@ -308,9 +311,9 @@ async function ramaDelTablero(
   sinLeer: number,
   hondura: number
 ): Promise<CarpetaEnElTablero> {
-  const [archivos, diasDeLaCarpeta, deQuienEsLaCarpeta, ajustes, adentro] =
+  const [{ archivos, agrupadas, pendientes }, diasDeLaCarpeta, deQuienEsLaCarpeta, ajustes, adentro] =
     await Promise.all([
-      piezasDeLaCarpeta(carpeta.id),
+      trabajosDeLaCarpeta(carpeta.id),
       plazoDe(carpeta.id),
       responsableDe(carpeta.id),
       ajustesDe(carpeta.id),
@@ -333,7 +336,6 @@ async function ramaDelTablero(
             )
         );
 
-  const agrupadas = agruparVersiones(archivos);
   const conArchivos = conSusArchivos(carpeta.id, agrupadas);
   const identidades = conArchivos.map((p) => p.id);
   // **`estadosDe` va primero, y solo.** Cuando una pieza cambia de nombre muda
@@ -458,10 +460,16 @@ async function ramaDelTablero(
   // **No alcanza con estar de nuestro lado.** Una pieza que el cliente devolvió
   // con cambios vuelve a `en_curso`, y ofrecerla para entregar ahí le manda el
   // mismo archivo que acaba de devolver. Falta la vuelta nueva.
+  // **Una vuelta sin asignar cuenta como sin entregar.** Es trabajo hecho que
+  // no le llegó al cliente, y lo que falta es de un clic: decir de qué trabajo
+  // es y entregarla. Sin esto, subir la V2 dejaba la carpeta en «lo tenemos
+  // nosotros» y nada decía que ya estaba lista.
   const sinEntregar =
     conArchivos.filter(({ id, version }) =>
       hayAlgoParaEntregar(estados[id].estado, version, estados[id].versionEntregada)
-    ).length + suma(hijas, (h) => h.sinEntregar);
+    ).length +
+    pendientes.length +
+    suma(hijas, (h) => h.sinEntregar);
 
   // Lo que ya no está en juego. Sigue existiendo —nada se borra— pero no es
   // trabajo pendiente de nadie.

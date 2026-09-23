@@ -18,7 +18,10 @@ vi.mock("@/lib/carpetas", () => ({
   olvidarCarpetas: vi.fn(),
   clienteDeCarpeta: vi.fn(async () => null),
 }));
-vi.mock("@/lib/piezas", () => ({ piezasDeLaCarpeta: vi.fn() }));
+vi.mock("@/lib/piezas", () => ({
+  piezasDeLaCarpeta: vi.fn(),
+  archivosAnotadosDe: vi.fn(async () => ({})),
+}));
 // Quien llama entra a la sección: acá se prueba qué hace la acción con lo que
 // le llega, no el segundo cerrojo —eso lo cubre `cimientos.test.ts`—.
 vi.mock("@/lib/sesion", () => ({

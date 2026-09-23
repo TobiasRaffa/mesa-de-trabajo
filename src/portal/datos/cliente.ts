@@ -23,10 +23,11 @@ import {
   soloLoVisible,
   type Vista,
 } from "@/lib/ajustes";
-import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
+import { estadosDe, type EstadoDePieza } from "@/lib/piezas";
+import { trabajosDeLaCarpeta } from "@/lib/trabajos";
 import { conLosComentariosDelCliente } from "@/lib/comentariosDelCliente";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
-import { agruparVersiones, conSusArchivos, hastaLoEntregado } from "@/lib/versiones";
+import { conSusArchivos, hastaLoEntregado } from "@/lib/versiones";
 import { RONDAS_INCLUIDAS_POR_DEFECTO } from "@/dominio/pieza";
 import { clientePorId } from "@/lib/clientes";
 import { calcularVencimiento } from "@/lib/fechas";
@@ -263,7 +264,7 @@ export async function portalDelCliente(
 
       // Incluye las que ya se mudaron a «Entregas finales»: aprobar no puede
       // costarle al cliente perder de vista lo que acaba de aprobar.
-      const todos = await piezasDeLaCarpeta(carpeta.id);
+      const { archivos: todos, agrupadas } = await trabajosDeLaCarpeta(carpeta.id);
 
       // «9304.jpeg» y «9304 V2.jpeg» son una sola pieza en dos vueltas, no
       // dos piezas. La regla vive en `versiones.ts` y está probada aparte.
@@ -275,7 +276,6 @@ export async function portalDelCliente(
       // aprobarla, no veía su fecha, y `estadosDe` —que escribe— mudaba la
       // ficha de un nombre al otro en cada visita, o la reiniciaba si todas
       // las vueltas que conocía estaban escondidas.
-      const agrupadas = agruparVersiones(todos);
 
       // Todo lo anotado sobre el trabajo va por la identidad de la pieza, no
       // por el archivo: subir una vuelta nueva no puede hacer desaparecer los

@@ -815,6 +815,26 @@ describe("las puertas", () => {
     expect(permisos).toContain("export async function quienPideDe");
   });
 
+  it("los trabajos de una carpeta se arman en un solo lugar", () => {
+    // **Las vueltas se asignan a mano**, y la asignación vive aparte de Drive.
+    // Una pantalla que agrupara los archivos por su cuenta —por el nombre,
+    // como antes— vería otros trabajos que el resto: el portal le mostraría
+    // al cliente una V2 que nadie asignó, o gestión y el portal nombrarían
+    // distinto a la misma pieza, que es de donde cuelga todo lo anotado.
+    const PERMITIDOS = ["src/lib/versiones.ts", "src/lib/trabajos.ts"];
+    const culpables = TODOS.filter((f) => {
+      const r = relativo(f);
+      if (PERMITIDOS.includes(r) || /\.test\.tsx?$/.test(r)) return false;
+      return /\b(agruparVersiones|armarTrabajos)\(/.test(sinImports(readFileSync(f, "utf8")));
+    }).map(relativo);
+
+    expect(
+      culpables,
+      "Estos arman los trabajos por su cuenta. Pedilos a trabajosDeLaCarpeta() " +
+        "de @/lib/trabajos, que es la que tiene en cuenta las vueltas asignadas."
+    ).toEqual([]);
+  });
+
   it("la gestión pide los clientes por un solo lugar", () => {
     // **Es el mismo problema que la puerta, con otra forma.** Los roles separan
     // secciones; el alcance separa clientes. Si cada pantalla filtrara por su

@@ -2082,3 +2082,28 @@ por pieza aprobada convertiría la conversación en un registro, que es lo
 contrario de lo que es. No cuentan como sin leer para nadie —el contador mira
 los mensajes del otro lado— y si no se puede anotar, no falla nada: lo que
 importaba ya se guardó.
+
+---
+
+## 121. Las vueltas se asignan a mano; el nombre sugiere
+
+Una V2 se sumaba sola al trabajo con el mismo nombre. Eso andaba mientras el
+nombre coincidiera, y cuando no —«V2 logo final.jpg», «Hario V60.jpg»— la
+aplicación decidía sola y en silencio: un trabajo nuevo que arrancaba en la
+V2, o la vuelta sesenta de algo que no existía.
+
+Ahora un archivo con `V2` o más **espera** a que alguien de la agencia diga de
+qué trabajo es; el que coincide por nombre viene elegido. Se anota en la
+aplicación, por el id del archivo (`@/lib/asignaciones`), y no se renombra
+nada en Drive: si lo renombran después, sigue siendo la misma vuelta. Hasta
+que se asigna no se entrega, el cliente no la ve, y el tablero la cuenta como
+«sin entregar».
+
+Lo que ya estaba sumado a un trabajo antes de esto sigue ahí: estar anotada en
+la pieza cuenta como asignada. «Es el mismo trabajo: unirlos» también pasó a
+anotar en la aplicación en vez de renombrar en Drive.
+
+Los trabajos se arman en un solo lugar, `trabajosDeLaCarpeta`
+(`@/lib/trabajos`), y hay un guardián en `cimientos.test.ts`: una pantalla
+que agrupara por su cuenta vería otros trabajos que el resto.
+

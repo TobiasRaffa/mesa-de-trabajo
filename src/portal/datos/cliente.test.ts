@@ -39,6 +39,7 @@ vi.mock("@/lib/clientes", () => ({
 }));
 vi.mock("@/lib/piezas", () => ({
   piezasDeLaCarpeta: vi.fn(),
+  archivosAnotadosDe: vi.fn(async () => ({})),
   estadosDe: vi.fn(),
 }));
 vi.mock("@/lib/publicaciones", async (original) => ({
@@ -69,7 +70,13 @@ vi.mock("@/lib/ajustes", async (original) => ({
 }));
 
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
-import { estadosDe, piezasDeLaCarpeta, type EstadoDePieza } from "@/lib/piezas";
+import {
+  archivosAnotadosDe,
+  estadosDe,
+  piezasDeLaCarpeta,
+  type EstadoDePieza,
+} from "@/lib/piezas";
+import { agruparVersiones } from "@/lib/versiones";
 import { publicacionesDe } from "@/lib/publicaciones";
 import { calcularVencimiento } from "@/lib/fechas";
 import { portalDelCliente } from "@/portal/datos/cliente";
@@ -139,6 +146,17 @@ beforeEach(() => {
   ESCONDIDOS.clear();
   for (const k of Object.keys(PLAZOS)) delete PLAZOS[k];
   vi.clearAllMocks();
+  // Las vueltas de estas pruebas ya estaban asignadas a su trabajo: lo que se
+  // prueba acá es qué muestra el portal, no cómo se asigna una V2 (eso está
+  // en `lib/trabajos.test.ts`). Anotadas en su pieza es asignadas.
+  vi.mocked(archivosAnotadosDe).mockImplementation(async (carpeta) =>
+    Object.fromEntries(
+      agruparVersiones(await piezasDeLaCarpeta(carpeta)).map((g) => [
+        `${carpeta}::${g.base}`,
+        g.versiones.map((v) => v.archivo.id),
+      ])
+    )
+  );
 });
 
 describe("el portal baja hasta donde haga falta", () => {
