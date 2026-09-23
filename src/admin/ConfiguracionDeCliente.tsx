@@ -7,7 +7,7 @@
 // empujaba hacia abajo lo que sí se usa seguido —quién lo lleva, cuántos días
 // tiene para revisar, si el portal está prendido—.
 
-import { useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect } from "react";
 import {
   cambiarCliente,
   cambiarVerEnDrive,
@@ -107,7 +107,18 @@ export function ConfiguracionDeCliente({
           botón que abre WhatsApp con el aviso ya escrito. La aplicación no manda
           nada sola; el mensaje lo mandás vos.
         </p>
-        <form action={guardarTel} className="mt-2 flex flex-wrap gap-2">
+        {/* **Se manda a mano y no con `action`.** React vacía todo formulario
+            que se manda con `action`, salga bien o mal: con un error, el
+            teléfono que se estaba corrigiendo volvía al viejo debajo del
+            mensaje que decía qué estaba mal. */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const datos = new FormData(e.currentTarget);
+            startTransition(() => guardarTel(datos));
+          }}
+          className="mt-2 flex flex-wrap gap-2"
+        >
           <input type="hidden" name="clienteId" value={cliente.id} />
           <input
             type="tel"

@@ -56,6 +56,12 @@ function pasa(c: CarpetaEnElTablero, f: Filtros): boolean {
  *
  * Una carpeta se conserva si pasa ella **o** si le queda alguna hija, con las
  * hijas ya filtradas: así el camino hasta el trabajo que pasa no se corta.
+ *
+ * **Y sus números se rehacen con lo que quedó.** Los de una carpeta incluyen
+ * los de todas sus hijas, y quedaban tal cual: con «Solo los míos», la madre
+ * que lleva otra y se conservaba por una hija mía seguía diciendo «5 sin
+ * entregar» —de la hija de otra— y se ubicaba en esa columna. Si no pasa ella,
+ * lo propio tampoco cuenta; lo que la dejó a la vista son sus hijas.
  */
 export function filtrar(
   carpetas: CarpetaEnElTablero[],
@@ -64,10 +70,78 @@ export function filtrar(
   const salida: CarpetaEnElTablero[] = [];
   for (const c of carpetas) {
     const hijas = filtrar(c.hijas, f);
-    if (pasa(c, f) || hijas.length > 0) salida.push({ ...c, hijas });
+    const ella = pasa(c, f);
+    if (!ella && hijas.length === 0) continue;
+
+    // Nada cambió abajo y pasa ella: queda como vino, sin rehacer cuentas.
+    const igual = hijas.length === c.hijas.length && hijas.every((h, i) => h === c.hijas[i]);
+    salida.push(ella && igual ? c : conLoQueQuedo(c, hijas, ella));
   }
   return salida;
 }
+
+/**
+ * La carpeta, con sus números rehechos desde las hijas que quedaron.
+ *
+ * Lo propio de la carpeta es lo que tiene menos lo que traían sus hijas. La
+ * cancha se decide igual que en `admin/datos/tablero.ts`.
+ */
+function conLoQueQuedo(
+  c: CarpetaEnElTablero,
+  hijas: CarpetaEnElTablero[],
+  cuentaLoPropio: boolean
+): CarpetaEnElTablero {
+  const numero = (de: (x: CarpetaEnElTablero) => number) =>
+    (cuentaLoPropio ? de(c) - suma(c.hijas, de) : 0) + suma(hijas, de);
+
+  const piezasEnJuego = cuentaLoPropio ? c.piezasEnJuego : [];
+  const piezas = numero((x) => x.piezas);
+  const entregadas = numero((x) => x.entregadas);
+  const enAgencia = numero((x) => x.enAgencia);
+  const sinEntregar = numero((x) => x.sinEntregar);
+  const sinRevisar = numero((x) => x.sinRevisar);
+
+  const vacia = piezas === 0 && entregadas === 0;
+  const cancha =
+    sinEntregar > 0
+      ? "sin_entregar"
+      : enAgencia > 0 || vacia
+        ? "agencia"
+        : sinRevisar > 0
+          ? "cliente"
+          : "listo";
+
+  const esperas = [...piezasEnJuego, ...hijas]
+    .map((x) => x.diasConNosotros)
+    .filter((d): d is number => d !== null);
+  const fechas = [...piezasEnJuego, ...hijas]
+    .map((x) => x.vence)
+    .filter((d): d is Date => d !== null);
+
+  return {
+    ...c,
+    hijas,
+    piezasEnJuego,
+    // Las muestras son de las piezas propias: sin ellas, no hay qué mostrar.
+    muestras: cuentaLoPropio ? c.muestras : [],
+    piezas,
+    entregadas,
+    enAgencia,
+    sinEntregar,
+    sinRevisar,
+    terminadas: numero((x) => x.terminadas),
+    enJuego: numero((x) => x.enJuego),
+    extraPedida: numero((x) => x.extraPedida),
+    cancha,
+    diasConNosotros: esperas.length > 0 ? Math.max(...esperas) : null,
+    vence: fechas.length > 0 ? new Date(Math.min(...fechas.map((d) => d.getTime()))) : null,
+    vencida: [...piezasEnJuego, ...hijas].some((x) => x.vencida),
+    porVencer: [...piezasEnJuego, ...hijas].some((x) => x.porVencer),
+  };
+}
+
+const suma = (xs: CarpetaEnElTablero[], de: (x: CarpetaEnElTablero) => number) =>
+  xs.reduce((n, x) => n + de(x), 0);
 
 /** Todas las carpetas del árbol, a cualquier profundidad. */
 function todasLasDelArbol(carpetas: CarpetaEnElTablero[]): CarpetaEnElTablero[] {

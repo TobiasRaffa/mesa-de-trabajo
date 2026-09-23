@@ -20,7 +20,7 @@
 // Cada fila sigue siendo un formulario suelto: se guarda una persona sin tocar
 // las demás, y un error de una no borra lo que se estaba escribiendo en otra.
 
-import { useActionState, useEffect, useState } from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import {
   darDeAlta,
   editarDelEquipo,
@@ -55,6 +55,24 @@ const BOTON =
   "text-tinta transition-colors hover:bg-hueco disabled:opacity-40";
 
 const MARCA = "mt-1 text-micro font-extrabold uppercase tracking-wider";
+
+/**
+ * Manda el formulario a la acción sin que React lo vacíe.
+ *
+ * **Con `<form action>`, React devuelve cada campo a su valor de entrada
+ * antes de mandar, salga bien o mal.** Con un error del servidor, la ficha
+ * quedaba a medias: el correo y los clientes tildados volvían a lo de antes y
+ * el rol, que se sigue en pantalla, quedaba en lo nuevo. Corregir el correo y
+ * guardar de nuevo grababa esa mezcla, un alcance que nadie eligió. Mandado a
+ * mano, lo escrito queda tal cual; cuando sale bien, la ficha se cierra igual.
+ */
+function sinVaciar(accion: (datos: FormData) => void) {
+  return (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const datos = new FormData(e.currentTarget);
+    startTransition(() => accion(datos));
+  };
+}
 
 export function FilaDePersona({
   persona,
@@ -188,7 +206,7 @@ export function FilaDePersona({
 
   return (
     <li className="border-b border-linea px-4 py-4">
-      <form action={guardar}>
+      <form onSubmit={sinVaciar(guardar)}>
         <input type="hidden" name="id" value={persona.id} />
 
         <div className="flex flex-wrap items-center gap-2">
@@ -632,7 +650,7 @@ export function SumarPersona({ clientes }: { clientes: ClienteParaElegir[] }) {
         contraseña la primera vez que entra. No la sabe nadie más.
       </p>
 
-      <form action={sumar} className="mt-3 flex flex-col gap-3">
+      <form onSubmit={sinVaciar(sumar)} className="mt-3 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* **El nombre se escribe acá.** Se sacaba del correo y se
               corregía después; con eso la lista mostraba «nari» hasta que

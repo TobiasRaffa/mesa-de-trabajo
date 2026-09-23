@@ -58,9 +58,60 @@ export function mensajeDeEntrega({ carpeta, link, dias }: Datos): string {
  * peor que no ofrecerlo, porque se descubre recién del otro lado.
  */
 export function linkDeWhatsApp(telefono: string, texto: string): string | null {
-  const digitos = telefono.replace(/\D/g, "");
-  if (digitos.length < 8) return null;
-  return `https://wa.me/${digitos}?text=${encodeURIComponent(texto)}`;
+  const numero = numeroParaWhatsApp(telefono);
+  if (!numero) return null;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+}
+
+/**
+ * Lleva el número a la forma internacional, suponiendo Argentina.
+ *
+ * **Sacar lo que no es dígito no alcanza.** «11 5555-5555» quedaba en
+ * «1155555555», y wa.me lo lee como un +1: un número de Estados Unidos, que
+ * puede ser de cualquiera. Lo mismo con el 0 de larga distancia, el 00
+ * internacional y el 15 del celular, que es como la gente tiene agendados los
+ * números.
+ *
+ * Un celular argentino en WhatsApp es 54, 9, la característica y el número:
+ * diez dígitos entre las dos, y sin el 15. Lo que no llega a eso da `null`.
+ * Sin característica —«15 5555-5555»— no hay cómo saber de dónde es, y
+ * suponer Buenos Aires es mandarle el mensaje a otro.
+ */
+function numeroParaWhatsApp(telefono: string): string | null {
+  const internacional = /^\s*(\+|00)/.test(telefono);
+  let digitos = telefono.replace(/\D/g, "");
+  if (digitos.startsWith("00")) digitos = digitos.slice(2);
+
+  let nacional: string;
+  if (digitos.startsWith("54")) {
+    // Ninguna característica argentina empieza con 5: un 54 adelante es
+    // siempre el código de país, se haya escrito con + o no.
+    nacional = digitos.slice(2);
+    // El 9 del celular, si vino.
+    if (nacional.startsWith("9") && (nacional.length === 11 || nacional.length === 13)) {
+      nacional = nacional.slice(1);
+    }
+  } else if (internacional) {
+    // Otro país, escrito a propósito con su código: se respeta como está.
+    return /^[1-9]\d{7,14}$/.test(digitos) ? digitos : null;
+  } else {
+    nacional = digitos;
+  }
+
+  // El 0 de larga distancia, que en la forma internacional no va.
+  if (nacional.startsWith("0")) nacional = nacional.slice(1);
+
+  // Con el 15 son doce dígitos. Va justo después de la característica, que es
+  // de dos (el 11), tres o cuatro. Como ninguna característica es el comienzo
+  // de otra, el primer «15» que aparece en esos lugares es el del celular.
+  if (nacional.length === 12) {
+    const donde = nacional.startsWith("11") ? 2 : nacional.slice(3, 5) === "15" ? 3 : 4;
+    if (nacional.slice(donde, donde + 2) !== "15") return null;
+    nacional = nacional.slice(0, donde) + nacional.slice(donde + 2);
+  }
+
+  // Las características argentinas empiezan con 11, 2 o 3.
+  return /^(11|[23]\d)\d{8}$/.test(nacional) ? `549${nacional}` : null;
 }
 
 export const PLANTILLAS: Plantilla[] = [

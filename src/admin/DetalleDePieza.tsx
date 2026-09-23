@@ -55,7 +55,11 @@ export function DetalleDePieza({
           anteriores se consultan de vez en cuando; se pueden abrir. */}
       {[...porVuelta].reverse().map((v, i) => (
         <div
-          key={v.version}
+          // **La versión sola no sirve de clave**: una misma vuelta puede
+          // entregarse y revisarse más de una vez. Se usa el lugar en la
+          // historia, contado desde la primera, que no cambia cuando se suma
+          // algo arriba; lo que está escribiendo lleva la suya.
+          key={v.abierta ? "abierta" : porVuelta.length - 1 - i}
           className={`border-l-4 border-acento bg-acento-tenue/40 py-1.5 pl-3 ${
             // Las viejas, atenuadas: están para consultar, no para leer.
             i === 0 ? "" : "opacity-70"

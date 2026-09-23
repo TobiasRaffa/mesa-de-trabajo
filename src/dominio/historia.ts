@@ -169,13 +169,30 @@ function leerPedido(detalle?: string): { version?: number; puntos: string[] } {
     return { puntos: [] };
   }
 
-  // Los puntos se escribieron como «1) … 2) …»: se parten por esa marca.
-  const puntos = cuerpo
-    .split(/\s*\d+\)\s*/)
-    .map((x) => x.trim())
-    .filter(Boolean);
+  return { version: conVersion ? Number(conVersion[1]) : undefined, puntos: partirPuntos(cuerpo) };
+}
 
-  return { version: conVersion ? Number(conVersion[1]) : undefined, puntos };
+/**
+ * Parte «1) …  2) …» en sus puntos.
+ *
+ * **Se corta solo por la numeración que se escribió al guardar, en orden**:
+ * «1) » al principio y después «  2) », «  3) »… con el doble espacio con que
+ * se unieron. Partir por cualquier «número)» cortaba lo que el cliente escribió
+ * adentro —«(tamaño 12)»— y la agencia leía pedidos que nadie hizo.
+ */
+function partirPuntos(cuerpo: string): string[] {
+  const texto = cuerpo.trim().replace(/^1\) ?/, "");
+  const puntos: string[] = [];
+  let desde = 0;
+  for (let n = 2; ; n++) {
+    const marca = `  ${n}) `;
+    const corte = texto.indexOf(marca, desde);
+    if (corte === -1) break;
+    puntos.push(texto.slice(desde, corte));
+    desde = corte + marca.length;
+  }
+  puntos.push(texto.slice(desde));
+  return puntos.map((x) => x.trim()).filter(Boolean);
 }
 
 /**

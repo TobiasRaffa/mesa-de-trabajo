@@ -56,6 +56,22 @@ describe("qué pidió el cliente en cada vuelta", () => {
     expect(r[1]).toEqual({ version: 2, puntos: ["y el fondo"], abierta: true });
   });
 
+  it("un número con paréntesis dentro del pedido no lo parte", () => {
+    // El cliente escribe como escribe: «(tamaño 12)» es parte de su frase, no
+    // un punto nuevo. Partido, la agencia leía tres pedidos donde hubo dos.
+    const r = cambiosPorVuelta([
+      enviada("V2: 1) Achicar el título (tamaño 12) y moverlo  2) Cambiar el fondo"),
+    ]);
+
+    expect(r[0].puntos).toEqual(["Achicar el título (tamaño 12) y moverlo", "Cambiar el fondo"]);
+  });
+
+  it("tampoco lo parte en la forma vieja", () => {
+    const r = cambiosPorVuelta([enviada(), entregada("Responde a: 1) poner 2) opciones")]);
+
+    expect(r[0].puntos).toEqual(["poner 2) opciones"]);
+  });
+
   it("una pieza sin vueltas no inventa ninguna", () => {
     expect(cambiosPorVuelta([entregada()])).toEqual([]);
   });

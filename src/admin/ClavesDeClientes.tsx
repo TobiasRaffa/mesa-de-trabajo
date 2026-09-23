@@ -20,7 +20,7 @@
 // afuera a quien tenga la vieja. Un solo botón que hiciera las dos obligaría a
 // abrir un campo de edición cada vez que solo se quería mirar.
 
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { ponerTagDeCliente, verClaveDeCliente } from "@/app/(admin)/gestion/acciones";
 import { BOTON, CAMPO, ETIQUETA, TITULO } from "@/admin/estilos";
 
@@ -52,6 +52,28 @@ export function ClavesDeClientes({ clientes }: { clientes: ClienteConClave[] }) 
 
 type Modo = null | "ver" | "cambiar";
 
+type Resultado = { ok: boolean; motivo?: string } | null;
+
+/**
+ * El error que corresponde a lo que está abierto, si es nuevo.
+ *
+ * **Se mostraba el primero que hubiera, y «Ver» iba primero.** Un «Esa
+ * contraseña no es la tuya» de antes quedaba pegado y tapaba el motivo real de
+ * «Cambiar»: la persona reescribía su contraseña sin enterarse de que lo que
+ * fallaba era la clave nueva. Lo que ya estaba al cerrar se da por visto.
+ */
+export function falloAMostrar(
+  modo: Modo,
+  ver: Resultado,
+  tag: Resultado,
+  vistos: { ver: Resultado; tag: Resultado }
+): string | null {
+  const [actual, visto] =
+    modo === "ver" ? [ver, vistos.ver] : modo === "cambiar" ? [tag, vistos.tag] : [null, null];
+  if (!actual || actual.ok || actual === visto) return null;
+  return actual.motivo ?? null;
+}
+
 function UnaClave({ cliente }: { cliente: ClienteConClave }) {
   const [modo, setModo] = useState<Modo>(null);
   const [estadoVer, verClave, viendo] = useActionState(verClaveDeCliente, null);
@@ -63,7 +85,11 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
   // levanta de la silla con la pantalla abierta deja esa puerta abierta.
   const [revelada, setRevelada] = useState<string | null>(null);
   const [atendida, setAtendida] = useState(estadoVer);
-  const fallo = [estadoVer, estadoTag].find((r) => r && !r.ok);
+  const [vistos, setVistos] = useState<{ ver: Resultado; tag: Resultado }>({
+    ver: null,
+    tag: null,
+  });
+  const fallo = falloAMostrar(modo, estadoVer, estadoTag, vistos);
 
   if (estadoVer !== atendida) {
     setAtendida(estadoVer);
@@ -73,7 +99,17 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
   function cerrar() {
     setModo(null);
     setRevelada(null);
+    setVistos({ ver: estadoVer, tag: estadoTag });
   }
+
+  // **La clave nueva se manda a mano y no con `action`.** React vacía todo
+  // formulario que se manda con `action`, salga bien o mal: con un error, la
+  // clave nueva y la contraseña desaparecían debajo del mensaje que decía qué
+  // corregir. Se vacía solo cuando se guardó, que es cuando ya no hace falta.
+  const formularioTag = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (estadoTag?.ok) formularioTag.current?.reset();
+  }, [estadoTag]);
 
   return (
     <li className="flex flex-col gap-2 border-b border-linea py-4">
@@ -145,7 +181,15 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
 
       {/* ----------------------------- Cambiar --------------------------- */}
       {modo === "cambiar" && (
-        <form action={guardarTag} className="flex flex-wrap items-center gap-2">
+        <form
+          ref={formularioTag}
+          onSubmit={(e) => {
+            e.preventDefault();
+            const datos = new FormData(e.currentTarget);
+            startTransition(() => guardarTag(datos));
+          }}
+          className="flex flex-wrap items-center gap-2"
+        >
           <input type="hidden" name="clienteId" value={cliente.id} />
           <input
             name="tag"
@@ -177,9 +221,9 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
         </p>
       )}
 
-      {fallo && !fallo.ok && (
+      {fallo && (
         <p aria-live="polite" className="text-menudo font-semibold text-alerta">
-          {fallo.motivo}
+          {fallo}
         </p>
       )}
     </li>

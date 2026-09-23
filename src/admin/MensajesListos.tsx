@@ -11,7 +11,19 @@
 // mandarle un WhatsApp más.
 
 import { useState } from "react";
-import { PLANTILLAS, type Datos } from "@/lib/plantillas";
+import { PLANTILLAS, type Datos, type Plantilla } from "@/lib/plantillas";
+
+/**
+ * El texto de una plantilla, con el link entero.
+ *
+ * **La ficha pasa «/t/…», un camino dentro de la aplicación.** Pegado en un
+ * WhatsApp o en un mail eso no es un link, y el cliente no llegaba a ningún
+ * lado. Se completa con el dominio desde donde se está mirando, como ya hace
+ * el aviso de entrega.
+ */
+export function textoListo(plantilla: Plantilla, datos: Datos, origen: string): string {
+  return plantilla.texto({ ...datos, link: new URL(datos.link, origen).toString() });
+}
 
 export function MensajesListos({
   datos,
@@ -33,7 +45,8 @@ export function MensajesListos({
     const plantilla = PLANTILLAS.find((p) => p.id === id);
     if (!plantilla) return;
     setAbierta(id);
-    setTexto(plantilla.texto(datos));
+    // Corre en un toque, así que `location` existe.
+    setTexto(textoListo(plantilla, datos, location.origin));
   }
 
   async function copiar(id: string) {

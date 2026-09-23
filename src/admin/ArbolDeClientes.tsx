@@ -59,6 +59,32 @@ import { MensajesSinLeer } from "@/admin/MensajesSinLeer";
 const SANGRIA = 22;
 
 /**
+ * Los clientes que deja ver el buscador.
+ *
+ * **Uno abierto pasa aunque su nombre no coincida**, igual que una carpeta. Se
+ * filtraban solo por nombre: buscar «banners» con Café Otoño abierto escondía
+ * al cliente, y con él la carpeta que se estaba buscando.
+ */
+export function clientesALaVista<C extends { id: string; nombre: string }>(
+  clientes: C[],
+  busqueda: string,
+  abiertas: Set<string>
+): C[] {
+  return clientes.filter((c) => coincide(c.nombre, busqueda) || abiertas.has(c.id));
+}
+
+/**
+ * Con qué se filtra lo de adentro de un cliente.
+ *
+ * **Si el cliente coincidió por su nombre, con nada.** Lo buscado era él: se
+ * escribía «cafe», se abría Café Otoño y sus carpetas se filtraban por «cafe»,
+ * así que adentro decía «Nada acá se llama así».
+ */
+export function busquedaAdentroDe(nombre: string, busqueda: string): string {
+  return coincide(nombre, busqueda) ? "" : busqueda;
+}
+
+/**
  * Cuál configuración está abierta, en todo el árbol.
  *
  * Una sola a la vez. Con varias abiertas la lista se estira, hay que desplazar
@@ -342,10 +368,13 @@ export function ArbolDeClientes({
    * buscar una palabra es lo que el árbol perezoso evita.
    */
   const [busqueda, setBusqueda] = useState("");
-  const aLaVista = clientes.filter((c) => coincide(c.nombre, busqueda));
 
-  /** Las carpetas abiertas: el buscador las deja pasar aunque no coincidan. */
+  /**
+   * Los clientes y carpetas abiertos: el buscador los deja pasar aunque no
+   * coincidan.
+   */
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
+  const aLaVista = clientesALaVista(clientes, busqueda, abiertas);
   const marcarAbierta = useCallback((id: string, abierta: boolean) => {
     setAbiertas((antes) => {
       const ahora = new Set(antes);
@@ -453,7 +482,13 @@ function FilaCliente({
   abiertoDeEntrada?: boolean;
 }) {
   const [abierto, setAbierto] = useState(Boolean(abiertoDeEntrada));
-  const { cual, alternarConfig } = useContext(Abierta);
+  const arbol = useContext(Abierta);
+  const { cual, alternarConfig, marcarAbierta } = arbol;
+
+  // Lo de adentro se busca con lo que corresponda a este cliente: nada, si
+  // lo buscado era él.
+  const adentro = busquedaAdentroDe(cliente.nombre, arbol.busqueda);
+  const contextoAdentro = useMemo(() => ({ ...arbol, busqueda: adentro }), [arbol, adentro]);
   const config = cual === cliente.id;
   const [contenido, setContenido] = useState<Contenido | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -511,12 +546,16 @@ function FilaCliente({
   // para siempre: alguien subía un archivo a Drive desde otra pestaña, volvía,
   // cerraba y abría —que es lo que cualquiera hace para actualizar— y seguía
   // viendo la lista vieja, sin más salida que recargar la pantalla entera.
+  // Se avisa al árbol, como hace cada carpeta, para que el buscador no lo
+  // esconda mientras se busca algo de adentro.
   async function alternar() {
     if (abierto) {
       setAbierto(false);
+      marcarAbierta(cliente.id, false);
       return;
     }
     setAbierto(true);
+    marcarAbierta(cliente.id, true);
     await traer();
   }
 
@@ -607,15 +646,17 @@ function FilaCliente({
             <p className="px-4 py-3 text-menudo font-semibold text-alerta">{error}</p>
           )}
           {contenido && (
-            <Adentro
-              contenido={contenido}
-              nivel={1}
-              clienteId={cliente.id}
-              carpetaId={cliente.id}
-              equipo={equipo}
-              alGuardar={traer}
-              vacio="Este cliente no tiene nada adentro todavía."
-            />
+            <Abierta.Provider value={contextoAdentro}>
+              <Adentro
+                contenido={contenido}
+                nivel={1}
+                clienteId={cliente.id}
+                carpetaId={cliente.id}
+                equipo={equipo}
+                alGuardar={traer}
+                vacio="Este cliente no tiene nada adentro todavía."
+              />
+            </Abierta.Provider>
           )}
         </div>
       )}
