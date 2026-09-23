@@ -71,12 +71,34 @@ export type NombreDeArchivo = {
   marcado: boolean;
 };
 
+/**
+ * Lo que tiene pinta de extensión: letras y números, sin espacios, con al
+ * menos una letra. «.09» (una fecha en un Google Doc) o «. Corrientes» no lo
+ * son.
+ */
+const PARECE_EXTENSION = /^\.[a-z0-9]*[a-z][a-z0-9]*$/i;
+
+/** Si lo que sigue al último punto no parece extensión, es parte del título. */
+function colaQueNoEsExtension(nombre: string): string {
+  const punto = nombre.lastIndexOf(".");
+  if (punto <= 0) return "";
+  const cola = nombre.slice(punto);
+  return PARECE_EXTENSION.test(cola) ? "" : cola;
+}
+
 export function leerNombre(nombre: string): NombreDeArchivo {
   const punto = nombre.lastIndexOf(".");
   // Un punto al principio no es una extensión, es un archivo oculto.
   const hayExtension = punto > 0;
   const cuerpo = hayExtension ? nombre.slice(0, punto) : nombre;
   const extension = hayExtension ? nombre.slice(punto) : "";
+
+  // **La base se sigue calculando con el último punto, parezca extensión o
+  // no.** Es la identidad de la pieza, y cambiarla ahora haría que lo anotado
+  // bajo «Informe.1» deje de encontrarse. Lo que se corrige es solo el título:
+  // en «Acta 12.09» el título era «Acta 12», igual para todas las actas del
+  // mes, y eso las hacía pasar por un renombre partido que «unir» juntaba.
+  const cola = colaQueNoEsExtension(nombre);
 
   // Primero adelante, que es como se escribe acá; si no, al final. Nunca las
   // dos: «V2 banner V3» no tiene una respuesta correcta, y elegir una en
@@ -102,13 +124,15 @@ export function leerNombre(nombre: string): NombreDeArchivo {
   // existen en el vocabulario de nadie. Se deja como está escrito, que se ve y
   // se corrige renombrando.
   if (marca && (limpio.trim() === "" || Number(marca[1]) === 0)) {
-    return { base: nombre, version: 1, titulo: cuerpo, marcado: false };
+    return { base: nombre, version: 1, titulo: cuerpo + cola, marcado: false };
   }
 
   return {
     base: limpio + extension,
     version: marca ? Number(marca[1]) : 1,
-    titulo: limpio,
+    // Con la marca atrás el número se leyó antes del punto —«Informe v2.1»—,
+    // y lo que sigue es ambiguo: se deja el título como siempre.
+    titulo: limpio + (atras ? "" : cola),
     marcado: Boolean(marca),
   };
 }
@@ -134,8 +158,27 @@ export function comoVueltaDe(
   version: number
 ): string {
   const punto = nombreDelArchivo.lastIndexOf(".");
-  const extension = punto > 0 ? nombreDelArchivo.slice(punto) : "";
-  return `V${version}_${titulo}${extension}`;
+  // Un Doc «Acta 12.09» no tiene extensión: repetir «.09» al final daría
+  // «Acta 12.09.09», que ya es otro nombre.
+  const extension =
+    punto > 0 && !colaQueNoEsExtension(nombreDelArchivo) ? nombreDelArchivo.slice(punto) : "";
+
+  const adelante = `V${version}_${titulo}${extension}`;
+
+  // **Lo escrito tiene que volver a leerse como esa vuelta de esa pieza**, o
+  // unir contesta que sí y el trabajo sigue partido. La marca adelante se come
+  // los separadores que la siguen, así que con «_portada» saldría
+  // «V2__portada», que se lee como «portada». En ese caso se escribe atrás,
+  // donde el separador del título no se toca. Si la de adelante se lee bien,
+  // que es lo de siempre, se deja esa: no cambia nada de lo que ya andaba.
+  const seLeeBien = (nombre: string) => {
+    const leido = leerNombre(nombre);
+    return leido.titulo === titulo && leido.version === version && leido.marcado;
+  };
+  if (seLeeBien(adelante)) return adelante;
+
+  const atras = `${titulo}_V${version}${extension}`;
+  return seLeeBien(atras) ? atras : adelante;
 }
 
 export type ConNombre = { name: string };
@@ -213,31 +256,39 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
   // separarlos le mostraba al cliente dos trabajos donde hay uno, sin poder
   // comparar. Se agrupa sin distinguir caja; el nombre que se muestra sigue
   // siendo el de la primera vuelta, tal como lo escribieron.
+  //
+  // **Tampoco la forma en que se escribió una tilde.** Algunas subidas desde
+  // macOS guardan «ñ» como «n» más la tilde suelta (NFD): se ve igual y daba
+  // otra clave, así que la pieza se partía en dos sin ningún aviso. Se
+  // normaliza solo para comparar; `base` y `titulo` quedan como vinieron,
+  // porque son la identidad de piezas que ya tienen cosas anotadas.
+  const clave = (s: string) => s.normalize("NFC").toLowerCase();
+
   const porBase = new Map<string, Agrupado<T>>();
   const orden: string[] = [];
 
-  const abrir = (clave: string, leido: Leido) => {
-    porBase.set(clave, {
+  const abrir = (suya: string, leido: Leido) => {
+    porBase.set(suya, {
       titulo: leido.titulo,
       base: leido.base,
       versiones: [],
       comparteNombre: false,
     });
-    orden.push(clave);
+    orden.push(suya);
   };
 
   // Primero las que no llevan marca: son las que fundan una pieza y le dan su
   // nombre. Recién después se reparten las marcadas, que necesitan saber qué
   // piezas existen para elegir a cuál sumarse.
   for (const leido of leidos.filter((l) => !l.marcado)) {
-    const clave = leido.base.toLowerCase();
-    if (!porBase.has(clave)) abrir(clave, leido);
-    porBase.get(clave)!.versiones.push({ numero: leido.version, archivo: leido.archivo });
+    const suya = clave(leido.base);
+    if (!porBase.has(suya)) abrir(suya, leido);
+    porBase.get(suya)!.versiones.push({ numero: leido.version, archivo: leido.archivo });
   }
 
   for (const leido of leidos.filter((l) => l.marcado)) {
     const mismoNombre = orden.filter(
-      (clave) => porBase.get(clave)!.titulo.toLowerCase() === leido.titulo.toLowerCase()
+      (otra) => clave(porBase.get(otra)!.titulo) === clave(leido.titulo)
     );
 
     // Su propia extensión primero; si no hay ninguna con ese nombre todavía,
@@ -246,7 +297,7 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
     // «stickers.jpg» al lado, sumar «V3_stickers.png» a una de las dos sería
     // elegir por el usuario, y elegir mal significa guardar la vuelta nueva
     // debajo del trabajo equivocado.
-    const propia = leido.base.toLowerCase();
+    const propia = clave(leido.base);
     const elegida =
       porBase.has(propia) && mismoNombre.includes(propia)
         ? propia
@@ -274,11 +325,11 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
   // se puede decir cuál es «la buena».
   const cuantasConEseNombre = new Map<string, number>();
   for (const pieza of porBase.values()) {
-    const suyo = pieza.titulo.toLowerCase();
+    const suyo = clave(pieza.titulo);
     cuantasConEseNombre.set(suyo, (cuantasConEseNombre.get(suyo) ?? 0) + 1);
   }
   for (const pieza of porBase.values()) {
-    pieza.comparteNombre = (cuantasConEseNombre.get(pieza.titulo.toLowerCase()) ?? 0) > 1;
+    pieza.comparteNombre = (cuantasConEseNombre.get(clave(pieza.titulo)) ?? 0) > 1;
   }
 
   return orden.map((clave) => porBase.get(clave)!);

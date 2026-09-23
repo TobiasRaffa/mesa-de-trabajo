@@ -650,3 +650,119 @@ describe("volver a juntar un trabajo que un renombre partió", () => {
     ).toBe("stickers.pdf");
   });
 });
+
+describe("un título que empieza con un separador", () => {
+  // «_portada.pdf» es un nombre habitual para que un archivo quede arriba en
+  // Drive. La marca adelante se come los separadores que la siguen, así que
+  // «V2__portada.jpg» se leía como la vuelta de «portada», no de «_portada»:
+  // unir contestaba que sí y el trabajo seguía partido.
+  it.each(["_portada", "-portada", " portada"])(
+    "el nombre que sale vuelve a leerse con el título «%s»",
+    (titulo) => {
+      const nuevo = comoVueltaDe(`${titulo}.jpg`, titulo, 2);
+      const leido = leerNombre(nuevo);
+
+      expect(leido.titulo).toBe(titulo);
+      expect(leido.version).toBe(2);
+      expect(leido.marcado).toBe(true);
+    }
+  );
+
+  it("y unir de verdad junta las dos piezas", () => {
+    const partido = agruparVersiones([{ name: "_portada.pdf" }, { name: "_portada.jpg" }]);
+    expect(partido).toHaveLength(2);
+    expect(partido.every((p) => p.comparteNombre)).toBe(true);
+
+    const unido = agruparVersiones([
+      { name: "_portada.pdf" },
+      { name: comoVueltaDe("_portada.jpg", "_portada", 2) },
+    ]);
+    expect(unido).toHaveLength(1);
+    expect(unido[0].versiones.map((v) => v.numero)).toEqual([1, 2]);
+    expect(unido[0].base).toBe("_portada.pdf");
+  });
+});
+
+describe("un punto que no es una extensión", () => {
+  // Los Google Docs llegan sin extensión, y en «Acta 12.09» el último punto es
+  // parte de una fecha. Tomarlo como extensión dejaba el título en «Acta 12»,
+  // igual para todas las actas del mes: gestión avisaba de un renombre partido
+  // que no existía, y «unir» juntaba dos documentos distintos.
+  it("el título conserva lo que sigue al punto", () => {
+    expect(leerNombre("Acta 12.09").titulo).toBe("Acta 12.09");
+    expect(leerNombre("Brief Av. Corrientes").titulo).toBe("Brief Av. Corrientes");
+    expect(leerNombre("V2 Acta 12.09").titulo).toBe("Acta 12.09");
+  });
+
+  it("dos actas de fechas distintas no se marcan como un renombre partido", () => {
+    const piezas = agruparVersiones([{ name: "Acta 12.09" }, { name: "Acta 12.10" }]);
+    expect(piezas).toHaveLength(2);
+    expect(piezas.map((p) => p.comparteNombre)).toEqual([false, false]);
+  });
+
+  it("ni una vuelta de una se suma a la otra", () => {
+    const piezas = agruparVersiones([{ name: "Acta 12.09" }, { name: "V2 Acta 12.10" }]);
+    expect(piezas.map((p) => p.versiones.map((v) => v.archivo.name))).toEqual([
+      ["Acta 12.09"],
+      ["V2 Acta 12.10"],
+    ]);
+  });
+
+  it("la identidad no se mueve: es la misma que antes para todos estos nombres", () => {
+    // Cambiar la base es perder de vista lo anotado. Solo cambia el título.
+    expect(leerNombre("Acta 12.09").base).toBe("Acta 12.09");
+    expect(leerNombre("V2 Acta 12.09")).toMatchObject({ base: "Acta 12.09", version: 2 });
+    expect(leerNombre("Informe v2.1")).toMatchObject({ base: "Informe.1", version: 2 });
+    expect(leerNombre("Acta 12.09 V2")).toMatchObject({ base: "Acta 12.09 V2", version: 1 });
+    expect(leerNombre("V2.09")).toMatchObject({ base: "V2.09", version: 1, marcado: false });
+  });
+
+  it("una extensión de verdad sigue siendo extensión", () => {
+    expect(leerNombre("logo V2.sketch")).toMatchObject({ titulo: "logo", base: "logo.sketch" });
+    expect(leerNombre("clip.mp4").titulo).toBe("clip");
+    expect(leerNombre("archivo.tar.gz").titulo).toBe("archivo.tar");
+  });
+
+  it("volver a juntar un Doc no le inventa una extensión", () => {
+    const nuevo = comoVueltaDe("acta 12.09", "Acta 12.09", 2);
+    expect(nuevo).toBe("V2_Acta 12.09");
+    expect(leerNombre(nuevo)).toMatchObject({ titulo: "Acta 12.09", version: 2 });
+  });
+});
+
+describe("el mismo nombre escrito en NFC y en NFD", () => {
+  // Algunas subidas desde macOS guardan «ñ» como «n» más una tilde suelta. Se
+  // ve igual, y separarlos le mostraba al cliente dos trabajos sin aviso.
+  const nfc = (s: string) => s.normalize("NFC");
+  const nfd = (s: string) => s.normalize("NFD");
+
+  it("es una sola pieza", () => {
+    const piezas = agruparVersiones([
+      { name: nfc("diseño.png") },
+      { name: nfd("V2 diseño.png") },
+    ]);
+    expect(piezas).toHaveLength(1);
+    expect(piezas[0].versiones.map((v) => v.numero)).toEqual([1, 2]);
+    // Lo guardado no se normaliza: la identidad es la de siempre.
+    expect(piezas[0].base).toBe(nfc("diseño.png"));
+  });
+
+  it("una vuelta en otro formato también se suma", () => {
+    const piezas = agruparVersiones([
+      { name: nfc("diseño.png") },
+      { name: nfd("V2 diseño.jpg") },
+    ]);
+    expect(piezas).toHaveLength(1);
+  });
+
+  it("y dos formatos sin marca se avisan como nombre compartido", () => {
+    const piezas = agruparVersiones([{ name: nfc("diseño.png") }, { name: nfd("diseño.jpg") }]);
+    expect(piezas).toHaveLength(2);
+    expect(piezas.map((p) => p.comparteNombre)).toEqual([true, true]);
+  });
+
+  it("la identidad de una pieza en NFD no cambia", () => {
+    const piezas = agruparVersiones([{ name: nfd("diseño.png") }, { name: nfd("V2 diseño.png") }]);
+    expect(piezas[0].base).toBe(nfd("diseño.png"));
+  });
+});
