@@ -13,13 +13,20 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { ponerPlazo, piezasDeLaCarpeta, esCarpetaMia } = vi.hoisted(() => ({
+const { ponerPlazo, piezasDeLaCarpeta, esCarpetaMia, subcarpetasDe } = vi.hoisted(() => ({
   ponerPlazo: vi.fn(async () => {}),
   piezasDeLaCarpeta: vi.fn(),
   esCarpetaMia: vi.fn(async () => true),
+  // Drive: por omisión, ninguna carpeta tiene subcarpetas.
+  subcarpetasDe: vi.fn(async (_id: string): Promise<Array<{ id: string; name: string }>> => []),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+
+vi.mock("@/lib/google", async (original) => ({
+  ...(await original<typeof import("@/lib/google")>()),
+  subcarpetasDe,
+}));
 
 vi.mock("@/lib/sesion", () => ({
   puedoAlgunaDe: vi.fn(async () => true),
@@ -71,6 +78,8 @@ function conArchivos(nombres: string[]) {
 beforeEach(() => {
   ponerPlazo.mockClear();
   esCarpetaMia.mockResolvedValue(true);
+  subcarpetasDe.mockReset();
+  subcarpetasDe.mockResolvedValue([]);
 });
 
 describe("ponerle el plazo a una pieza suelta", () => {
@@ -116,5 +125,43 @@ describe("el plazo de la carpeta borra lo que haya puesto debajo", () => {
     expect(r.ok).toBe(true);
     const [, , debajo] = ponerPlazo.mock.calls[0] as unknown as [string, number, string[]];
     expect([...debajo].sort()).toEqual([`${CARPETA}::banner.png`, `${CARPETA}::stickers.jpg`]);
+  });
+});
+
+describe("lo de arriba borra lo de abajo, a cualquier hondura", () => {
+  // **`nivelReal` bajaba un solo escalón.** Para el cliente juntaba sus
+  // carpetas y las piezas de cada una; para una carpeta, solo sus piezas. Una
+  // subcarpeta de segundo nivel —«Banners / Septiembre»— y lo de adentro
+  // quedaban con el plazo o el responsable viejo, y nada en la pantalla decía
+  // de dónde salía.
+  //
+  // Drive: cliente → b (con logo.png) → s (con post.png).
+  beforeEach(() => {
+    subcarpetasDe.mockImplementation(async (id: string) =>
+      id === "cliente" ? [{ id: "b", name: "Banners" }] : id === "b" ? [{ id: "s", name: "Septiembre" }] : []
+    );
+    piezasDeLaCarpeta.mockImplementation(async (id: string) =>
+      id === "b"
+        ? [{ id: "d-logo", name: "logo.png", mimeType: "image/png" }]
+        : id === "s"
+          ? [{ id: "d-post", name: "post.png", mimeType: "image/png" }]
+          : []
+    );
+  });
+
+  it("el plazo del cliente deja heredando también a la subcarpeta de segundo nivel", async () => {
+    const r = await guardarDiasDeRevision("cliente", "cliente", 5);
+
+    expect(r.ok).toBe(true);
+    const [, , debajo] = ponerPlazo.mock.calls[0] as unknown as [string, number, string[]];
+    expect([...debajo].sort()).toEqual(["b", "b::logo.png", "s", "s::post.png"]);
+  });
+
+  it("el de una carpeta, a sus subcarpetas y a lo que tienen adentro", async () => {
+    const r = await guardarDiasDeRevision("carpeta", "b", 5);
+
+    expect(r.ok).toBe(true);
+    const [, , debajo] = ponerPlazo.mock.calls[0] as unknown as [string, number, string[]];
+    expect([...debajo].sort()).toEqual(["b::logo.png", "s", "s::post.png"]);
   });
 });

@@ -195,16 +195,20 @@ export function hayAlgoParaEntregar(
  * versiones viejas pueden quedar —la V1, la V4—, pero la V6 que el cliente
  * aprobó se fue. Si la vuelta entregada sigue ahí, sigue en «Aprobado»: quizás
  * la copiaron en vez de moverla, y eso no es entregar.
+ *
+ * Se pregunta por **las vueltas que quedan**, no por la más alta: comparando
+ * con la más alta, una V3 subida después de aprobar la V2 dejaba la pieza
+ * trabada en «Aprobado» aunque la V2 ya se hubiera ido.
  */
 export function yaSeEntrego(
   estado: Estado,
   /** La vuelta que se le entregó al cliente, si se anotó. */
   versionEntregada: number | undefined,
-  /** La vuelta más alta que queda hoy en la carpeta. */
-  versionMasAlta: number
+  /** Los números de vuelta que quedan hoy en la carpeta. */
+  presentes: number[]
 ): boolean {
   if (estado !== "final" || versionEntregada === undefined) return false;
-  return versionMasAlta < versionEntregada;
+  return !presentes.includes(versionEntregada);
 }
 
 /**

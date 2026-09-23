@@ -522,21 +522,29 @@ describe("cerrar la revisión no toca lo que no cambió", () => {
 describe("ya se entregó", () => {
   it("aprobada y sin la vuelta entregada en la carpeta: se la llevaron a finales", () => {
     // Se entregó la V6; en la carpeta quedó hasta la V4.
-    expect(yaSeEntrego("final", 6, 4)).toBe(true);
+    expect(yaSeEntrego("final", 6, [1, 2, 3, 4])).toBe(true);
   });
 
   it("aprobada con la vuelta entregada todavía ahí: sigue en Aprobado", () => {
-    expect(yaSeEntrego("final", 6, 6)).toBe(false);
-    expect(yaSeEntrego("final", 6, 7)).toBe(false);
+    expect(yaSeEntrego("final", 6, [4, 6])).toBe(false);
+    expect(yaSeEntrego("final", 6, [4, 6, 7])).toBe(false);
+  });
+
+  it("se fue la entregada aunque después hayan subido una más alta", () => {
+    // **Comparaba con la vuelta más alta que quedaba**, y no con si la
+    // entregada seguía: aprobada la V2, se sube una V3 de exportación y la V2
+    // se lleva a «Entregas finales». Quedan V1 y V3, la V2 no está, y la pieza
+    // se quedaba para siempre en «Aprobado» contando como pendiente.
+    expect(yaSeEntrego("final", 2, [1, 3])).toBe(true);
   });
 
   it("sin saber qué vuelta se entregó, no se adivina", () => {
-    expect(yaSeEntrego("final", undefined, 1)).toBe(false);
+    expect(yaSeEntrego("final", undefined, [1])).toBe(false);
   });
 
   it("solo una aprobada puede estar entregada", () => {
     const otros: Estado[] = ["en_curso", "entregada", "en_revision", "cambios_marcados", "extra_pedida", "cancelada"];
-    for (const estado of otros) expect(yaSeEntrego(estado, 6, 4)).toBe(false);
+    for (const estado of otros) expect(yaSeEntrego(estado, 6, [1, 2, 3, 4])).toBe(false);
   });
 });
 

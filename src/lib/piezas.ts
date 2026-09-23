@@ -18,6 +18,9 @@ import { randomUUID } from "node:crypto";
 import { coleccion } from "@/lib/almacen";
 import type { Estado } from "@/dominio/pieza";
 import { archivosDe, metadatosArchivo, type ArchivoDrive } from "@/lib/google";
+import { mudarPublicacion } from "@/lib/publicaciones";
+import { mudarPlazo } from "@/lib/plazos";
+import { mudarResponsable } from "@/lib/responsables";
 // Los hitos y cómo se leen viven en el dominio: los necesita una pantalla, y
 // este módulo lee y escribe archivos. Se reexportan para no obligar a nadie a
 // cambiar de puerta.
@@ -309,6 +312,33 @@ export async function estadosDe(
   const yaAdoptadas = new Set<string>();
   /** Las que cambiaron de nombre: hay que escribirlas bajo el de ahora. */
   const mudadas = new Set<string>();
+  /**
+   * De qué nombre a qué nombre se mudó cada ficha, para mudar con ella lo que
+   * se guarda aparte por la identidad de la pieza. `pisar` es cuando bajo el
+   * nombre de ahora había una ficha de un archivo que ya no existe: lo suyo no
+   * vale más que lo de la pieza de verdad.
+   */
+  const mudanzas: Array<{ viejo: string; nuevo: string; pisar: boolean }> = [];
+
+  const compartenArchivos = (guardada: EstadoDePieza, archivos: string[]) =>
+    (normalizar(guardada).archivos ?? []).some((a) => archivos.includes(a));
+
+  /**
+   * Si una ficha huérfana es de esta pieza.
+   *
+   * Compartir un archivo alcanza **salvo cuando la pieza se partió en dos**:
+   * renombrar la V1 deja dos piezas que comparten archivos con la misma ficha,
+   * y se la llevaba la primera en el orden de Drive, aunque no tuviera la vuelta
+   * que el cliente aprobó. Ahí decide la última vuelta anotada —la más alta, que
+   * es la que se le entregó—: si la tiene otra pieza de ahora, la ficha es de
+   * esa. Si no la tiene nadie, vale la regla de siempre.
+   */
+  const esDeEsta = (guardada: EstadoDePieza, archivos: string[]) => {
+    if (!compartenArchivos(guardada, archivos)) return false;
+    const ultima = normalizar(guardada).archivos?.at(-1);
+    if (ultima === undefined || archivos.includes(ultima)) return true;
+    return !piezas.some((p) => p.archivos.includes(ultima));
+  };
 
   /**
    * La ficha de esta pieza, buscándola también con su nombre anterior.
@@ -318,22 +348,30 @@ export async function estadosDe(
    * guardado nombra alguno de los archivos que tengo ahora, es esta pieza y no
    * otra. Es la misma comprobación con la que más abajo se decide si una pieza
    * vuelve a empezar, usada para lo contrario: reconocerla.
+   *
+   * Por eso la ficha que ya está bajo este nombre gana solo si comparte algún
+   * archivo. Si no comparte ninguno —es de un archivo que ya no existe— y hay
+   * una huérfana que sí, la de verdad es la huérfana: quedarse con la del
+   * nombre hacía renacer en curso una pieza aprobada, y la aprobada, huérfana,
+   * se contaba además como entregada.
    */
   const laFicha = (id: string, archivos: string[]) => {
-    if (todo[id]) return todo[id];
+    const propia = todo[id];
+    if (propia && compartenArchivos(propia, archivos)) return propia;
 
     const vieja = huerfanas.find(
-      ([clave, guardada]) =>
-        !yaAdoptadas.has(clave) &&
-        (normalizar(guardada).archivos ?? []).some((a) => archivos.includes(a))
+      ([clave, guardada]) => !yaAdoptadas.has(clave) && esDeEsta(guardada, archivos)
     );
-    if (!vieja) return undefined;
+    // Sin huérfana que reclamar, la propia —si hay— sigue su camino: más abajo
+    // se decide si es de estos archivos o si la pieza vuelve a empezar.
+    if (!vieja) return propia;
 
     // La ficha se muda al nombre de ahora y la vieja se borra: dejar las dos
     // sería que la próxima lectura encontrara dos candidatas para lo mismo.
     yaAdoptadas.add(vieja[0]);
     mudadas.add(id);
     aGuardar[vieja[0]] = undefined;
+    mudanzas.push({ viejo: vieja[0], nuevo: id, pisar: Boolean(propia) });
     return vieja[1];
   };
 
@@ -392,6 +430,24 @@ export async function estadosDe(
   // ficha vieja se está borrando en la misma tanda, y no escribir la nueva
   // sería perder justo lo que esta mudanza viene a salvar.
   for (const id of mudadas) if (!(id in aGuardar)) aGuardar[id] = salida[id];
+
+  // **La fecha de publicación, el plazo y el responsable propios se mudan
+  // con la ficha.** Se guardan aparte, por la identidad de la pieza, y
+  // quedaban bajo el nombre viejo: la pieza caía en «sin fecha» y su plazo y su
+  // responsable volvían a heredarse de la carpeta, sin que nadie lo decidiera.
+  //
+  // Van **antes** que la ficha a propósito: si algo falla en el medio, la
+  // ficha sigue bajo el nombre viejo y la próxima lectura vuelve a intentar la
+  // mudanza entera. Al revés, la ficha ya estaría mudada y lo demás quedaría
+  // huérfano para siempre. Mudar dos veces no hace daño: la segunda no
+  // encuentra nada bajo el nombre viejo.
+  await Promise.all(
+    mudanzas.flatMap(({ viejo, nuevo, pisar }) => [
+      mudarPublicacion(viejo, nuevo, { pisar }),
+      mudarPlazo(viejo, nuevo, { pisar }),
+      mudarResponsable(viejo, nuevo, { pisar }),
+    ])
+  );
 
   // Se escribe solo cuando de verdad cambió algo, y todo junto.
   await escribir(aGuardar);

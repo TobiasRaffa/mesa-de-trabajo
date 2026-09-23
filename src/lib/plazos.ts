@@ -36,6 +36,27 @@ export async function plazoDe(id: string): Promise<number | undefined> {
   return typeof valor === "number" ? valor : undefined;
 }
 
+/**
+ * Pasa el plazo propio de una pieza a su nombre nuevo.
+ *
+ * Por lo mismo que `mudarPublicacion`: la identidad de la pieza cambia cuando
+ * se va la vuelta que le daba el nombre, y el plazo puesto a mano no puede
+ * quedarse atrás y volver a heredarse sin que nadie lo decida.
+ *
+ * Se escribe con `poner` dejando «debajo» la clave vieja: es la forma que
+ * tiene este almacén de guardar una y borrar la otra en una sola escritura.
+ */
+export async function mudarPlazo(
+  viejo: string,
+  nuevo: string,
+  { pisar = false }: { pisar?: boolean } = {}
+): Promise<void> {
+  const deAntes = await almacen.leerUno(viejo);
+  if (deAntes === undefined) return;
+  const yaTenia = pisar ? undefined : await almacen.leerUno(nuevo);
+  await almacen.poner(nuevo, yaTenia !== undefined ? yaTenia : deAntes, [viejo]);
+}
+
 export async function ponerPlazo(
   id: string,
   dias: number,

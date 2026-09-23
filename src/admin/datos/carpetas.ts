@@ -91,10 +91,11 @@ export async function carpetaParaFechar(
   const agrupadas = agruparVersiones(archivos);
   const conArchivos = conSusArchivos(carpetaId, agrupadas);
   const identidades = conArchivos.map((p) => p.id);
-  const [dias, guardados] = await Promise.all([
-    publicacionesDe(identidades),
-    estadosDe(carpetaId, conArchivos),
-  ]);
+  // `estadosDe` primero: si una pieza cambió de nombre, ahí se muda su ficha
+  // junto con su fecha. Leída en paralelo, la fecha aparecía perdida en esta
+  // pantalla hasta la próxima vez.
+  const guardados = await estadosDe(carpetaId, conArchivos);
+  const dias = await publicacionesDe(identidades);
 
   // **Lo que escribieron encima del archivo, en Drive.**
   //

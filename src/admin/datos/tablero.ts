@@ -311,8 +311,13 @@ async function ramaDelTablero(
   const agrupadas = agruparVersiones(archivos);
   const conArchivos = conSusArchivos(carpeta.id, agrupadas);
   const identidades = conArchivos.map((p) => p.id);
-  const [estados, propios, seFueron] = await Promise.all([
-    estadosDe(carpeta.id, conArchivos),
+  // **`estadosDe` va primero, y solo.** Cuando una pieza cambia de nombre muda
+  // su ficha —y su plazo propio— a la clave nueva, y lo hace en esta misma
+  // lectura. Leyendo en paralelo, las otras dos preguntas veían la foto de
+  // antes de la mudanza: la clave vieja contaba como una aprobada que se fue
+  // —la misma pieza, dos veces— y el plazo propio se perdía hasta recargar.
+  const estados = await estadosDe(carpeta.id, conArchivos);
+  const [propios, seFueron] = await Promise.all([
     plazosDe(identidades),
     // Aprobadas que ya no dejaron ni un archivo en la carpeta.
     aprobadasQueSeFueron(carpeta.id, [...identidades, ...archivos.map((a) => a.id)]),
@@ -324,8 +329,14 @@ async function ramaDelTablero(
   // el trabajo terminó: no es de nadie, ni siquiera de la columna de aprobados.
   const yaEntregadas = new Set(
     conArchivos
-      .filter(({ id, version }) =>
-        yaSeEntrego(estados[id].estado, estados[id].versionEntregada, version)
+      .filter(({ id }, i) =>
+        yaSeEntrego(
+          estados[id].estado,
+          estados[id].versionEntregada,
+          // Las vueltas que quedan, no la más alta: `conArchivos` sale de
+          // `agrupadas` en el mismo orden.
+          agrupadas[i].versiones.map((v) => v.numero)
+        )
       )
       .map(({ id }) => id)
   );
@@ -374,7 +385,12 @@ async function ramaDelTablero(
       return recordarSiHaceFalta(
         {
           piezaId: suya,
-          detalle: enPalabrasLoRevisado([{ nombre: pieza.titulo, version: ultima.numero }]),
+          // La vuelta que se le entregó, que es la que el cliente tiene
+          // delante: el plazo corre sobre esa. Una V3 subida y todavía sin
+          // entregar no es algo por lo que se le pueda insistir.
+          detalle: enPalabrasLoRevisado([
+            { nombre: pieza.titulo, version: estado.versionEntregada ?? ultima.numero },
+          ]),
           entregadaEl: estado.entregadaEl,
           dias: plazoQueCorre(propios[suya], dias, undefined),
           vence: venceLaPieza(estado.entregadaEl, propios[suya], dias),

@@ -332,8 +332,11 @@ async function archivosDeCarpeta(
   const conArchivos = conSusArchivos(carpetaId, agrupadas);
   const identidades = conArchivos.map((p) => p.id);
 
-  const [estados, dias, propios, responsables, escondidos] = await Promise.all([
-    estadosDe(carpetaId, conArchivos),
+  // `estadosDe` primero: si una pieza cambió de nombre, ahí se muda su ficha
+  // junto con la fecha, el plazo y el responsable propios. Leídos en paralelo,
+  // esta pantalla los mostraría perdidos hasta la próxima vez.
+  const estados = await estadosDe(carpetaId, conArchivos);
+  const [dias, propios, responsables, escondidos] = await Promise.all([
     publicacionesDe(identidades),
     plazosDe(identidades),
     responsablesDe(identidades),

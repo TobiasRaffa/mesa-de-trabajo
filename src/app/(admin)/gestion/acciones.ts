@@ -385,7 +385,11 @@ export async function pedirLinkDeCarpeta(carpetaId: string): Promise<
   { ok: true; token: string } | { ok: false; motivo: string }
 > {
   if (!(await puedoAlgunaDe(EN_CLIENTES))) return NO_ES_TUYO;
-  if (!(await esCarpetaMia(carpetaId))) {
+  // **Solo las de primer nivel**, aunque `esCarpetaMia` ya acepte las más
+  // hondas: la puerta del link (`entradaDe`/`puertaDe` en `lib/acceso`) busca
+  // la carpeta entre las hijas directas del cliente, así que un link de una
+  // subcarpeta más honda —o de la raíz— quedaría muerto apenas se lo manden.
+  if (!(await misCarpetas()).has(carpetaId)) {
     return { ok: false, motivo: "Esa carpeta no está adentro de la de un cliente." };
   }
   try {
@@ -828,7 +832,22 @@ export async function reabrirPieza(
       { tipo: "reabrir", por: firma }
     );
     if (!r.ok) return { abort: r.motivo };
-    return { commit: anotar({ ...actual, estado: r.pieza.estado }, "reabierta_por_agencia", firma) };
+    return {
+      commit: anotar(
+        {
+          ...actual,
+          estado: r.pieza.estado,
+          // **El plazo del cliente vuelve a correr desde hoy.** Reabierta, la
+          // pieza vuelve a esperarlo, y el vencimiento sale de `entregadaEl`:
+          // con la fecha de la entrega original quedaba vencida en el acto, el
+          // tablero la pintaba en rojo y salía el aviso de «venció». Las
+          // estadísticas ya cuentan la reapertura como un reloj nuevo.
+          entregadaEl: new Date().toISOString(),
+        },
+        "reabierta_por_agencia",
+        firma
+      ),
+    };
   });
   if ("abort" in cambio) return { ok: false, motivo: cambio.abort };
   let pieza = cambio.pieza;
@@ -940,6 +959,37 @@ async function identidadesDeLaCarpeta(carpetaId: string): Promise<string[]> {
   return conSusArchivos(carpetaId, agrupadas).map((p) => p.id);
 }
 
+/**
+ * Hasta dónde se baja juntando lo que queda debajo.
+ *
+ * El mismo tope con el que `lib/carpetas` reconoce una subcarpeta: lo que se
+ * puede configurar a mano tiene que poder volver a heredar cuando se pone un
+ * valor más arriba.
+ */
+const HONDURA_DE_LO_DE_ABAJO = 6;
+
+/**
+ * Todas las subcarpetas que cuelgan de una, a cualquier hondura, con sus
+ * piezas.
+ *
+ * **Bajaba un solo escalón**, y la regla de la herencia —lo de arriba borra lo
+ * de abajo— se cortaba ahí: poner el plazo o el responsable en el cliente o en
+ * «Banners» dejaba a «Banners / Septiembre» con el valor viejo, y nada en la
+ * pantalla explicaba de dónde salía.
+ */
+async function debajoDe(carpetaId: string, hondura: number): Promise<string[]> {
+  if (hondura >= HONDURA_DE_LO_DE_ABAJO) return [];
+  const hijas = await subcarpetasDe(carpetaId);
+  const deCadaUna = await Promise.all(
+    hijas.map(async (hija) => [
+      hija.id,
+      ...(await identidadesDeLaCarpeta(hija.id)),
+      ...(await debajoDe(hija.id, hondura + 1)),
+    ])
+  );
+  return deCadaUna.flat();
+}
+
 async function nivelReal(
   nivel: Nivel,
   id: string,
@@ -947,11 +997,10 @@ async function nivelReal(
 ): Promise<{ ok: true; debajo: string[] } | { ok: false; motivo: string }> {
   if (nivel === "cliente") {
     if (!(await esClienteReal(id))) return { ok: false, motivo: "Ese cliente no existe." };
-    const carpetas = await subcarpetasDe(id);
-    const piezas = await Promise.all(carpetas.map((c) => identidadesDeLaCarpeta(c.id)));
+    // Las piezas sueltas de la raíz también heredan del cliente.
     return {
       ok: true,
-      debajo: [...carpetas.map((c) => c.id), ...piezas.flat()],
+      debajo: [...(await identidadesDeLaCarpeta(id)), ...(await debajoDe(id, 0))],
     };
   }
 
@@ -959,7 +1008,10 @@ async function nivelReal(
     if (!(await esCarpetaMia(id))) {
       return { ok: false, motivo: "Esa carpeta no existe." };
     }
-    return { ok: true, debajo: await identidadesDeLaCarpeta(id) };
+    return {
+      ok: true,
+      debajo: [...(await identidadesDeLaCarpeta(id)), ...(await debajoDe(id, 1))],
+    };
   }
 
   if (!carpetaId || !(await esCarpetaMia(carpetaId))) {

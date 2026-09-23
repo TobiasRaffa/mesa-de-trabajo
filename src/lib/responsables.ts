@@ -34,6 +34,23 @@ export async function ponerResponsable(
   await almacen.poner(id, personaId, debajo);
 }
 
+/**
+ * Pasa el responsable propio de una pieza a su nombre nuevo.
+ *
+ * Igual que `mudarPlazo` y por lo mismo. «Nadie» (`null`) también se muda: es
+ * una decisión que alguien tomó, no la falta de una.
+ */
+export async function mudarResponsable(
+  viejo: string,
+  nuevo: string,
+  { pisar = false }: { pisar?: boolean } = {}
+): Promise<void> {
+  const deAntes = await almacen.leerUno(viejo);
+  if (deAntes === undefined) return;
+  const yaTenia = pisar ? undefined : await almacen.leerUno(nuevo);
+  await almacen.poner(nuevo, yaTenia !== undefined ? yaTenia : deAntes, [viejo]);
+}
+
 /** Quién lleva algo, mirando su nivel y después los de arriba. */
 export function responsableQueCorre(
   delArchivo: string | null | undefined,

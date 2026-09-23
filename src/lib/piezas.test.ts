@@ -10,7 +10,10 @@ const guardado = memoriaDePruebas.ver("piezas");
 // incluido— así que lo que pasa acá dice algo de lo que va a pasar de verdad.
 vi.mock("@/lib/almacen", async () => (await import("@/lib/almacen/enMemoria")).memoriaDePruebas);
 
-const { estadosDe, cambiarPieza, estadoDe } = await import("@/lib/piezas");
+const { estadosDe, cambiarPieza, estadoDe, aprobadasQueSeFueron } = await import("@/lib/piezas");
+const { publicacionesDe } = await import("@/lib/publicaciones");
+const { plazosDe } = await import("@/lib/plazos");
+const { responsablesDe } = await import("@/lib/responsables");
 import type { EstadoDePieza } from "@/lib/piezas";
 
 const CARPETA = "carpeta1";
@@ -31,7 +34,7 @@ function guardarPieza(parche: Partial<EstadoDePieza>) {
 }
 
 beforeEach(() => {
-  for (const k of Object.keys(guardado)) delete guardado[k];
+  memoriaDePruebas.vaciar();
 });
 
 describe("una pieza sigue siendo la misma mientras quede algo de ella", () => {
@@ -276,6 +279,84 @@ describe("la ficha sigue a la pieza cuando le cambia el nombre", () => {
 
     expect(r[CON_JPG].estado).toBe("en_curso");
     expect(r[CON_JPG].ronda).toBe(0);
+  });
+
+  it("la fecha de publicación, el plazo y el responsable propios se mudan con ella", async () => {
+    // **Se mudaba la ficha y nada más.** La fecha, el plazo y quién la lleva
+    // también se guardan por la identidad de la pieza, y quedaban bajo el
+    // nombre viejo: la pieza desaparecía del calendario —el de la agencia y el
+    // del cliente— sin aviso, y su plazo y su responsable volvían a heredarse.
+    guardarPieza({ archivos: ["pdf-viejo", "jpg-nuevo"] });
+    memoriaDePruebas.ver("publicaciones")[CON_PDF] = "2026-09-18";
+    memoriaDePruebas.ver("plazos")[CON_PDF] = { valor: 5 };
+    memoriaDePruebas.ver("responsables")[CON_PDF] = { valor: "persona-1" };
+
+    await estadosDe(CARPETA, [{ id: CON_JPG, archivos: ["jpg-nuevo"] }]);
+
+    expect(await publicacionesDe([CON_JPG])).toEqual({ [CON_JPG]: "2026-09-18" });
+    expect(await plazosDe([CON_JPG])).toEqual({ [CON_JPG]: 5 });
+    expect(await responsablesDe([CON_JPG])).toEqual({ [CON_JPG]: "persona-1" });
+    // Y no queda nada bajo el nombre viejo.
+    expect(await publicacionesDe([CON_PDF])).toEqual({});
+    expect(await plazosDe([CON_PDF])).toEqual({});
+    expect(await responsablesDe([CON_PDF])).toEqual({});
+  });
+
+  it("«sin asignar» también se muda: es una decisión, no la falta de una", async () => {
+    guardarPieza({ archivos: ["pdf-viejo", "jpg-nuevo"] });
+    memoriaDePruebas.ver("responsables")[CON_PDF] = { valor: null };
+
+    await estadosDe(CARPETA, [{ id: CON_JPG, archivos: ["jpg-nuevo"] }]);
+
+    expect(await responsablesDe([CON_JPG])).toEqual({ [CON_JPG]: null });
+  });
+
+  it("gana la ficha que comparte archivos, no una vieja que se llama igual", async () => {
+    // Bajo el nombre nuevo había quedado la ficha de un archivo que ya no
+    // existe. Se usaba esa: la pieza aprobada renacía en curso y, como la
+    // ficha de verdad quedaba huérfana y aprobada, contaba además como
+    // entregada. Dos veces, y sin la aprobación.
+    guardado[CON_JPG] = {
+      carpetaId: CARPETA,
+      estado: "final",
+      ronda: 0,
+      rondasExtra: 0,
+      cambios: [],
+      enviada: false,
+      mudada: false,
+      archivos: ["un-archivo-que-ya-no-esta"],
+      historia: [],
+    };
+    guardarPieza({ archivos: ["pdf-viejo", "jpg-nuevo"], versionEntregada: 2 });
+    memoriaDePruebas.ver("publicaciones")[CON_JPG] = "2025-01-01";
+    memoriaDePruebas.ver("publicaciones")[CON_PDF] = "2026-09-18";
+
+    const r = await estadosDe(CARPETA, [{ id: CON_JPG, archivos: ["jpg-nuevo"] }]);
+
+    expect(r[CON_JPG].estado).toBe("final");
+    expect(r[CON_JPG].versionEntregada).toBe(2);
+    expect(guardado[CON_PDF], "la de verdad se mudó").toBeUndefined();
+    expect(await aprobadasQueSeFueron(CARPETA, [CON_JPG, "jpg-nuevo"])).toBe(0);
+    // La fecha que vale es la de la pieza de verdad, no la de la ficha muerta.
+    expect(await publicacionesDe([CON_JPG])).toEqual({ [CON_JPG]: "2026-09-18" });
+  });
+
+  it("si la pieza se parte en dos, la ficha va con la que tiene la última vuelta anotada", async () => {
+    // Se renombró `stickers.pdf` (la V1) a `afiche.pdf`: el grupo se parte en
+    // dos piezas y las dos comparten un archivo con la ficha. Se la llevaba la
+    // primera en el orden de Drive —el afiche—, que ni siquiera tiene la V2 que
+    // el cliente aprobó.
+    guardarPieza({ archivos: ["pdf-viejo", "jpg-nuevo"], versionEntregada: 2 });
+    const AFICHE = "carpeta1::afiche.pdf";
+
+    const r = await estadosDe(CARPETA, [
+      { id: AFICHE, archivos: ["pdf-viejo"], version: 1 },
+      { id: CON_JPG, archivos: ["jpg-nuevo"], version: 2 },
+    ]);
+
+    expect(r[CON_JPG].estado).toBe("final");
+    expect(r[CON_JPG].versionEntregada).toBe(2);
+    expect(r[AFICHE].estado, "el afiche nace limpio").toBe("en_curso");
   });
 });
 

@@ -65,6 +65,29 @@ export async function publicacionesDe(archivos: string[]): Promise<Record<string
 }
 
 /**
+ * Pasa la fecha de una pieza a su nombre nuevo.
+ *
+ * **La fecha va por la identidad de la pieza, y la identidad puede cambiar**:
+ * sale del nombre de la vuelta más baja, así que borrar `stickers.pdf` y dejar
+ * `V2 stickers.jpg` la muda de `::stickers.pdf` a `::stickers.jpg`. La ficha se
+ * muda en `estadosDe`; sin esto la fecha quedaba bajo el nombre viejo y la
+ * pieza caía en «sin fecha», del calendario de la agencia y del del cliente.
+ *
+ * No pisa una fecha que el nombre nuevo ya tenga, salvo con `pisar`: es cuando
+ * lo que había bajo el nombre nuevo era de un archivo que ya no existe.
+ */
+export async function mudarPublicacion(
+  viejo: string,
+  nuevo: string,
+  { pisar = false }: { pisar?: boolean } = {}
+): Promise<void> {
+  const dia = await almacen.uno(viejo);
+  if (dia === undefined) return;
+  await almacen.cambiar(nuevo, (actual) => (pisar ? dia : (actual ?? dia)));
+  await almacen.borrar(viejo);
+}
+
+/**
  * Guarda de una sola vez las fechas de una carpeta.
  *
  * Es una sola operación y no una por pieza porque así se guarda el calendario:

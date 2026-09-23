@@ -61,16 +61,20 @@ export async function devolverDesdeFinales(
   carpetaDeTrabajo: string
 ): Promise<ResultadoDeMudanza> {
   try {
-    const finales = await carpetaDeFinales(clienteId);
-    if (!finales) {
-      return { movida: false, motivo: "El cliente no tiene «Entregas finales»." };
-    }
-
+    // **Primero dónde está el archivo, después la carpeta de finales.** Al
+    // revés, un archivo que alguien ya devolvió a mano —y después borró o
+    // renombró «Entregas finales»— daba «no se pudo», y la pieza reabierta
+    // quedaba marcada como mudada: el portal la escondía.
     const datos = await metadatosArchivo(archivoId);
     const padres = datos.parents ?? [];
 
     // Ya está donde tiene que estar: alguien lo movió a mano mientras tanto.
     if (padres.includes(carpetaDeTrabajo)) return { movida: true };
+
+    const finales = await carpetaDeFinales(clienteId);
+    if (!finales) {
+      return { movida: false, motivo: "El cliente no tiene «Entregas finales»." };
+    }
 
     if (!padres.includes(finales)) {
       return { movida: false, motivo: "El archivo ya no está en «Entregas finales»." };

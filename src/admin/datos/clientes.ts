@@ -74,9 +74,13 @@ export async function miCliente(id: string): Promise<Cliente | null> {
  * una carpeta de Drive. Sin esto, una carpeta ajena pasaba la validación de
  * «existe» y lo demás se deducía del servidor, que es justamente lo correcto
  * salvo que falte preguntar de quién es.
+ *
+ * Vale a cualquier hondura que muestre el árbol, y para la carpeta del cliente
+ * misma. Se pregunta **como agencia**: la gestión trabaja también sobre lo que
+ * escondió y sobre «Facturas», que el cliente no ve.
  */
 export async function clienteDeMiCarpeta(carpetaId: string): Promise<Cliente | null> {
-  const cliente = await clienteDeCarpeta(carpetaId);
+  const cliente = await clienteDeCarpeta(carpetaId, { comoAgencia: true });
   if (!cliente) return null;
   return recortaA(await miAlcance(), [cliente]).length === 1 ? cliente : null;
 }
