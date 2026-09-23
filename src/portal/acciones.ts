@@ -21,7 +21,7 @@ import {
   RONDAS_INCLUIDAS_POR_DEFECTO,
   type Evento,
 } from "@/dominio/pieza";
-import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { agruparVersiones, conSusArchivos, hastaLoEntregado } from "@/lib/versiones";
 import { comoFirmaElCliente, enPalabrasLoRevisado } from "@/dominio/historia";
 import { idDeDrive, vieneDeDrive } from "@/dominio/comentarios";
 import { entradaDe } from "@/lib/acceso";
@@ -198,7 +198,7 @@ async function piezaDeLaCarpeta(
       if (`${carpetaId}::${pieza.base}` !== piezaId) continue;
       // La vuelta que el cliente tiene delante es la que se le entregó, no la
       // última que hay en Drive: el portal le muestra hasta esa.
-      return laQueMira(pieza, (await estadoDe(carpetaId, piezaId)).versionEntregada);
+      return laQueMira(pieza, await estadoDe(carpetaId, piezaId));
     }
     return null;
   } catch {
@@ -233,13 +233,13 @@ type LaQueMira = {
 
 function laQueMira<T extends { name: string; id: string }>(
   pieza: { versiones: Array<{ numero: number; archivo: T }> },
-  /** La vuelta que se le entregó. Sin ella, la última que hay. */
-  entregada?: number
+  /** Lo que se le entregó. Sin nada, la última que hay. */
+  entregado: { versionEntregada?: number; archivoEntregado?: string } = {}
 ): LaQueMira {
-  const hasta =
-    entregada === undefined
-      ? pieza.versiones
-      : pieza.versiones.filter((v) => v.numero <= entregada);
+  const hasta = hastaLoEntregado(pieza.versiones, {
+    version: entregado.versionEntregada,
+    archivo: entregado.archivoEntregado,
+  });
   // Mismo criterio que el portal: si la entregada ya no está y solo quedan
   // vueltas más nuevas, se nombra la que hay antes que ninguna.
   const lista = hasta.length > 0 ? hasta : pieza.versiones;
@@ -491,7 +491,7 @@ export async function enviarRevision(
   const laVuelta: Record<string, { nombre: string; version: number }> = Object.fromEntries(
     agrupadas.map((pieza) => {
       const id = `${carpetaId}::${pieza.base}`;
-      const { nombre, version } = laQueMira(pieza, estados[id]?.versionEntregada);
+      const { nombre, version } = laQueMira(pieza, estados[id]);
       return [id, { nombre, version }];
     })
   );

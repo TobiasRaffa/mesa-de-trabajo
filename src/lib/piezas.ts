@@ -81,6 +81,18 @@ export type EstadoDePieza = {
    */
   versionEntregada?: number;
   /**
+   * El archivo de Drive que se le entregó, con su identificador.
+   *
+   * **El número de vuelta sale del nombre, y el nombre lo cambia cualquiera.**
+   * Con solo `versionEntregada`, un segundo archivo que dijera ser la misma
+   * vuelta —«9304.jpeg» y «9304 V1.jpeg», o una V2 vuelta a subir— podía
+   * reemplazar en el portal al que se entregó, sin que nadie lo entregara. El
+   * identificador de Drive no cambia al renombrar: es lo que se le mandó.
+   * Las piezas entregadas antes de que existiera no lo tienen, y para esas
+   * sigue valiendo el número.
+   */
+  archivoEntregado?: string;
+  /**
    * El archivo de Drive que se mudó a «Entregas finales», si se mudó.
    *
    * Hace falta porque el identificador de la pieza ya no es el de un archivo:
@@ -255,6 +267,8 @@ function normalizar(v: EstadoDePieza): EstadoDePieza {
       typeof crudo.versionEntregada === "number" && crudo.versionEntregada >= 1
         ? crudo.versionEntregada
         : undefined,
+    archivoEntregado:
+      typeof crudo.archivoEntregado === "string" ? crudo.archivoEntregado : undefined,
     archivoMudado:
       typeof crudo.archivoMudado === "string" ? crudo.archivoMudado : undefined,
     archivos: Array.isArray(crudo.archivos)

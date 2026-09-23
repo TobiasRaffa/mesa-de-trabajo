@@ -335,6 +335,95 @@ export function agruparVersiones<T extends ConNombre>(archivos: T[]): Array<Agru
   return orden.map((clave) => porBase.get(clave)!);
 }
 
+/**
+ * Las vueltas que el cliente puede ver: **hasta la que se le entregó**.
+ *
+ * Entregar es lo que decide qué ve el cliente. Si el equipo sube la V3
+ * mientras el cliente revisa la V2, la V3 no aparece hasta que alguien la
+ * entregue.
+ *
+ * **Primero por el archivo, después por el número.** El número sale del
+ * nombre, y dos archivos pueden decir el mismo —«9304.jpeg» y «9304 V1.jpeg»,
+ * o una V2 vuelta a subir—: con el número solo, el que se mostraba podía ser
+ * uno que nadie entregó. Si se sabe cuál archivo se entregó y sigue ahí, se
+ * muestra ese y lo anterior. Las piezas entregadas antes de que eso se
+ * guardara, o cuyo archivo ya no está, siguen yendo por el número.
+ *
+ * Puede devolver una lista vacía —la entregada ya no está y todo lo que queda
+ * es más nuevo—; qué hacer entonces lo decide quien pregunta.
+ */
+export function hastaLoEntregado<T extends { id: string }>(
+  versiones: Array<{ numero: number; archivo: T }>,
+  entregado: { version?: number; archivo?: string }
+): Array<{ numero: number; archivo: T }> {
+  const exacta = entregado.archivo
+    ? versiones.find((v) => v.archivo.id === entregado.archivo)
+    : undefined;
+  if (exacta) return versiones.filter((v) => v === exacta || v.numero < exacta.numero);
+  if (entregado.version === undefined) return versiones;
+  return versiones.filter((v) => v.numero <= entregado.version!);
+}
+
+/**
+ * Lo raro en los nombres de una pieza: lo que conviene mirar antes de entregar.
+ *
+ * **La aplicación entiende las vueltas por el nombre, y no adivina.** Eso la
+ * hace predecible, y también quiere decir que un nombre escrito de otra forma
+ * cambia lo que se muestra sin que nadie lo note. Esto no corrige nada —el
+ * nombre es lo que manda, y cambiar cómo se lee movería piezas que ya tienen
+ * cosas anotadas—: dice lo que leyó, para que lo arregle quien nombra.
+ *
+ *   - **Vuelta repetida**: dos archivos dicen ser la misma vuelta. Uno solo
+ *     es el que se muestra y se entrega, y cuál depende del orden.
+ *   - **Salto**: la pieza arranca en la V3 o más, o pasa de la V1 a la V4. A
+ *     veces es que borraron las anteriores; otras, que el número es parte
+ *     del nombre —«Hario V60», «V4x4 camioneta»— y se leyó como una vuelta.
+ */
+export type RarezasDeNombres = {
+  repetida?: { numero: number; nombres: string[]; tomada: string };
+  salto?: { desde: number | null; hasta: number; nombre: string };
+};
+
+/** Desde cuánto un salto de números deja de ser un descuido y pide mirarlo. */
+const SALTO_RARO = 3;
+
+export function rarezasDeNombres(
+  versiones: Array<{ numero: number; archivo: ConNombre }>
+): RarezasDeNombres {
+  const salida: RarezasDeNombres = {};
+
+  for (let i = 0; i < versiones.length && !salida.repetida; i++) {
+    const iguales = versiones.filter((v) => v.numero === versiones[i].numero);
+    if (iguales.length > 1) {
+      salida.repetida = {
+        numero: versiones[i].numero,
+        nombres: iguales.map((v) => v.archivo.name),
+        // Vienen ordenadas por número y, a igual número, de forma estable: la
+        // que queda última es la que la aplicación toma como esa vuelta.
+        tomada: iguales[iguales.length - 1].archivo.name,
+      };
+    }
+  }
+
+  const primera = versiones[0];
+  if (primera && primera.numero >= SALTO_RARO) {
+    salida.salto = { desde: null, hasta: primera.numero, nombre: primera.archivo.name };
+  } else {
+    for (let i = 1; i < versiones.length; i++) {
+      if (versiones[i].numero - versiones[i - 1].numero >= SALTO_RARO) {
+        salida.salto = {
+          desde: versiones[i - 1].numero,
+          hasta: versiones[i].numero,
+          nombre: versiones[i].archivo.name,
+        };
+        break;
+      }
+    }
+  }
+
+  return salida;
+}
+
 // ---------------------------------------------------------------------------
 
 /**

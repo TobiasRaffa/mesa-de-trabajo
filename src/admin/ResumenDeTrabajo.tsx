@@ -45,6 +45,7 @@ import { DetalleDePieza } from "@/admin/DetalleDePieza";
 import { ConfigurarPieza } from "@/admin/ConfigurarPieza";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { Entregar } from "@/admin/Entregar";
+import { RarezasDeNombres } from "@/admin/RarezasDeNombres";
 import { Estado } from "@/ui/Estado";
 import { Miniatura } from "@/ui/Miniatura";
 import { Boton, BotonEnlace } from "@/ui/Boton";
@@ -599,6 +600,11 @@ function Ficha({
             mayor. Si solo la renombraste, ignoralo.
           </p>
         )}
+
+        <RarezasDeNombres
+          archivo={p}
+          clase="border-l-4 border-alerta bg-alerta-tenue px-3 py-2 text-menudo font-semibold text-alerta"
+        />
 
         {/*
           **La franja: quién, cuándo y en qué anda, de un vistazo.** Es lo que

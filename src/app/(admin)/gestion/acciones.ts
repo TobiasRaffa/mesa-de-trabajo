@@ -606,6 +606,11 @@ export async function entregarCarpeta(
   // En qué vuelta va cada pieza, según el nombre del archivo más alto que hay
   // en Drive. Es lo que se le entrega, y lo que queda anotado como entregado.
   const versionDe = new Map(conArchivos.map((p) => [p.id, p.version]));
+  // Y **cuál archivo** es esa vuelta: el número sale del nombre, y otro
+  // archivo puede decir el mismo número. Lo entregado es este.
+  const archivoDe = new Map(
+    conArchivos.map((p, i) => [p.id, agrupadas[i].versiones.at(-1)?.archivo.id])
+  );
 
   // El plazo se guarda **antes** de entregar: el vencimiento se calcula desde
   // la fecha de entrega con los días que corren, y si se guardara después la
@@ -683,6 +688,7 @@ export async function entregarCarpeta(
             // con una versión de más el tablero ofrecía entregarle el mismo
             // archivo que acababa de devolver.
             versionEntregada: versionDe.get(id),
+            archivoEntregado: archivoDe.get(id),
             cambios: [],
             enviada: false,
           },

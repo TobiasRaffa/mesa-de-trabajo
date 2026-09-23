@@ -26,7 +26,7 @@ import {
 import { piezasDeLaCarpeta, estadosDe, type EstadoDePieza } from "@/lib/piezas";
 import { conLosComentariosDelCliente } from "@/lib/comentariosDelCliente";
 import { fechaDeDia, publicacionesDe } from "@/lib/publicaciones";
-import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { agruparVersiones, conSusArchivos, hastaLoEntregado } from "@/lib/versiones";
 import { RONDAS_INCLUIDAS_POR_DEFECTO } from "@/dominio/pieza";
 import { clientePorId } from "@/lib/clientes";
 import { calcularVencimiento } from "@/lib/fechas";
@@ -385,9 +385,12 @@ export async function portalDelCliente(
           // nadie la entregara— como si fuera la pieza, y era la que aprobaba.
           // La vuelta nueva aparece cuando alguien la entrega. En «Entregas
           // finales» no hay nada que filtrar: lo que está ahí, está.
-          const tope = entregas ? undefined : guardado.versionEntregada;
-          const entregadas =
-            tope === undefined ? visibles : visibles.filter((v) => v.numero <= tope);
+          const entregadas = entregas
+            ? visibles
+            : hastaLoEntregado(visibles, {
+                version: guardado.versionEntregada,
+                archivo: guardado.archivoEntregado,
+              });
           // Si la vuelta entregada ya no está en Drive y todo lo que queda es
           // más nuevo —un caso raro—, se muestra lo que hay antes que dejar la
           // pieza sin archivo. Lo que se puede mirar, siempre.

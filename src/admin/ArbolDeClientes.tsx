@@ -45,6 +45,7 @@ import { ConfiguracionDeCliente } from "@/admin/ConfiguracionDeCliente";
 import { ConfiguracionDeCarpeta } from "@/admin/ConfiguracionDeCarpeta";
 import { ConfiguracionDeArchivo } from "@/admin/ConfiguracionDeArchivo";
 import { Entregar } from "@/admin/Entregar";
+import { RarezasDeNombres } from "@/admin/RarezasDeNombres";
 import { ResumenDeTrabajo, type TrabajoParaMirar } from "@/admin/ResumenDeTrabajo";
 import { Visibilidad } from "@/admin/Visibilidad";
 import { Estado } from "@/ui/Estado";
@@ -1176,6 +1177,21 @@ function FilaArchivo({
               vuelta atrasada
             </span>
           )}
+          {archivo.entregadoPerdido && (
+            <span className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta">
+              falta lo entregado
+            </span>
+          )}
+          {archivo.vueltaRepetida && (
+            <span className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta">
+              vuelta repetida
+            </span>
+          )}
+          {archivo.saltoDeVuelta && (
+            <span className="bg-alerta-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-alerta">
+              número raro
+            </span>
+          )}
           {/* **Lo que corre, y nada más.** El renglón decía las dos cuentas a
               la vez —«7 días · vence el 20 sept»— y son la misma: el plazo es
               con lo que se calcula el vencimiento. Mientras la pieza está de
@@ -1216,6 +1232,7 @@ function FilaArchivo({
             mayor.
           </p>
         )}
+        <RarezasDeNombres archivo={archivo} clase="mt-1 text-micro text-alerta" />
       </Fila>
 
       {config && (

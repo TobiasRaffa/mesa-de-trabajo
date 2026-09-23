@@ -36,7 +36,7 @@ import {
 } from "@/lib/responsables";
 import { diaDe, publicacionesDe } from "@/lib/publicaciones";
 import { calcularVencimiento } from "@/lib/fechas";
-import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
+import { agruparVersiones, conSusArchivos, rarezasDeNombres, type RarezasDeNombres } from "@/lib/versiones";
 import {
   esperaAlCliente,
   hayAlgoParaEntregar,
@@ -144,6 +144,19 @@ export type NodoArchivo = {
    * distinto del que estaba revisando, sin que nadie se entere.
    */
   comparteNombre?: boolean;
+  /** Dos archivos de esta pieza dicen ser la misma vuelta. */
+  vueltaRepetida?: RarezasDeNombres["repetida"];
+  /** Los números de vuelta saltan de una forma que conviene mirar. */
+  saltoDeVuelta?: RarezasDeNombres["salto"];
+  /**
+   * El archivo que se le entregó al cliente ya no es parte de esta pieza, y el
+   * cliente todavía está revisando.
+   *
+   * Se renombró, se movió o se borró en Drive. El portal no puede mostrarle
+   * lo que se le entregó y le muestra la vuelta anterior que quede, así que
+   * lo que tiene delante ya no es lo que se le mandó.
+   */
+  entregadoPerdido?: boolean;
   /** Si el cliente lo ve. Se apaga y se prende igual que una carpeta. */
   visible: boolean;
   /**
@@ -364,6 +377,7 @@ async function archivosDeCarpeta(
     const quien = responsableQueCorre(propio, heredado.responsable, undefined);
 
     const suyos = pieza.versiones.map((v) => v.archivo.id);
+    const rarezas = rarezasDeNombres(pieza.versiones);
 
     // Cuál se tocó al final en Drive. Si no es la vuelta más alta, alguien
     // subió con un número que ya estaba superado.
@@ -388,6 +402,14 @@ async function archivosDeCarpeta(
           ? { subida: ultimaTocada.archivo.name, actual: ultima.name }
           : undefined,
       comparteNombre: pieza.comparteNombre || undefined,
+      vueltaRepetida: rarezas.repetida,
+      saltoDeVuelta: rarezas.salto,
+      entregadoPerdido:
+        Boolean(estado.archivoEntregado) &&
+        esperaAlCliente(estado) &&
+        !suyos.includes(estado.archivoEntregado!)
+          ? true
+          : undefined,
       // Si alguna vuelta está escondida, la pieza se muestra como escondida:
       // mitad visible y mitad no es un estado que nadie quiso.
       visible: !suyos.some((a) => escondidos.has(a)),
