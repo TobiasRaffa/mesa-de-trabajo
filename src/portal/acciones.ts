@@ -85,12 +85,18 @@ async function quienEntro(carpetaId: string) {
 
   // Entró por el link de una carpeta sola: solo esa carpeta, y lo que cuelgue
   // de ella. Con el identificador de otra carpeta del mismo cliente, no.
-  if (
-    entrada.carpeta &&
-    entrada.carpeta !== carpetaId &&
-    (await cadenaHasta(carpetaId, entrada.carpeta)).length === 0
-  ) {
-    return null;
+  //
+  // **Cualquiera de las carpetas cuyo link abrió, no solo la primera.** Con
+  // dos links del mismo cliente en el navegador —uno por mes es lo normal—,
+  // la segunda carpeta abría y todas sus acciones contestaban que no existía.
+  if (entrada.carpeta) {
+    const suyas = entrada.carpetas ?? [entrada.carpeta];
+    let alcanza = suyas.includes(carpetaId);
+    for (const suya of suyas) {
+      if (alcanza) break;
+      alcanza = (await cadenaHasta(carpetaId, suya)).length > 0;
+    }
+    if (!alcanza) return null;
   }
 
   try {
@@ -136,12 +142,37 @@ const DESDE_EL_PORTAL: Partial<Record<Evento["tipo"], Hito | null>> = {
   // su cuenta, marca `enviada`, anota qué se pidió y avisa.
 };
 
+/**
+ * Lo que vuelve al navegador de una pieza: **lo que la pantalla usa, nada más**.
+ *
+ * Se devolvía la ficha entera, y la respuesta de una acción se lee en la
+ * pestaña Red: viajaban la historia —con el nombre propio de quien del equipo
+ * hizo cada cosa y el motivo crudo de un error de Drive— y los ids de todas
+ * las vueltas, incluida la que todavía no se entregó y que `/api/archivo`
+ * sirve con solo pedirla. Es el mismo cuidado que ya tiene `PiezaDeCarpeta`
+ * para lo que llega con la página.
+ */
+export type PiezaParaElCliente = Pick<
+  EstadoDePieza,
+  "estado" | "ronda" | "rondasExtra" | "cambios" | "enviada"
+>;
+
+function paraElCliente(p: EstadoDePieza): PiezaParaElCliente {
+  return {
+    estado: p.estado,
+    ronda: p.ronda,
+    rondasExtra: p.rondasExtra,
+    cambios: p.cambios,
+    enviada: p.enviada,
+  };
+}
+
 export type RespuestaDePieza =
-  | { ok: true; pieza: EstadoDePieza }
+  | { ok: true; pieza: PiezaParaElCliente }
   | { ok: false; motivo: string };
 
 export type RespuestaDeCarpeta =
-  | { ok: true; cuantas: number; piezas: Record<string, EstadoDePieza> }
+  | { ok: true; cuantas: number; piezas: Record<string, PiezaParaElCliente> }
   | { ok: false; motivo: string };
 
 export type RespuestaDeChat =
@@ -334,7 +365,7 @@ export async function moverPieza(
     });
   }
 
-  return { ok: true, pieza };
+  return { ok: true, pieza: paraElCliente(pieza) };
 }
 
 /**
@@ -404,7 +435,7 @@ export async function guardarCambiosDePieza(
   });
 
   if ("abort" in cambio) return { ok: false, motivo: cambio.abort };
-  return { ok: true, pieza: cambio.pieza };
+  return { ok: true, pieza: paraElCliente(cambio.pieza) };
 }
 
 /**
@@ -533,7 +564,18 @@ export async function enviarRevision(
   // **Cuántas viajaron de verdad.** Sin este número la pantalla contestaba
   // «Enviamos la revisión al equipo» pasara lo que pasara, incluso cuando el
   // dominio no había cerrado ninguna vuelta y no se había avisado a nadie.
-  return { ok: true, cuantas: revisadas.length, piezas: { ...estados, ...aGuardar } };
+  //
+  // **Vuelven solo las que se cerraron.** Volvían también `estados`, que es
+  // la carpeta entera —lo escondido, lo que no se entregó, lo que no es
+  // imagen—, con el nombre de cada archivo en la clave. La pantalla solo
+  // refresca las que cambiaron; las demás se quedan como estaban.
+  return {
+    ok: true,
+    cuantas: revisadas.length,
+    piezas: Object.fromEntries(
+      Object.entries(aGuardar).map(([id, p]) => [id, paraElCliente(p)])
+    ),
+  };
 }
 
 // ---------------------------------------------------------------------------

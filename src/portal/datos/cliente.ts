@@ -153,12 +153,30 @@ const HONDURA = 6;
  * Hacerlo navegar carpetas es ponerle entre él y el trabajo la parte de Drive
  * que el portal vino a sacar del medio. Con el camino en el nombre no se pierde
  * de dónde salió cada cosa, y no hay nada que aprender.
+ *
+ * Cada carpeta lleva además **los ids de las de arriba** y **el plazo que le
+ * toca**. Los ids, porque el camino son nombres y Drive deja dos hermanas con
+ * el mismo: comparando nombres, el link de una «Logos» mostraba lo de adentro
+ * de la otra. El plazo, porque se hereda escalón por escalón como en el
+ * tablero: mirando solo la carpeta y el cliente, el puesto en una carpeta del
+ * medio no contaba y el cliente veía otro vencimiento que la agencia.
  */
 async function carpetasVisiblesBajo(
   raiz: string,
   camino: string[],
-  hondura: number
-): Promise<Array<{ id: string; name: string; webViewLink?: string; camino: string[] }>> {
+  hondura: number,
+  ancestros: string[],
+  diasHeredados: number | undefined
+): Promise<
+  Array<{
+    id: string;
+    name: string;
+    webViewLink?: string;
+    camino: string[];
+    ancestros: string[];
+    dias: number | undefined;
+  }>
+> {
   if (hondura >= HONDURA) return [];
 
   const hijas = await soloLoVisible(await subcarpetasDe(raiz));
@@ -166,12 +184,19 @@ async function carpetasVisiblesBajo(
   const salida = await Promise.all(
     hijas.map(async (hija) => {
       const suCamino = [...camino, hija.name];
-      const nietas = await carpetasVisiblesBajo(hija.id, suCamino, hondura + 1).catch(
+      const dias = (await plazoDe(hija.id)) ?? diasHeredados;
+      const nietas = await carpetasVisiblesBajo(
+        hija.id,
+        suCamino,
+        hondura + 1,
+        [...ancestros, hija.id],
+        dias
+      ).catch(
         // Una subcarpeta que Drive no contesta no puede tumbar la pantalla
         // entera: se pierde esa rama, no el portal.
         () => []
       );
-      return [{ ...hija, camino: suCamino }, ...nietas];
+      return [{ ...hija, camino: suCamino, ancestros, dias }, ...nietas];
     })
   );
 
@@ -206,18 +231,26 @@ export async function portalDelCliente(
   const conDrive = (await clientePorId(raiz))?.verEnDrive ?? false;
   const siDrive = (url?: string) => (conDrive ? url : undefined);
 
-  const todas = await carpetasVisiblesBajo(raiz, [], 0);
   const diasDelCliente = await plazoDe(raiz);
+  const todas = await carpetasVisiblesBajo(raiz, [], 0, [], diasDelCliente);
 
   // El link de una carpeta muestra esa y lo que tenga adentro, no el resto.
+  // Por id y no por nombre: ver `carpetasVisiblesBajo`.
   const elegidas = soloEsta
-    ? todas.filter((c) => c.id === soloEsta || perteneceA(c, todas, soloEsta))
+    ? todas.filter((c) => c.id === soloEsta || c.ancestros.includes(soloEsta))
     : todas;
 
   // La carpeta del cliente también puede tener archivos sueltos. Antes no se
   // miraban, así que un archivo dejado ahí no lo veía nadie.
   const conLaRaiz = [
-    { id: raiz, name: cliente.name, webViewLink: cliente.webViewLink, camino: [] as string[] },
+    {
+      id: raiz,
+      name: cliente.name,
+      webViewLink: cliente.webViewLink,
+      camino: [] as string[],
+      ancestros: [] as string[],
+      dias: diasDelCliente,
+    },
     ...elegidas,
   ];
   const aMirar = soloEsta ? elegidas : conLaRaiz;
@@ -230,19 +263,19 @@ export async function portalDelCliente(
 
       // Incluye las que ya se mudaron a «Entregas finales»: aprobar no puede
       // costarle al cliente perder de vista lo que acaba de aprobar.
-      const enLaCarpeta = (await piezasDeLaCarpeta(carpeta.id)).filter((a) =>
-        MOSTRABLES.test(a.mimeType)
-      );
-
-      // Un archivo se puede apagar solo, sin apagar su carpeta. Se filtra acá
-      // y además no se sirve: la pantalla no es el permiso, pero tampoco puede
-      // ofrecer algo que después va a dar «no encontrado».
-      const escondidos = await escondidosEntre(enLaCarpeta.map((a) => a.id));
-      const archivos = enLaCarpeta.filter((a) => !escondidos.has(a.id));
+      const todos = await piezasDeLaCarpeta(carpeta.id);
 
       // «9304.jpeg» y «9304 V2.jpeg» son una sola pieza en dos vueltas, no
       // dos piezas. La regla vive en `versiones.ts` y está probada aparte.
-      const agrupadas = agruparVersiones(archivos);
+      //
+      // **Se agrupa todo, y recién después se decide qué se muestra.** Se
+      // agrupaba después de sacar lo escondido y lo que no es imagen ni PDF, y
+      // como la identidad sale de la vuelta más baja, con un «logo.ai» de V1 la
+      // pieza se llamaba distinto acá que en gestión: el cliente no podía
+      // aprobarla, no veía su fecha, y `estadosDe` —que escribe— mudaba la
+      // ficha de un nombre al otro en cada visita, o la reiniciaba si todas
+      // las vueltas que conocía estaban escondidas.
+      const agrupadas = agruparVersiones(todos);
 
       // Todo lo anotado sobre el trabajo va por la identidad de la pieza, no
       // por el archivo: subir una vuelta nueva no puede hacer desaparecer los
@@ -251,11 +284,14 @@ export async function portalDelCliente(
       const identidades = conArchivos.map((p) => p.id);
       const entregas = esCarpetaDeEntregas(carpeta.name);
 
-      const [dias, deLaBase, propios, diasDeLaCarpeta] = await Promise.all([
+      const [dias, deLaBase, propios, escondidos] = await Promise.all([
         publicacionesDe(identidades),
         estadosDe(carpeta.id, conArchivos),
         plazosDe(identidades),
-        plazoDe(carpeta.id),
+        // Un archivo se puede apagar solo, sin apagar su carpeta. Se filtra
+        // abajo y además no se sirve: la pantalla no es el permiso, pero
+        // tampoco puede ofrecer algo que después va a dar «no encontrado».
+        escondidosEntre(todos.map((a) => a.id)),
       ]);
 
       // **Lo que el cliente escribió encima del archivo, en Drive, es un
@@ -310,9 +346,26 @@ export async function portalDelCliente(
         entregas ||
         ((p.estado !== "en_curso" || p.entregadaEl !== undefined) && !p.mudada);
 
+      // Y lo que se puede mirar: solo imágenes y PDF. Se filtra por vuelta, con
+      // la pieza ya armada; una que no tiene ninguna que se pueda mirar no se
+      // muestra.
+      //
+      // **Si alguna vuelta está escondida, la pieza entera queda afuera**, que
+      // es como la ve gestión. Esconder apaga los archivos que hay en ese
+      // momento, así que la V2 subida después quedaba visible, y el portal la
+      // mostraba sola —con su fecha— mientras gestión decía que estaba oculta.
       const aLaVista = agrupadas
-        .map((pieza, i) => ({ pieza, suya: identidades[i] }))
-        .filter(({ suya }) => seMuestra(estados[suya]));
+        .map((pieza, i) => ({
+          pieza,
+          suya: identidades[i],
+          visibles: pieza.versiones.filter((v) => MOSTRABLES.test(v.archivo.mimeType)),
+        }))
+        .filter(
+          ({ pieza, suya, visibles }) =>
+            visibles.length > 0 &&
+            !pieza.versiones.some((v) => escondidos.has(v.archivo.id)) &&
+            seMuestra(estados[suya])
+        );
 
       return {
         id: carpeta.id,
@@ -322,7 +375,7 @@ export async function portalDelCliente(
         nombre: carpeta.camino.length > 0 ? carpeta.camino.join(" / ") : carpeta.name,
         enlaceDrive: siDrive(carpeta.webViewLink),
         vista,
-        piezas: aLaVista.map(({ pieza, suya }) => {
+        piezas: aLaVista.map(({ pieza, suya, visibles }) => {
           const guardado = estados[suya];
 
           // **El cliente ve hasta la vuelta que se le entregó, no la última que
@@ -334,11 +387,11 @@ export async function portalDelCliente(
           // finales» no hay nada que filtrar: lo que está ahí, está.
           const tope = entregas ? undefined : guardado.versionEntregada;
           const entregadas =
-            tope === undefined ? pieza.versiones : pieza.versiones.filter((v) => v.numero <= tope);
+            tope === undefined ? visibles : visibles.filter((v) => v.numero <= tope);
           // Si la vuelta entregada ya no está en Drive y todo lo que queda es
           // más nuevo —un caso raro—, se muestra lo que hay antes que dejar la
-          // pieza sin archivo.
-          const aMostrar = entregadas.length > 0 ? entregadas : pieza.versiones;
+          // pieza sin archivo. Lo que se puede mirar, siempre.
+          const aMostrar = entregadas.length > 0 ? entregadas : visibles;
 
           const versiones = aMostrar.map((v) => ({
             // **El número que dice el archivo.** Se renumeraban de corrido
@@ -351,9 +404,16 @@ export async function portalDelCliente(
             driveFileId: v.archivo.id,
             modificado: v.archivo.modifiedTime,
             enlaceDrive: siDrive(v.archivo.webViewLink),
-            entregadaEl: v.archivo.modifiedTime
-              ? new Date(v.archivo.modifiedTime)
-              : new Date(),
+            // La vuelta entregada lleva **la fecha de la entrega**, que es la
+            // misma con la que corre el plazo y la del mensaje que recibió el
+            // cliente. La de Drive es cuándo se tocó el archivo, que puede ser
+            // semanas antes. Para las anteriores no hay otra, así que queda.
+            entregadaEl:
+              v.numero === guardado.versionEntregada && guardado.entregadaEl
+                ? new Date(guardado.entregadaEl)
+                : v.archivo.modifiedTime
+                  ? new Date(v.archivo.modifiedTime)
+                  : new Date(),
           }));
           const ultima = versiones[versiones.length - 1];
 
@@ -381,7 +441,9 @@ export async function portalDelCliente(
             vence: guardado.entregadaEl
               ? calcularVencimiento(
                   new Date(guardado.entregadaEl),
-                  plazoQueCorre(propios[suya], diasDeLaCarpeta, diasDelCliente)
+                  // `carpeta.dias` ya trae lo heredado por el camino, hasta
+                  // el del cliente.
+                  plazoQueCorre(propios[suya], carpeta.dias, undefined)
                 )
               : undefined,
             // **La ronda es la que dice el dominio, y nada más.**
@@ -428,18 +490,4 @@ export async function portalDelCliente(
     rondasIncluidas: RONDAS_INCLUIDAS,
     rondasExtra: 0,
   };
-}
-
-/** Si esta carpeta cuelga de aquella, mirando el camino que ya calculamos. */
-function perteneceA(
-  carpeta: { camino: string[] },
-  todas: Array<{ id: string; camino: string[] }>,
-  ancestro: string
-): boolean {
-  const suyo = todas.find((c) => c.id === ancestro);
-  if (!suyo) return false;
-  return (
-    carpeta.camino.length > suyo.camino.length &&
-    suyo.camino.every((paso, i) => carpeta.camino[i] === paso)
-  );
 }

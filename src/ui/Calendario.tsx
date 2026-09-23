@@ -1,7 +1,7 @@
 "use client";
 
 import { Miniatura } from "@/ui/Miniatura";
-import { enPalabrasElMes } from "@/dominio/tiempo";
+import { diaEnBuenosAires, enPalabrasElMes } from "@/dominio/tiempo";
 
 // La entrega puesta en el tiempo.
 //
@@ -37,28 +37,63 @@ type Props = {
   onAbrir: (id: string) => void;
 };
 
+/**
+ * Año, mes (de 1 a 12) y día de un instante **en Buenos Aires**.
+ *
+ * Las fechas de publicación son días de Buenos Aires, y los getters de `Date`
+ * dan el día del huso de quien mira: desde Tokio o Sídney, el mediodía de
+ * Buenos Aires ya es mañana, y la pieza caía un casillero más allá del «sale
+ * el …» que dice al lado. Y «hoy» se calcula primero en el servidor, que corre
+ * en tiempo universal: de 21 a 24 h de Buenos Aires resaltaba el día siguiente.
+ */
+function enBuenosAires(momento: Date): [anio: number, mes: number, dia: number] {
+  const [a, m, d] = diaEnBuenosAires(momento).split("-").map(Number);
+  return [a, m, d];
+}
+
+/** Qué día de la semana es en Buenos Aires, contando desde el lunes. */
+function diaDeLaSemana(momento: Date): number {
+  const [a, m, d] = enBuenosAires(momento);
+  return (new Date(Date.UTC(a, m - 1, d)).getUTCDay() + 6) % 7;
+}
+
+/** Si dos instantes caen en el mismo mes de Buenos Aires. */
+export function mismoMes(a: Date, b: Date): boolean {
+  return diaEnBuenosAires(a).slice(0, 7) === diaEnBuenosAires(b).slice(0, 7);
+}
+
+/**
+ * Un día del mes siguiente o del anterior. Al mediodía de Buenos Aires, como
+ * `fechaDeDia`: armado con la hora local, desde Sídney el 1.º de octubre era
+ * todavía septiembre en Buenos Aires, y el encabezado nombraba el mes de antes.
+ */
+export function otroMes(mes: Date, paso: -1 | 1): Date {
+  const [anio, numero] = enBuenosAires(mes);
+  return new Date(Date.UTC(anio, numero - 1 + paso, 1, 15));
+}
+
 export function Calendario({ modo, mes, piezas, onAbrir }: Props) {
-  const anio = mes.getFullYear();
-  const numeroDeMes = mes.getMonth();
-  const diasDelMes = new Date(anio, numeroDeMes + 1, 0).getDate();
+  const [anio, numeroDeMes] = enBuenosAires(mes);
+  // El día 0 del mes siguiente es el último de este. En tiempo universal, que
+  // es pura aritmética de calendario y no depende de dónde se mire.
+  const diasDelMes = new Date(Date.UTC(anio, numeroDeMes, 0)).getUTCDate();
 
-  // getDay() cuenta desde el domingo; acá la semana arranca el lunes.
-  const arranca = (new Date(anio, numeroDeMes, 1).getDay() + 6) % 7;
-
-  const delMes = piezas.filter(
-    (p) => p.publicaEl.getFullYear() === anio && p.publicaEl.getMonth() === numeroDeMes
-  );
-  const fuera = piezas.length - delMes.length;
+  // getUTCDay() cuenta desde el domingo; acá la semana arranca el lunes.
+  const arranca = (new Date(Date.UTC(anio, numeroDeMes - 1, 1)).getUTCDay() + 6) % 7;
 
   const porDia = new Map<number, PiezaEnCalendario[]>();
-  for (const pieza of delMes) {
-    const dia = pieza.publicaEl.getDate();
+  let fuera = 0;
+  for (const pieza of piezas) {
+    const [a, m, dia] = enBuenosAires(pieza.publicaEl);
+    if (a !== anio || m !== numeroDeMes) {
+      fuera++;
+      continue;
+    }
     porDia.set(dia, [...(porDia.get(dia) ?? []), pieza]);
   }
 
-  const hoy = new Date();
-  const esDeHoy = (dia: number) =>
-    hoy.getFullYear() === anio && hoy.getMonth() === numeroDeMes && hoy.getDate() === dia;
+  const [hoyA, hoyM, hoyD] = enBuenosAires(new Date());
+  const esDeHoy = (dia: number) => hoyA === anio && hoyM === numeroDeMes && hoyD === dia;
 
   const nombreDelMes = enPalabrasElMes(mes);
 
@@ -300,7 +335,7 @@ function VistaAgenda({ porDia, esDeHoy, onAbrir }: VistaProps) {
               >
                 <span className="text-guia font-extrabold leading-none">{dia}</span>
                 <span className="mt-1 text-micro font-bold uppercase leading-none opacity-70">
-                  {DIAS[(pieza.publicaEl.getDay() + 6) % 7]}
+                  {DIAS[diaDeLaSemana(pieza.publicaEl)]}
                 </span>
               </span>
 

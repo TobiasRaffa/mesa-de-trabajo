@@ -22,7 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Evento, Pieza } from "@/dominio/pieza";
 import { Ampliada, type Lamina } from "@/ui/Ampliada";
 import { Boton, BotonEnlace } from "@/ui/Boton";
-import { Calendario, type PiezaEnCalendario } from "@/ui/Calendario";
+import { Calendario, mismoMes, otroMes, type PiezaEnCalendario } from "@/ui/Calendario";
 import {
   IconoDescargar,
   IconoDrive,
@@ -32,12 +32,13 @@ import {
 } from "@/ui/Icono";
 import { Conversacion, juntarMensajes } from "@/ui/Conversacion";
 import type { Mensaje } from "@/lib/conversaciones";
-import type { Cambio, EstadoDePieza } from "@/lib/piezas";
+import type { Cambio } from "@/lib/piezas";
 import {
   enviarRevision,
   escribirComoCliente,
   guardarCambiosDePieza,
   moverPieza,
+  type PiezaParaElCliente,
 } from "@/portal/acciones";
 import { pasoActual, Seguimiento } from "@/ui/Seguimiento";
 import { Ventana } from "@/ui/Ventana";
@@ -65,6 +66,19 @@ function firmaDe(clienteId: string): string | null {
     // Sin almacenamiento —modo privado, permisos— se pregunta cada vez.
     return null;
   }
+}
+
+/**
+ * Hasta cuándo quedó leído el chat al abrirlo: **la hora del último mensaje
+ * en pantalla**, con lo que había como piso.
+ *
+ * Era la hora del teléfono, y se compara con la del servidor de cada mensaje:
+ * con el reloj adelantado, lo que el equipo contestaba después no contaba como
+ * sin leer; atrasado, lo ya leído volvía a contar. Así las dos puntas de la
+ * comparación son del mismo reloj.
+ */
+export function leidoAlAbrir(mensajes: Mensaje[], previo: string): string {
+  return mensajes.reduce((max, m) => (m.cuando > max ? m.cuando : max), previo);
 }
 
 /** Un identificador para un cambio recién escrito. */
@@ -323,10 +337,10 @@ function Revision({
     // y la pantalla ya no sabría dónde empezaba lo nuevo.
     setSinLeerAlAbrir(sinLeer);
     setConversando(true);
-    const ahora = new Date().toISOString();
-    setLeidoHasta(ahora);
+    const hasta = leidoAlAbrir(mensajes, leidoHasta);
+    setLeidoHasta(hasta);
     try {
-      localStorage.setItem(claveDeLeido(datos.cliente.id), ahora);
+      localStorage.setItem(claveDeLeido(datos.cliente.id), hasta);
     } catch {}
   }
 
@@ -364,7 +378,7 @@ function Revision({
   }
 
   /** Reemplaza una pieza con lo que devolvió el servidor. */
-  function refrescar(id: string, estado: EstadoDePieza) {
+  function refrescar(id: string, estado: PiezaParaElCliente) {
     setPiezas((antes) => antes.map((p) => (p.id === id ? { ...p, ...estado } : p)));
   }
 
@@ -587,15 +601,12 @@ function Revision({
   const mes = mesVisible ?? primerMes;
   const nombreDelMes = hayCalendario ? enPalabrasElMes(mes) : "";
 
-  const moverMes = (paso: -1 | 1) =>
-    setMesVisible(new Date(mes.getFullYear(), mes.getMonth() + paso, 1, 12));
+  // El mes es el de Buenos Aires, igual que el encabezado y la grilla: con la
+  // hora del navegador, desde Sídney el título nombraba el mes anterior.
+  const moverMes = (paso: -1 | 1) => setMesVisible(otroMes(mes, paso));
 
   /** Piezas fechadas fuera del mes que se está mirando. */
-  const enOtrosMeses = conFecha.filter(
-    (p) =>
-      p.publicaEl!.getFullYear() !== mes.getFullYear() ||
-      p.publicaEl!.getMonth() !== mes.getMonth()
-  );
+  const enOtrosMeses = conFecha.filter((p) => !mismoMes(p.publicaEl!, mes));
 
   const abiertaIndice = piezas.findIndex((p) => p.id === abierta);
   const piezaAbierta = abiertaIndice >= 0 ? piezas[abiertaIndice] : null;

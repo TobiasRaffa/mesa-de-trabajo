@@ -45,6 +45,13 @@ vi.mock("@/lib/publicaciones", async (original) => ({
   ...(await original<typeof import("@/lib/publicaciones")>()),
   publicacionesDe: vi.fn(async () => ({})),
 }));
+// Los plazos puestos a mano, por carpeta. Lo demás del módulo —la regla de qué
+// plazo corre— es el de verdad.
+vi.mock("@/lib/plazos", async (original) => ({
+  ...(await original<typeof import("@/lib/plazos")>()),
+  plazoDe: vi.fn(async (id: string) => PLAZOS[id]),
+  plazosDe: vi.fn(async () => ({})),
+}));
 vi.mock("@/lib/ajustes", async (original) => ({
   ...(await original<typeof import("@/lib/ajustes")>()),
   ajustesDe: vi.fn(async () => ({ visible: true, vista: "lista" as const })),
@@ -63,10 +70,27 @@ vi.mock("@/lib/ajustes", async (original) => ({
 
 import { datosDeCarpeta, subcarpetasDe } from "@/lib/google";
 import { estadosDe, piezasDeLaCarpeta, type EstadoDePieza } from "@/lib/piezas";
+import { publicacionesDe } from "@/lib/publicaciones";
+import { calcularVencimiento } from "@/lib/fechas";
 import { portalDelCliente } from "@/portal/datos/cliente";
 
 /** Lo que la agencia apagó, en esta prueba. */
 const ESCONDIDOS = new Set<string>();
+
+/** Los días de revisión puestos a mano en cada carpeta, en esta prueba. */
+const PLAZOS: Record<string, number> = {};
+
+/** El tipo de archivo sale de la extensión, como en Drive. */
+function tipoDe(nombre: string): string {
+  const ext = nombre.slice(nombre.lastIndexOf(".") + 1).toLowerCase();
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "png") return "image/png";
+  if (ext === "ai") return "application/postscript";
+  if (ext === "pptx") {
+    return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  }
+  return "image/jpeg";
+}
 
 const RAIZ = "cliente";
 
@@ -86,7 +110,7 @@ function driveCon(
     (archivos[id] ?? []).map((nombre) => ({
       id: `${id}:${nombre}`,
       name: nombre,
-      mimeType: "image/jpeg",
+      mimeType: tipoDe(nombre),
       modifiedTime: "2026-09-01T10:00:00Z",
     }))
   );
@@ -113,6 +137,7 @@ const nombres = (c: Array<{ nombre: string }>) => c.map((x) => x.nombre).sort();
 
 beforeEach(() => {
   ESCONDIDOS.clear();
+  for (const k of Object.keys(PLAZOS)) delete PLAZOS[k];
   vi.clearAllMocks();
 });
 
@@ -548,5 +573,189 @@ describe("qué campos de la pieza salen al navegador", () => {
     expect(comoTexto).not.toContain("Nombre Propio De Alguien Del Equipo");
     expect(comoTexto).not.toContain("no_se_pudo_devolver");
     expect(comoTexto).not.toContain("comentario-de-drive");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("la pieza se llama igual en el portal que en gestión", () => {
+  /**
+   * El portal agrupaba las vueltas **después** de sacar lo escondido y lo que
+   * no es imagen ni PDF, y el resto de la aplicación antes. Como la identidad
+   * sale de la vuelta más baja, la misma pieza tenía dos nombres: el cliente
+   * no podía aprobarla («No encontramos esa pieza.»), la fecha y el plazo no
+   * se encontraban, y cada lectura mudaba la ficha de un nombre al otro.
+   */
+  function lasQueRecibioEstadosDe() {
+    return vi.mocked(estadosDe).mock.calls.flatMap(([, piezas]) =>
+      piezas.map((p) => ({ id: p.id, archivos: [...p.archivos].sort() }))
+    );
+  }
+
+  it("una V1 que no se muestra (un .ai) no le cambia el nombre a la pieza", async () => {
+    driveCon({ [RAIZ]: [{ id: "logos", name: "Logos" }] }, { logos: ["logo.ai", "V2_logo.png"] });
+    // La fecha la puso gestión, bajo el nombre que usa gestión. Se pregunta
+    // una vez por carpeta —la del cliente también—, así que se contesta por id.
+    vi.mocked(publicacionesDe).mockImplementation(
+      async (ids: string[]): Promise<Record<string, string>> =>
+        ids.includes("logos::logo.ai") ? { "logos::logo.ai": "2026-09-18" } : {}
+    );
+
+    const portal = await portalDelCliente(RAIZ);
+
+    expect(lasQueRecibioEstadosDe()).toEqual([
+      { id: "logos::logo.ai", archivos: ["logos:V2_logo.png", "logos:logo.ai"] },
+    ]);
+    const pieza = portal.carpetas[0].piezas[0];
+    expect(pieza.id).toBe("logos::logo.ai");
+    // Lo que se ve sigue siendo solo lo que se puede mirar.
+    expect(pieza.versiones.map((v) => v.driveFileId)).toEqual(["logos:V2_logo.png"]);
+    expect(pieza.publicaEl, "La fecha puesta en gestión tiene que llegar").toBeDefined();
+  });
+
+  it("una V1 en PPTX y la V2 en PDF son la misma pieza que en gestión", async () => {
+    driveCon(
+      { [RAIZ]: [{ id: "c1", name: "Presentaciones" }] },
+      { c1: ["presentacion.pptx", "V2 presentacion.pdf"] }
+    );
+
+    const portal = await portalDelCliente(RAIZ);
+    expect(portal.carpetas[0].piezas.map((p) => p.id)).toEqual(["c1::presentacion.pptx"]);
+  });
+
+  it("lo escondido igual cuenta para saber de qué pieza es cada archivo", async () => {
+    // Con [V2] sola, `estadosDe` no reconoce ningún archivo de la ficha y la
+    // reinicia: una lectura del cliente borraba la aprobación y las rondas.
+    ESCONDIDOS.add("logos:9304.jpeg");
+    driveCon({ [RAIZ]: [{ id: "logos", name: "Logos" }] }, { logos: ["9304.jpeg", "9304 V2.jpeg"] });
+
+    await portalDelCliente(RAIZ);
+
+    expect(lasQueRecibioEstadosDe()).toEqual([
+      { id: "logos::9304.jpeg", archivos: ["logos:9304 V2.jpeg", "logos:9304.jpeg"] },
+    ]);
+  });
+
+  it("con las vueltas viejas escondidas y una nueva, la ficha ve las tres", async () => {
+    ESCONDIDOS.add("logos:stickers.pdf");
+    ESCONDIDOS.add("logos:V2 stickers.pdf");
+    driveCon(
+      { [RAIZ]: [{ id: "logos", name: "Logos" }] },
+      { logos: ["stickers.pdf", "V2 stickers.pdf", "V3 stickers.pdf"] }
+    );
+
+    await portalDelCliente(RAIZ);
+
+    expect(lasQueRecibioEstadosDe()).toEqual([
+      {
+        id: "logos::stickers.pdf",
+        archivos: ["logos:V2 stickers.pdf", "logos:V3 stickers.pdf", "logos:stickers.pdf"],
+      },
+    ]);
+  });
+});
+
+describe("una pieza escondida sigue escondida aunque llegue otra vuelta", () => {
+  it("si alguna vuelta está escondida, la pieza entera no se muestra", async () => {
+    // Esconder marca los archivos que hay en ese momento. La V2 que se sube
+    // después queda visible, y el portal la mostraba sola —con su fecha—
+    // mientras gestión decía que la pieza estaba oculta.
+    ESCONDIDOS.add("logos:9304.jpeg");
+    driveCon(
+      { [RAIZ]: [{ id: "logos", name: "Logos" }] },
+      { logos: ["9304.jpeg", "9304 V2.jpeg", "otra.jpeg"] }
+    );
+
+    const portal = await portalDelCliente(RAIZ);
+    expect(portal.carpetas[0].piezas.map((p) => p.nombre)).toEqual(["otra"]);
+  });
+});
+
+describe("el plazo baja por las carpetas del medio", () => {
+  it("el plazo puesto en «Banners» vale para «Banners / Septiembre»", async () => {
+    PLAZOS["b"] = 10;
+    driveCon(
+      {
+        [RAIZ]: [{ id: "b", name: "Banners" }],
+        b: [{ id: "s", name: "Septiembre" }],
+      },
+      { s: ["post.png"] }
+    );
+    const entregadaEl = "2026-09-21T13:00:00.000Z";
+    vi.mocked(estadosDe).mockImplementation(async (carpeta, piezas) =>
+      Object.fromEntries(
+        piezas.map(({ id }) => [
+          id,
+          {
+            carpetaId: carpeta,
+            estado: "entregada" as const,
+            ronda: 0,
+            rondasExtra: 0,
+            cambios: [],
+            enviada: false,
+            mudada: false,
+            historia: [],
+            entregadaEl,
+          },
+        ])
+      )
+    );
+    const esperado = calcularVencimiento(new Date(entregadaEl), 10);
+
+    for (const soloEsta of [undefined, "b"]) {
+      const portal = await portalDelCliente(RAIZ, soloEsta);
+      expect(
+        portal.carpetas[0].piezas[0].vence,
+        "Tablero y árbol heredan escalón por escalón: el cliente tiene que ver lo mismo."
+      ).toEqual(esperado);
+    }
+  });
+});
+
+describe("«Entregada el» dice cuándo se entregó", () => {
+  it("la vuelta entregada lleva la fecha de la entrega, no la de Drive", async () => {
+    driveCon({ [RAIZ]: [{ id: "logos", name: "Logos" }] }, { logos: ["post.png"] });
+    vi.mocked(estadosDe).mockImplementation(async (carpeta, piezas) =>
+      Object.fromEntries(
+        piezas.map(({ id }) => [
+          id,
+          {
+            carpetaId: carpeta,
+            estado: "entregada" as const,
+            ronda: 0,
+            rondasExtra: 0,
+            cambios: [],
+            enviada: false,
+            mudada: false,
+            historia: [],
+            versionEntregada: 1,
+            entregadaEl: "2026-09-21T13:00:00.000Z",
+          },
+        ])
+      )
+    );
+
+    const pieza = (await portalDelCliente(RAIZ)).carpetas[0].piezas[0];
+    expect(pieza.versiones[0].entregadaEl).toEqual(new Date("2026-09-21T13:00:00.000Z"));
+  });
+});
+
+describe("el link de una carpeta no se come a su hermana del mismo nombre", () => {
+  it("dos «Logos» hermanas: el link de una no muestra lo de adentro de la otra", async () => {
+    // Drive deja tener dos carpetas con el mismo nombre en el mismo lugar. Se
+    // comparaba el camino por nombres, y la subcarpeta de la otra pasaba.
+    driveCon(
+      {
+        [RAIZ]: [
+          { id: "A", name: "Logos" },
+          { id: "B", name: "Logos" },
+        ],
+        B: [{ id: "Bsub", name: "Privado" }],
+      },
+      { A: ["a.jpeg"], Bsub: ["secreto.jpeg"] }
+    );
+
+    const portal = await portalDelCliente(RAIZ, "A");
+    expect(portal.carpetas.map((c) => c.id)).toEqual(["A"]);
   });
 });

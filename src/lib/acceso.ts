@@ -228,6 +228,15 @@ export type Entrada = {
   cliente: Cliente;
   /** La carpeta por la que entró, si fue por un link de carpeta. */
   carpeta?: string;
+  /**
+   * Todas las carpetas de ese cliente cuyo link abrió este navegador, con
+   * `carpeta` primera.
+   *
+   * Un link por mes o por campaña es el uso normal, y las galletas viajan
+   * todas juntas: quedándose con la primera, la página de la segunda abría
+   * pero sus acciones contestaban «No encontramos esa carpeta.».
+   */
+  carpetas?: string[];
 };
 
 export async function entradaDe(
@@ -249,21 +258,40 @@ export async function entradaDe(
 
   // Después los de carpeta: el token sale del almacén, y Drive solo confirma
   // la carpeta que la galleta nombra, en vez de recorrerlas todas.
+  //
+  // Se juntan todas las del mismo cliente —el de la primera que acierta—, no
+  // solo la primera: ver `Entrada.carpetas`.
+  let suCliente: Cliente | null = null;
+  const suyas: string[] = [];
+  const hijasDe = new Map<string, Promise<Array<{ id: string }>>>();
+
   for (const [token, carpetaId] of Object.entries(await carpetasConLink())) {
     const valor = galletas.get(await nombreDeGalleta(token))?.value;
     if (!(await galletaValida(token, valor))) continue;
 
-    for (const cliente of clientes) {
+    // **Una carpeta apagada no abre, tampoco con la galleta puesta.** La
+    // puerta ya lo cortaba, pero esto es lo que miran las acciones y `/api`:
+    // quien había entrado seguía hasta treinta días bajando los archivos,
+    // escribiendo en el chat y aprobando, con la carpeta ya apagada.
+    if (!(await ajustesDe(carpetaId)).visible) continue;
+
+    const candidatos: Cliente[] = suCliente ? [suCliente] : clientes;
+    for (const cliente of candidatos) {
       try {
-        const carpetas = await subcarpetasDe(cliente.id);
-        if (carpetas.some((c) => c.id === carpetaId)) return { cliente, carpeta: carpetaId };
+        if (!hijasDe.has(cliente.id)) hijasDe.set(cliente.id, subcarpetasDe(cliente.id));
+        const carpetas = await hijasDe.get(cliente.id)!;
+        if (carpetas.some((c) => c.id === carpetaId)) {
+          suCliente = cliente;
+          suyas.push(carpetaId);
+          break;
+        }
       } catch {
         // Un cliente cuya carpeta no se puede leer no invalida a los demás.
       }
     }
   }
 
-  return null;
+  return suCliente ? { cliente: suCliente, carpeta: suyas[0], carpetas: suyas } : null;
 }
 
 /**
