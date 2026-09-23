@@ -224,6 +224,10 @@ mostrar, y que una conversación tenga sus mensajes.
    la aplicación funciona igual, los avisos quedan anotados en la bandeja de
    adentro pero no sale ningún correo.
 
+   La de errores (`NEXT_PUBLIC_SENTRY_DSN`) también es opcional: sin ella los
+   errores quedan solo en el registro de Netlify. Cómo sacarla está más abajo,
+   en «Enterarse de los errores».
+
    `GOOGLE_SA_KEY` es la que más se rompe al copiar. Va completa, con el
    `-----BEGIN PRIVATE KEY-----`, y los saltos de línea escritos como `\n`,
    tal como vienen en el JSON de Google. Si Netlify la corta en varias líneas,
@@ -274,9 +278,77 @@ En este orden, que va de lo que falla feo a lo que falla fácil:
 - [ ] **Volver a desplegar sin cambiar nada** y comprobar que el cliente de
       prueba sigue ahí. Esto es lo que prueba que la base está de verdad en el
       medio; es el paso que más importa de todos.
+- [ ] En Netlify, **Logs → Functions → tarea-diaria → Run now**. El registro
+      tiene que decir `Respaldo:` con un nombre de archivo y `Plazos revisados:
+      1 de 1 clientes` (o los que haya). Después, en Supabase → **Storage**,
+      tiene que aparecer el depósito `respaldos` con el archivo de hoy.
 - [ ] Borrar el cliente de prueba.
 
 ---
+
+## 5. Lo que corre solo todas las mañanas
+
+En internet la aplicación no tiene un reloj propio: cada pedido arranca y
+termina. Así que hay **una tarea programada** (`netlify/functions/tarea-diaria.mjs`)
+que Netlify corre todos los días a las **8 de la mañana de Buenos Aires**. No
+hay que configurar nada: Netlify la encuentra sola al desplegar, y usa las
+mismas variables que la aplicación. Hace dos cosas:
+
+- **Manda los recordatorios de plazo** —«va por la mitad del plazo», «se
+  cumplió el plazo»— aunque nadie haya abierto el tablero. Antes salían solo
+  al abrirlo: un fin de semana largo, el aviso llegaba el martes. Siguen
+  saliendo una sola vez cada uno, abra quien abra el tablero.
+- **Guarda un respaldo de toda la base** en Supabase → Storage → `respaldos`,
+  un archivo por día, y borra solo los de hace más de treinta días. El depósito
+  es privado: no tiene link, y la aplicación lo crea sola la primera vez.
+
+Si algo falla, queda en **Logs → Functions → tarea-diaria**, y ahí mismo está
+«Run now» para correrla sin esperar a mañana.
+
+### Los respaldos
+
+El plan gratis de Supabase no guarda copias propias: por eso existe esto. Cubre
+los errores —una fila borrada a mano, algo que la aplicación guardó mal—, pero
+vive en el mismo proyecto que la base, así que **no cubre perder el proyecto
+entero**. Para eso, de vez en cuando, bajar una copia a esta computadora:
+
+```bash
+node --env-file=.env.local supabase/restaurar-respaldo.mjs --bajar
+```
+
+Queda en `respaldos/`, que no se sube al repositorio (es la base entera, con
+las claves y los chats). Con una fecha, baja la de ese día:
+`--bajar 2026-09-23`.
+
+**Para volver atrás** después de un error, primero mirar qué cambiaría:
+
+```bash
+node --env-file=.env.local supabase/restaurar-respaldo.mjs respaldos/respaldo-2026-09-23.json.gz
+```
+
+Muestra, colección por colección, cuántos documentos volverían a como estaban
+y cuáles habían desaparecido. Si es lo que se esperaba, se repite con
+`--escribir`. Con `--coleccion piezas` se vuelve atrás una sola colección, que
+suele ser lo que hace falta. **No borra** lo creado después del respaldo, y
+conviene hacerlo con la aplicación sin usar.
+
+### Enterarse de los errores
+
+Sin esto, un error en internet queda en un registro que nadie abre: una
+pantalla que se cae para un cliente pasa sin que nadie se entere hasta que se
+queja. Con Sentry cada error llega a un panel, y la primera vez que aparece
+manda un correo.
+
+1. Crear una cuenta en [sentry.io](https://sentry.io) (el plan gratis alcanza)
+   y un proyecto de tipo **Next.js**.
+2. En el proyecto: **Settings → Client Keys (DSN)**, copiar el DSN.
+3. Cargarlo en Netlify como `NEXT_PUBLIC_SENTRY_DSN` y volver a desplegar.
+
+No hace falta correr el asistente de Sentry ni tocar código: ya está conectado,
+y sin el DSN no manda nada. **Lo que se manda está limpio a propósito**: el
+token del link del cliente se tacha, y no viajan ni lo que se escribió en un
+formulario —puede ser una contraseña—, ni galletas, ni cabeceras, ni quién
+estaba mirando. Está en `src/lib/errores.ts`.
 
 ## Lo que se arregló para poder subirla
 
