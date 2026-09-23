@@ -766,6 +766,22 @@ describe("las puertas", () => {
         const texto = readFileSync(f, "utf8");
         const cuerpo = sinImports(texto);
 
+        // **La única ruta que no es de una persona** es la de la tarea de
+        // todas las mañanas: no tiene sesión que mirar, y se presenta con la
+        // llave de la tarea. Vale solo si **cada** función que exporta la
+        // pide antes que cualquier otra cosa.
+        if (/esLaTarea\(/.test(cuerpo)) {
+          const exportadas = [
+            ...cuerpo.matchAll(/export async function \w+\([^)]*\)[^{]*\{([\s\S]{0,80})/g),
+          ];
+          const todas =
+            exportadas.length > 0 &&
+            exportadas.every((m) => /^\s*if \(!esLaTarea\(\w+\)\)/.test(m[1]));
+          return todas
+            ? null
+            : `${relativo(f)}: pide la llave de la tarea, pero no antes de todo lo demás`;
+        }
+
         if (!/const PUERTA: Puerta = \{/.test(cuerpo)) {
           return `${relativo(f)}: no declara su PUERTA`;
         }

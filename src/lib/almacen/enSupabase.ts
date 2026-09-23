@@ -28,7 +28,7 @@ import type { Almacen, Coleccion, Documento } from "@/lib/almacen/contrato";
  * eso `documentos` tiene la política de acceso cerrada para todo el resto —lo
  * que protege los datos de un cliente sigue siendo el código, igual que hoy—.
  */
-function credenciales(): { url: string; llave: string } | null {
+export function credenciales(): { url: string; llave: string } | null {
   const url = process.env.SUPABASE_URL?.trim();
   const llave = process.env.SUPABASE_SERVICE_KEY?.trim();
   return url && llave ? { url, llave } : null;
@@ -145,6 +145,27 @@ async function leerPaginado(consulta: string): Promise<Fila[]> {
     todas.push(...pagina);
     if (pagina.length < PAGINA) return todas;
   }
+}
+
+/** Una fila tal como está en la base, con sus fechas. */
+export type FilaEntera = {
+  coleccion: string;
+  id: string;
+  datos: unknown;
+  creado: string;
+  modificado: string;
+};
+
+/**
+ * Todas las filas de todas las colecciones. **Solo para el respaldo.**
+ *
+ * No valida nada a propósito: un respaldo que dejara afuera lo que hoy no
+ * pasa la validación perdería justo lo que alguien va a querer mirar.
+ */
+export async function todasLasFilas(): Promise<FilaEntera[]> {
+  return (await leerPaginado(
+    `${TABLA}?select=coleccion,id,datos,creado,modificado`
+  )) as unknown as FilaEntera[];
 }
 
 export const enSupabase: Almacen = {

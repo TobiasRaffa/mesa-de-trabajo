@@ -205,27 +205,7 @@ export async function elTablero(): Promise<Tablero> {
   const sinLeer = await sinLeerPorCliente("agencia");
 
   const porCliente = await Promise.all(
-    clientes.map(async (cliente) => {
-      const [carpetas, diasDelCliente, deQuienEsElCliente] = await Promise.all([
-        subcarpetasDe(cliente.id),
-        plazoDe(cliente.id),
-        responsableDe(cliente.id),
-      ]);
-
-      return Promise.all(
-        carpetas
-          .filter((c) => !esCarpetaReservada(c.name))
-          .map((carpeta) =>
-            ramaDelTablero(
-              { id: cliente.id, nombre: cliente.nombre },
-              carpeta,
-              { dias: diasDelCliente, responsable: deQuienEsElCliente },
-              sinLeer[cliente.id] ?? 0,
-              0
-            )
-          )
-      );
-    })
+    clientes.map((cliente) => carpetasDelCliente(cliente, sinLeer[cliente.id] ?? 0))
   );
 
   return {
@@ -250,6 +230,51 @@ export async function elTablero(): Promise<Tablero> {
       .filter((c) => c.piezas > 0 || (c.hijas.length > 0 && c.entregadas === 0))
       .sort((a, b) => (b.diasConNosotros ?? -1) - (a.diasConNosotros ?? -1)),
   };
+}
+
+/** Las carpetas de un cliente en el tablero, con lo que cuelga de cada una. */
+async function carpetasDelCliente(
+  cliente: { id: string; nombre: string },
+  sinLeer: number
+): Promise<CarpetaEnElTablero[]> {
+  const [carpetas, diasDelCliente, deQuienEsElCliente] = await Promise.all([
+    subcarpetasDe(cliente.id),
+    plazoDe(cliente.id),
+    responsableDe(cliente.id),
+  ]);
+
+  return Promise.all(
+    carpetas
+      .filter((c) => !esCarpetaReservada(c.name))
+      .map((carpeta) =>
+        ramaDelTablero(
+          { id: cliente.id, nombre: cliente.nombre },
+          carpeta,
+          { dias: diasDelCliente, responsable: deQuienEsElCliente },
+          sinLeer,
+          0
+        )
+      )
+  );
+}
+
+/**
+ * Los recordatorios de plazo de un cliente, sin que nadie abra el tablero.
+ *
+ * **Es lo que corre la tarea de todas las mañanas.** Los recordatorios salían
+ * solo al abrir el tablero: un fin de semana, o una semana en que nadie lo
+ * abrió, el aviso de que algo venció llegaba cuando alguien volvía, que es
+ * tarde. Recorre lo mismo que el tablero —la misma herencia de plazos, las
+ * mismas subcarpetas— porque un recordatorio que se calculara de otra manera
+ * diría una fecha distinta de la que se ve en pantalla. Cada aviso sigue
+ * saliendo una sola vez: el tablero y la tarea comparten la anotación.
+ *
+ * No mira el alcance de nadie porque no hay nadie mirando: la llama la tarea
+ * programada, y lo que produce son avisos, que ya se reparten según quién
+ * lleva cada cosa.
+ */
+export async function revisarPlazosDe(cliente: { id: string; nombre: string }): Promise<void> {
+  await carpetasDelCliente(cliente, 0);
 }
 
 /**
@@ -376,7 +401,8 @@ async function ramaDelTablero(
 
   // **Los recordatorios de plazo salen de acá.** El tablero es la única
   // pantalla que mira todas las piezas con su plazo, y se abre todos los días;
-  // no hay un reloj corriendo en el servidor. Cada uno sale una sola vez.
+  // la tarea de cada mañana recorre este mismo camino (`revisarPlazosDe`) para
+  // los días en que nadie lo abre. Cada uno sale una sola vez.
   await Promise.all(
     agrupadas.map((pieza, i) => {
       const suya = identidades[i];

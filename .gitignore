@@ -53,3 +53,7 @@ next-env.d.ts
 # trabajar en paralelo sin pisarse. Son copias enteras del repositorio: si se
 # subieran, o si el chequeo de tipos las mirara, todo aparecería repetido.
 /.claude/worktrees/
+
+# Los respaldos que se bajan con `supabase/restaurar-respaldo.mjs --bajar`.
+# Son la base entera —claves, chats, clientes—: no van al repositorio.
+/respaldos/

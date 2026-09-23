@@ -6,9 +6,11 @@
 // una fecha que pasó.
 //
 // **No hay un reloj corriendo.** En internet la aplicación no tiene un proceso
-// vivo que mire la hora: cada pedido arranca y termina. Así que se revisa
-// cuando alguien abre el tablero, que es la pantalla del día y se abre todos
-// los días. Un aviso puede llegar horas tarde; nunca dos veces.
+// vivo que mire la hora: cada pedido arranca y termina. Así que se revisa en
+// dos momentos: cuando alguien abre el tablero, y todas las mañanas a las 8,
+// con la tarea programada de Netlify (`netlify/functions/tarea-diaria.mjs`),
+// para que un fin de semana sin nadie mirando no demore el aviso hasta el
+// lunes. Un aviso puede llegar horas tarde; nunca dos veces.
 //
 // **Nunca dos veces** es lo que guarda este archivo: cada aviso queda anotado
 // con la pieza, la entrega y de qué clase fue, y con eso anotado no vuelve a
