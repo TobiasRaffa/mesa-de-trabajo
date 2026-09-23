@@ -59,6 +59,8 @@ export default async function Diagnostico() {
       archivos = await listarCarpeta((await misClientes())[0]?.id ?? "");
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
+      // La pantalla dice que el motivo quedó en los registros: que quede.
+      console.error("[diagnostico] Drive", e);
     }
   }
 
@@ -88,6 +90,8 @@ export default async function Diagnostico() {
   const primero = await primerArchivo(archivos);
   if (primero) {
     const r = await leerComentarios(primero.id);
+    // Mismo trato: la pantalla manda a buscar el motivo a los registros.
+    if (!r.ok) console.error("[diagnostico] comentarios", r.motivo);
     comentarios = {
       archivo: primero.name,
       ok: r.ok,

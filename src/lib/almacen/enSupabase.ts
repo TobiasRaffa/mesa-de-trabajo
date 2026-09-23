@@ -116,17 +116,46 @@ function esFuncionQueFalta(error: unknown): boolean {
   return error instanceof Error && error.message.includes("PGRST202");
 }
 
+/**
+ * Cuántas filas se piden por vez.
+ *
+ * **Supabase corta cada respuesta en mil filas y no avisa** («Max rows», que
+ * viene así por omisión). Con un solo pedido, el día que una colección pasaba
+ * de mil lo más nuevo desaparecía de `todo()` —el orden es por creación— y
+ * `uno()` lo seguía encontrando: lo que se veía y lo que estaba guardado
+ * dejaban de coincidir. Se pide de a mil y se sigue hasta que vuelva una
+ * página incompleta. Si alguien bajara «Max rows» por debajo de esto, las
+ * páginas volverían cortas y se volvería a perder lo del final: no tocarlo.
+ */
+const PAGINA = 1000;
+
+/**
+ * Todas las filas de una consulta, página por página.
+ *
+ * El orden lleva el `id` de desempate: dos filas creadas en el mismo instante
+ * podrían cambiar de lugar entre un pedido y el siguiente, y una se repetiría
+ * mientras otra se pierde.
+ */
+async function leerPaginado(consulta: string): Promise<Fila[]> {
+  const todas: Fila[] = [];
+  for (let desde = 0; ; desde += PAGINA) {
+    const pagina = ((await pedir(
+      `${consulta}&order=creado.asc,id.asc&limit=${PAGINA}&offset=${desde}`
+    )) ?? []) as Fila[];
+    todas.push(...pagina);
+    if (pagina.length < PAGINA) return todas;
+  }
+}
+
 export const enSupabase: Almacen = {
   coleccion<T>(nombre: string, valido: (valor: unknown) => valor is T): Coleccion<T> {
     const filtro = `coleccion=eq.${encodeURIComponent(nombre)}`;
 
     async function todo(): Promise<Record<string, T>> {
-      const filas = (await pedir(
-        `${TABLA}?${filtro}&select=id,datos&order=creado.asc`
-      )) as Fila[] | null;
+      const filas = await leerPaginado(`${TABLA}?${filtro}&select=id,datos`);
 
       const salida: Record<string, T> = {};
-      for (const fila of filas ?? []) {
+      for (const fila of filas) {
         // Lo que sale de la base se valida igual que lo que llega por la red:
         // alguien puede haberlo tocado a mano, o haberlo escrito una versión
         // anterior de la aplicación.
@@ -146,7 +175,14 @@ export const enSupabase: Almacen = {
 
     async function borrarVarios(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
-      const lista = ids.map((i) => `"${i.replace(/"/g, '""')}"`).join(",");
+      // Adentro de las comillas de `in.(…)` PostgREST escapa con barra
+      // invertida: `\` va doble y `"` va como `\"`. Duplicar la comilla, como
+      // en CSV, no lo entiende, y el borrado no encontraba nada sin dar error.
+      // Las barras primero, para no volver a escapar las que agregan las
+      // comillas.
+      const lista = ids
+        .map((i) => `"${i.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`)
+        .join(",");
       await pedir(`${TABLA}?${filtro}&id=in.(${encodeURIComponent(lista)})`, {
         method: "DELETE",
       });
@@ -164,12 +200,12 @@ export const enSupabase: Almacen = {
         // `%` y `_` son comodines de `like`; un identificador que los tenga
         // adentro traería de más.
         const escapado = prefijo.replace(/([%_\\])/g, "\\$1");
-        const filas = (await pedir(
-          `${TABLA}?${filtro}&id=like.${encodeURIComponent(`${escapado}*`)}&select=id,datos&order=creado.asc`
-        )) as Fila[] | null;
+        const filas = await leerPaginado(
+          `${TABLA}?${filtro}&id=like.${encodeURIComponent(`${escapado}*`)}&select=id,datos`
+        );
 
         const salida: Record<string, T> = {};
-        for (const fila of filas ?? []) {
+        for (const fila of filas) {
           if (valido(fila.datos)) salida[fila.id] = fila.datos;
         }
         return salida;

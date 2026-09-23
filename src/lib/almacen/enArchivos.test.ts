@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -151,6 +151,56 @@ describe("cambiar el mismo documento a la vez", () => {
       propio: { valor: 2 },
       otro: { valor: 7 },
     });
+  });
+});
+
+describe("un archivo tocado a mano", () => {
+  // **Estos archivos se abren con el Bloc de notas**, y el Bloc de notas puede
+  // dejar la marca de orden de bytes al principio; a mano también se escapa
+  // una coma de más. Antes cualquiera de las dos se leía como «no hay nada», y
+  // la próxima escritura partía de vacío: se borraba la colección entera.
+  const escribirAMano = async (texto: string) => {
+    await mkdir(path.dirname(archivoDeLaPrueba), { recursive: true });
+    await writeFile(archivoDeLaPrueba, texto, "utf8");
+  };
+
+  it("con la marca del Bloc de notas se lee igual", async () => {
+    await escribirAMano('﻿{"a":{"valor":1},"b":{"valor":2}}');
+
+    expect(await coleccion.todo()).toEqual({ a: { valor: 1 }, b: { valor: 2 } });
+    await coleccion.guardar("c", { valor: 3 });
+    expect(Object.keys(JSON.parse(await readFile(archivoDeLaPrueba, "utf8"))).sort()).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
+
+  it("si no se puede leer, falla y no lo pisa", async () => {
+    const roto = '{ "a": {"valor":1}, "b": {"valor":2}, }';
+    await escribirAMano(roto);
+
+    await expect(coleccion.todo()).rejects.toThrow();
+    await expect(coleccion.cambiar("z", () => ({ valor: 9 }))).rejects.toThrow();
+    await expect(coleccion.guardar("z", { valor: 9 })).rejects.toThrow();
+    expect(await readFile(archivoDeLaPrueba, "utf8")).toBe(roto);
+  });
+
+  it("un documento suelto roto tampoco se pisa", async () => {
+    await escribirAMano("{ roto");
+    const doc = enArchivos.documento<Record<string, number>>(
+      `prueba${cuantas}`,
+      (v): v is Record<string, number> => Boolean(v) && typeof v === "object",
+      {}
+    );
+
+    await expect(doc.leer()).rejects.toThrow();
+    await expect(doc.cambiar((actual) => ({ ...actual, x: 1 }))).rejects.toThrow();
+    expect(await readFile(archivoDeLaPrueba, "utf8")).toBe("{ roto");
+  });
+
+  it("si todavía no existe, está vacío", async () => {
+    expect(await coleccion.todo()).toEqual({});
   });
 });
 

@@ -21,12 +21,33 @@ import type { Almacen, Coleccion, Documento } from "@/lib/almacen/contrato";
 const CARPETA = path.join(process.cwd(), "datos");
 
 async function leerCrudo(archivo: string): Promise<unknown> {
+  let texto: string;
   try {
-    return JSON.parse(await readFile(archivo, "utf8"));
-  } catch {
-    // No existe todavía, o quedó a medio escribir. En los dos casos la
-    // respuesta correcta es «no hay nada», que es un estado válido.
-    return null;
+    texto = await readFile(archivo, "utf8");
+  } catch (e) {
+    // Que no exista todavía es un estado válido: «no hay nada».
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    throw e;
+  }
+
+  // El Bloc de notas puede guardar con la marca de orden de bytes adelante, y
+  // `JSON.parse` no la acepta.
+  texto = texto.replace(/^﻿/, "");
+  // Vacío no tiene nada que perder: se trata como si no existiera.
+  if (texto.trim() === "") return null;
+
+  try {
+    return JSON.parse(texto);
+  } catch (e) {
+    // **Un archivo que no se entiende no es un archivo vacío.** A medio
+    // escribir no queda nunca —se escribe aparte y se renombra—, así que esto
+    // es alguien que lo tocó a mano y se le escapó una coma. Leerlo como «no
+    // hay nada» hacía que la próxima escritura partiera de cero y borrara la
+    // colección entera. Mejor que falle y diga cuál es.
+    throw new Error(
+      `No se pudo leer ${path.basename(archivo)}: el JSON está roto ` +
+        `(${e instanceof Error ? e.message : String(e)}). No se escribió nada encima.`
+    );
   }
 }
 

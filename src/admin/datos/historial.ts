@@ -43,9 +43,16 @@ async function recorrer(
 ): Promise<void> {
   if (hondura >= HONDURA) return;
 
-  const carpetas = (await subcarpetasDe(carpetaId).catch(() => [])).filter(
-    (c) => !esCarpetaReservada(c.name)
-  );
+  // **La carpeta del cliente no se perdona.** Si esa no se puede leer —llave
+  // vencida, carpeta sin compartir— no hay historial, y tragarse el error
+  // bajaba una planilla con solo los títulos como si estuviera todo bien. Que
+  // llegue a la ruta, que contesta que no se pudo. Más abajo sí se sigue: una
+  // subcarpeta rota no se lleva puestas a las demás.
+  const lista =
+    hondura === 0
+      ? await subcarpetasDe(carpetaId)
+      : await subcarpetasDe(carpetaId).catch(() => []);
+  const carpetas = lista.filter((c) => !esCarpetaReservada(c.name));
 
   for (const carpeta of carpetas) {
     const suCamino = [...camino, carpeta.name];
