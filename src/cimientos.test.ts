@@ -1138,7 +1138,7 @@ describe("la ventana del trabajo no vuelve a mezclar mirar con hacer", () => {
     expect(abre, "La ventana se quedó sin <footer>.").toBeGreaterThan(-1);
 
     const barra = ventana.slice(abre, cierra);
-    for (const cual of ["Abrir en Drive", "Comparar con la v", "<Entregar", "Configurar"]) {
+    for (const cual of ["Abrir en Drive", "Comparar v", "<Entregar", "Configurar"]) {
       expect(barra, "«" + cual + "» se fue de la barra de abajo.").toContain(cual);
     }
   });
