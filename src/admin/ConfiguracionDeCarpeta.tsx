@@ -12,7 +12,6 @@ import type { NodoCarpeta } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
 import { BOTON, TITULO } from "@/admin/estilos";
-import { BotonEnlace } from "@/ui/Boton";
 
 /**
  * Dos botones que dicen qué está pasando, no qué va a pasar.
@@ -70,12 +69,10 @@ function SiONo({
 
 export function ConfiguracionDeCarpeta({
   carpeta,
-  clienteId,
   equipo,
   alGuardar,
 }: {
   carpeta: NodoCarpeta;
-  clienteId: string;
   equipo: Persona[];
   /** Se llama cuando algo se guardó, para que la fila de arriba se actualice. */
   alGuardar: () => void;
@@ -132,21 +129,6 @@ export function ConfiguracionDeCarpeta({
               }
             />
           </form>
-
-          {/* **Un solo nombre para esa pantalla.** Se llamaba de tres
-              formas —«Armar calendario», «Armar el calendario de X», «Abrir la
-              carpeta»— y la última chocaba de frente con «Abrir la carpeta en
-              Drive», que va a otro lado. El calendario es una de las cosas que
-              hay ahí; también está qué pasó con cada pieza. */}
-          {!oculta && (
-            <BotonEnlace
-              variante="principal"
-              tamano="chico"
-              href={`/gestion/cliente/${clienteId}/carpeta/${carpeta.id}?desde=clientes`}
-            >
-              Ver la carpeta
-            </BotonEnlace>
-          )}
         </div>
       </section>
 

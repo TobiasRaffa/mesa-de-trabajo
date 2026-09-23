@@ -90,6 +90,18 @@ import type { Persona } from "@/lib/equipo";
  * decía mal apenas se entregaba algo desde acá, porque era una foto sacada al
  * abrir la pantalla de atrás.
  */
+/**
+ * Las dos columnas de la ventana: la pieza y lo que se sabe de ella.
+ *
+ * **La ficha y la barra de abajo usan las mismas**, así los botones de mirar
+ * quedan justo del ancho de la imagen. Escritas dos veces, un día una cambia
+ * y la otra no.
+ */
+const COLUMNAS = "lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-8";
+
+/** Los botones de mirar: se reparten el ancho de la imagen en partes iguales. */
+const DE_LA_IMAGEN = "min-w-0 flex-1 px-3! whitespace-nowrap";
+
 export type TrabajoParaMirar = {
   clienteId: string;
   cliente: string;
@@ -319,7 +331,10 @@ export function ResumenDeTrabajo({
 
           {/* El medio: la pieza y lo que se sabe de ella. Se desplaza, y no
               tiene un solo botón de acción. */}
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          {/* El lugar de la barra de desplazamiento se reserva acá y en la
+              barra de abajo por igual: si no, cuando aparece, angosta la
+              imagen y los botones de abajo dejan de medir lo mismo. */}
+          <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
             {error && (
               <p className="px-5 py-4 text-normal font-semibold text-alerta">{error}</p>
             )}
@@ -387,18 +402,25 @@ export function ResumenDeTrabajo({
           */}
           {pieza && (
             <footer
-              className="flex flex-wrap items-center gap-2 border-t-2 border-tinta bg-lienzo
-                         px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3"
+              className={`grid gap-2 overflow-y-auto border-t-2 border-tinta bg-lienzo px-5 py-3
+                         pb-[calc(0.75rem+env(safe-area-inset-bottom))] [scrollbar-gutter:stable]
+                         sm:pb-3 ${COLUMNAS}`}
             >
+              {/* **Los de mirar, del ancho de la imagen.** Van en la misma
+                  columna que la pieza, repartidos en partes iguales: son los
+                  botones de esa imagen, y así se leen. */}
+              <div className="flex flex-wrap gap-2 lg:flex-nowrap">
               {pieza.enlaceDrive && (
                 <BotonEnlace
                   variante="contorno"
                   href={pieza.enlaceDrive}
                   target="_blank"
                   rel="noreferrer noopener"
+                  title="Abrir en Drive"
+                  className={DE_LA_IMAGEN}
                 >
                   <IconoDrive />
-                  Abrir en Drive
+                  Drive
                 </BotonEnlace>
               )}
 
@@ -408,6 +430,8 @@ export function ResumenDeTrabajo({
                   volver. El visor ya existe: lo usa el portal. */}
               <Boton
                 variante="contorno"
+                title="Ver en grande"
+                className={DE_LA_IMAGEN}
                 onClick={() => {
                   const ultima = pieza.archivos[pieza.archivos.length - 1];
                   const previa = pieza.archivos[pieza.archivos.length - 2];
@@ -428,13 +452,14 @@ export function ResumenDeTrabajo({
                 }}
               >
                 <IconoAmpliar />
-                Ver en grande
+                Ampliar
               </Boton>
 
               {pieza.vueltas > 1 && (
                 <Boton
                   variante={comparando === pieza.id ? "principal" : "contorno"}
                   aria-pressed={comparando === pieza.id}
+                  className={DE_LA_IMAGEN}
                   onClick={() => setComparando(comparando === pieza.id ? null : pieza.id)}
                 >
                   <IconoComparar />
@@ -442,16 +467,15 @@ export function ResumenDeTrabajo({
                       «V2» y «V5» en la carpeta, «comparar con la v1» manda a
                       buscar un archivo que no existe. */}
                   {comparando === pieza.id
-                    ? "Ver solo la última"
-                    : `Comparar con la v${
-                        pieza.versiones[pieza.versiones.length - 2]?.numero ?? 1
-                      }`}
+                    ? "Solo la última"
+                    : `Comparar v${pieza.versiones[pieza.versiones.length - 2]?.numero ?? 1}`}
                 </Boton>
               )}
+              </div>
 
               {/* Lo que empuja a la derecha lo que hay que decidir: mirar es
                   gratis, entregar y otorgar una vuelta extra no. */}
-              <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 {pieza.estado === "extra_pedida" && (
                   <RevisionExtra
                     carpetaId={c.carpetaId}
@@ -561,9 +585,7 @@ function Ficha({
 
   return (
     <div
-      className={`grid gap-6 p-5 lg:gap-8 ${
-        aLaPar ? "" : "lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]"
-      }`}
+      className={`grid gap-6 p-5 lg:gap-8 ${aLaPar ? "" : COLUMNAS}`}
     >
       {/* Los rótulos llevan el nombre del archivo y no «v1» a secas: comparar
           dos imágenes parecidas sin saber cuál archivo es cuál es la mitad de
@@ -634,7 +656,18 @@ function Ficha({
           se lee primero y no en letra micro y gris. El estado va acá adentro
           y no arriba suelto: es un dato más de la misma pregunta.
         */}
-        <dl className="flex flex-wrap items-center gap-x-7 gap-y-4 rounded-tarjeta bg-hueco/60 px-5 py-4">
+        <dl className="flex flex-wrap items-start gap-x-7 gap-y-4 rounded-tarjeta bg-hueco/60 px-5 py-4">
+          {/* **El estado primero, arriba a la izquierda.** Iba al final,
+              empujado a la derecha, y en cuanto la franja no entraba en una
+              línea caía solo abajo, lejos de todo. */}
+          <div className="flex basis-full flex-wrap items-center gap-2">
+            <Estado estado={p.estado} mirada="agencia" />
+            {!p.visible && (
+              <span className="rounded-full bg-tinta px-2.5 py-1 font-mono text-micro font-bold uppercase tracking-wider text-lienzo">
+                Oculta
+              </span>
+            )}
+          </div>
           <Dato rotulo="A cargo de">
             {p.responsableA ? (
               <span className="inline-flex items-center gap-2">
@@ -688,15 +721,11 @@ function Ficha({
               )}
             </>
           )}
-          {p.publicaEl && <Dato rotulo="Sale">{enPalabrasElDia(p.publicaEl)}</Dato>}
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Estado estado={p.estado} mirada="agencia" />
-            {!p.visible && (
-              <span className="rounded-full bg-tinta px-2.5 py-1 font-mono text-micro font-bold uppercase tracking-wider text-lienzo">
-                Oculta
-              </span>
-            )}
-          </div>
+          {/* La fecha en que se publica, la que se pone en el calendario de
+              la carpeta. Decía «Sale», y no se entendía qué salía. */}
+          {p.publicaEl && (
+            <Dato rotulo="Se publica">{enPalabrasElDia(p.publicaEl)}</Dato>
+          )}
         </dl>
 
         {detalle && <DetalleDePieza pieza={detalle} version={p.version} />}
@@ -807,7 +836,9 @@ function Dato({
       <dt className="font-mono text-micro font-bold uppercase tracking-widest text-apagado">
         {rotulo}
       </dt>
-      <dd className={`cifras mt-1 text-guia font-extrabold leading-none tracking-tight ${tono}`}>
+      <dd
+        className={`cifras mt-1 flex min-h-7 items-center text-guia font-extrabold leading-none tracking-tight ${tono}`}
+      >
         {children}
       </dd>
     </div>

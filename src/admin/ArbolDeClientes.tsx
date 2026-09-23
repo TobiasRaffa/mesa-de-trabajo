@@ -984,7 +984,6 @@ function FilaCarpeta({
           ) : (
             <ConfiguracionDeCarpeta
               carpeta={carpeta}
-              clienteId={clienteId}
               equipo={equipo}
               alGuardar={alGuardar}
             />
@@ -1236,7 +1235,7 @@ function FilaArchivo({
               (laTenemosNosotros(archivo.estado) || !archivo.vence
                 ? `${archivo.diasQueCorren} ${archivo.diasQueCorren === 1 ? "día" : "días"} de revisión · `
                 : `vence el ${enPalabrasElDia(archivo.vence)} · `)}
-            {archivo.publicaEl && `sale el ${enPalabrasElDia(archivo.publicaEl)} · `}
+            {archivo.publicaEl && `se publica el ${enPalabrasElDia(archivo.publicaEl)} · `}
             {archivo.responsableA}
           </span>
         </div>
