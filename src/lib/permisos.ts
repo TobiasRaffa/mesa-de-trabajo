@@ -191,7 +191,17 @@ async function hayCamino(
  * cliente: ¿cuelga de alguna de estas raíces?
  */
 export type QuienPide =
-  | { tipo: "cliente"; raiz: string }
+  | {
+      tipo: "cliente";
+      raiz: string;
+      /**
+       * Todas las carpetas cuyo link abrió, si entró por más de un link de carpeta
+       * del mismo cliente. Sin esto, con dos links abiertos en el navegador, la
+       * segunda carpeta se veía pero sus miniaturas y archivos daban «no
+       * encontrado»: se autorizaba solo contra la primera.
+       */
+      raices?: string[];
+    }
   | {
       tipo: "agencia";
       raices: string[];
@@ -255,7 +265,7 @@ export async function archivoAutorizado(
     // El archivo en sí puede estar escondido aunque su carpeta se muestre.
     if (!deLaAgencia && (await escondidosEntre([fileId])).has(fileId)) return null;
 
-    const raices = quien.tipo === "agencia" ? quien.raices : [quien.raiz];
+    const raices = quien.tipo === "agencia" ? quien.raices : (quien.raices ?? [quien.raiz]);
     const adentro = await hayCamino(archivo.parents ?? [], raices, {
       respetarEscondidos: !deLaAgencia,
     });
@@ -293,7 +303,9 @@ async function quienPide(galletas: Galletas): Promise<QuienPide | null> {
   // Quien entró por el link de una carpeta ve esa carpeta: su raíz es la
   // carpeta, no el cliente entero.
   const entrada = await entradaDe(galletas);
-  return entrada ? { tipo: "cliente", raiz: entrada.carpeta ?? entrada.cliente.id } : null;
+  if (!entrada) return null;
+  const raiz = entrada.carpeta ?? entrada.cliente.id;
+  return { tipo: "cliente", raiz, raices: entrada.carpetas ?? [raiz] };
 }
 
 /** Lo que hace falta para leer una galleta, sin depender de cómo se leyó. */

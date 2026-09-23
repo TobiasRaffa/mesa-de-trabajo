@@ -23,6 +23,7 @@ import {
 } from "@/dominio/pieza";
 import { agruparVersiones, conSusArchivos } from "@/lib/versiones";
 import { comoFirmaElCliente, enPalabrasLoRevisado } from "@/dominio/historia";
+import { idDeDrive, vieneDeDrive } from "@/dominio/comentarios";
 import { entradaDe } from "@/lib/acceso";
 import { cadenaHasta } from "@/lib/permisos";
 import { avisar } from "@/lib/avisar";
@@ -391,12 +392,12 @@ export async function guardarCambiosDePieza(
     return { ok: false, motivo: "No pude leer los cambios." };
   }
 
-  const limpios: Cambio[] = [];
+  const recibidos: Cambio[] = [];
   for (const cambio of cambios) {
     const texto = String(cambio?.texto ?? "").trim();
     const id = String(cambio?.id ?? "");
     if (!id || !texto) continue;
-    limpios.push({ id, texto: texto.slice(0, LARGO_MAXIMO) });
+    recibidos.push({ id, texto: texto.slice(0, LARGO_MAXIMO) });
   }
 
   // Se reescribe sobre el estado que hay ahora, no sobre una foto: si la
@@ -406,6 +407,20 @@ export async function guardarCambiosDePieza(
     if (guardada.enviada) {
       return { abort: "Esta pieza ya se envió: lo escrito queda firme." };
     }
+
+    // **Un pedido que vino de Drive y el cliente corrigió acá, deja de seguir
+    // a Drive.** Lo copiado de un comentario se mantiene al día con lo que diga
+    // el comentario —corregirlo en Drive es lo normal—, así que la carga
+    // siguiente le pisaba al cliente lo que acababa de corregir en el portal,
+    // sin aviso. Si el texto que llega es distinto del guardado, lo escribió el
+    // cliente: pasa a ser un pedido suyo, con un id propio. El comentario sigue
+    // anotado como copiado, así que no vuelve a entrar repetido.
+    const antes = new Map(guardada.cambios.map((c) => [c.id, c.texto]));
+    const limpios = recibidos.map((c) =>
+      vieneDeDrive(c.id) && antes.has(c.id) && antes.get(c.id) !== c.texto
+        ? { ...c, id: `corregido:${idDeDrive(c.id)}` }
+        : c
+    );
 
     let estado = guardada.estado;
     let ronda = guardada.ronda;

@@ -682,6 +682,12 @@ export async function piezasDeLaCarpeta(carpetaId: string): Promise<ArchivoDrive
     faltantes.map(async (id): Promise<ArchivoDrive | null> => {
       try {
         const datos = await metadatosArchivo(id);
+        // **Lo que está en la papelera ya no es una pieza.** Drive contesta
+        // igual por un archivo tirado —pedirlo por su id no mira la papelera—,
+        // así que lo mudado a «Entregas finales» y después borrado seguía
+        // apareciendo en su carpeta de origen como si estuviera. Los listados
+        // ya lo excluían; esto es lo único que lo pedía por id.
+        if (datos.trashed) return null;
         return {
           id: datos.id,
           name: datos.name,

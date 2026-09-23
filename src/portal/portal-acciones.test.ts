@@ -151,3 +151,40 @@ describe("con dos links de carpeta del mismo cliente, andan las dos", () => {
     expect(r).toEqual({ ok: false, motivo: "No encontramos esa carpeta." });
   });
 });
+
+describe("un pedido que vino de Drive y el cliente corrigió en el portal", () => {
+  it("se vuelve suyo: deja de seguir al comentario y no se pisa en la carga siguiente", async () => {
+    // Un pedido copiado de un comentario de Drive, ya en la lista.
+    guardado[PIEZA] = {
+      ...(guardado[PIEZA] as object),
+      estado: "cambios_marcados",
+      cambios: [{ id: "drive:c1", texto: "V1 · Cambiar el verde" }],
+      comentariosCopiados: ["c1"],
+    };
+
+    const r = await guardarCambiosDePieza(CARPETA, PIEZA, [
+      { id: "drive:c1", texto: "Cambiar el verde por el azul de la marca" },
+    ]);
+
+    expect(r.ok).toBe(true);
+    const cambios = (guardado[PIEZA] as { cambios: Array<{ id: string; texto: string }> }).cambios;
+    // Con otro id: la sincronización con Drive solo toca los `drive:*`.
+    expect(cambios).toEqual([{ id: "corregido:c1", texto: "Cambiar el verde por el azul de la marca" }]);
+    // Y el comentario sigue anotado como copiado: no vuelve a entrar repetido.
+    expect((guardado[PIEZA] as { comentariosCopiados: string[] }).comentariosCopiados).toContain("c1");
+  });
+
+  it("si el texto no cambió, sigue siendo el de Drive", async () => {
+    guardado[PIEZA] = {
+      ...(guardado[PIEZA] as object),
+      estado: "cambios_marcados",
+      cambios: [{ id: "drive:c1", texto: "V1 · Cambiar el verde" }],
+      comentariosCopiados: ["c1"],
+    };
+
+    await guardarCambiosDePieza(CARPETA, PIEZA, [{ id: "drive:c1", texto: "V1 · Cambiar el verde" }]);
+
+    const cambios = (guardado[PIEZA] as { cambios: Array<{ id: string }> }).cambios;
+    expect(cambios.map((c) => c.id)).toEqual(["drive:c1"]);
+  });
+});

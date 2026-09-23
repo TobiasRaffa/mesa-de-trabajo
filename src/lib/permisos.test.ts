@@ -543,3 +543,16 @@ describe("lo que el portal lista, se sirve", () => {
     await expect(archivoAutorizado("archivo-1", comoCliente(CLIENTE))).resolves.toBeNull();
   });
 });
+
+describe("con dos links de carpeta del mismo cliente abiertos", () => {
+  it("los archivos de la segunda carpeta también se sirven", async () => {
+    // El archivo cuelga de «septiembre»; el navegador abrió «agosto» primero.
+    driveConArbol({ "archivo-1": ["septiembre"], septiembre: [CLIENTE], agosto: [CLIENTE] });
+
+    const soloLaPrimera = { tipo: "cliente" as const, raiz: "agosto" };
+    const lasDos = { tipo: "cliente" as const, raiz: "agosto", raices: ["agosto", "septiembre"] };
+
+    expect(await archivoAutorizado("archivo-1", soloLaPrimera)).toBeNull();
+    expect(await archivoAutorizado("archivo-1", lasDos)).not.toBeNull();
+  });
+});
