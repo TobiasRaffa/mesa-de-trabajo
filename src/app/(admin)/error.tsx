@@ -10,6 +10,7 @@
 
 import { useEffect } from "react";
 import { PANTALLA } from "@/admin/EncabezadoDePagina";
+import { reportarError } from "@/lib/errores";
 
 export default function Error({
   error,
@@ -21,6 +22,7 @@ export default function Error({
   useEffect(() => {
     // Al registro del servidor, que es donde se mira después.
     console.error(error);
+    reportarError(error);
   }, [error]);
 
   return (
