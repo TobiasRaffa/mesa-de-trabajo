@@ -3,6 +3,7 @@ import {
   calcularAviso,
   calcularVencimiento,
   diasDeDiferencia,
+  haceCuanto,
   plazoEnPalabras,
   situacionDelPlazo,
 } from "@/lib/fechas";
@@ -125,5 +126,27 @@ describe("plazoEnPalabras", () => {
       );
       expect(texto).not.toMatch(/\b1 días\b/);
     }
+  });
+});
+
+describe("haceCuanto", () => {
+  it("lo de otro año lleva el año: sin él, hace un año se lee como mañana", () => {
+    // Una visita del 23 de septiembre pasado, leída el 22 de este, decía
+    // «el 23 sept»: parecía una fecha de esta semana, y encima futura.
+    const ahora = utc("2026-09-22T15:00:00Z");
+    expect(haceCuanto("2025-09-23T15:00:00Z", ahora)).toMatch(/^el 23 .*2025$/);
+  });
+
+  it("lo de este año sigue sin año, que ahí sobra", () => {
+    const ahora = utc("2026-09-22T15:00:00Z");
+    expect(haceCuanto("2026-07-10T15:00:00Z", ahora)).not.toMatch(/2026/);
+  });
+
+  it("el año se cuenta en Buenos Aires, no en tiempo universal", () => {
+    // El 1 de enero a las 2 universales todavía es 31 de diciembre en Buenos
+    // Aires: es del año que terminó.
+    const ahora = utc("2026-12-31T23:00:00Z");
+    expect(haceCuanto("2026-01-01T02:00:00Z", ahora)).toMatch(/2025$/);
+    expect(haceCuanto("2026-01-01T12:00:00Z", ahora)).not.toMatch(/2025|2026/);
   });
 });

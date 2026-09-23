@@ -199,25 +199,43 @@ export async function avisoQueContinua(
   nuevo: { clase: ClaseDeAviso; clienteId: string; carpetaId?: string },
   ahora = new Date()
 ): Promise<Aviso | null> {
+  // **El último de esa carpeta, no el último del cliente.** Buscando solo por
+  // clase y cliente, una aprobación en «Stories» tapaba a la de «Banners»:
+  // `continuaA` la descartaba por ser de otra carpeta y la siguiente de
+  // «Banners» abría otro aviso, con otro correo.
   const ultimo = (await losAvisos()).find(
-    (a) => a.clase === nuevo.clase && a.clienteId === nuevo.clienteId
+    (a) =>
+      a.clase === nuevo.clase &&
+      a.clienteId === nuevo.clienteId &&
+      (nuevo.carpetaId === undefined || a.carpetaId === nuevo.carpetaId)
   );
   return ultimo && continuaA(ultimo, nuevo, ahora) ? ultimo : null;
 }
 
-/** Reescribe un aviso que ya está: el texto y la hora, que pasa a ser ahora. */
+/**
+ * Reescribe un aviso que ya está, con los cambios que salen de lo guardado.
+ *
+ * `cambios` recibe el aviso **como está guardado ahora** y no la copia que
+ * trajo quien llama: entre que lo leyó y llega acá, otro pudo haberle subido
+ * la cuenta de veces —y escribir sobre la copia vieja la pisaba— o alguien
+ * pudo haberlo visto. Si devuelve `null`, no se toca nada y esto devuelve
+ * `null`: el aviso ya no admite que se le sume algo.
+ */
 export async function actualizarAviso(
   aviso: Aviso,
-  cambios: Partial<Pick<Aviso, "texto" | "cuando" | "veces" | "piezas">>
-): Promise<Aviso> {
-  // Se parte de lo que hay guardado y no de la copia que trajo quien llama:
-  // entre que lo leyó y llega acá, otro pudo haberle subido la cuenta de veces
-  // o cambiado el texto, y escribir la copia vieja lo borraría.
-  const quedo = await almacen.cambiar(aviso.id, (habia) => ({
-    ...(habia ?? aviso),
-    ...cambios,
-  }));
-  return quedo ?? { ...aviso, ...cambios };
+  cambios: (
+    habia: Aviso
+  ) => Partial<Pick<Aviso, "texto" | "cuando" | "veces" | "piezas">> | null
+): Promise<Aviso | null> {
+  // `como` puede correr más de una vez; lo que vale es la última, que es la
+  // que queda escrita.
+  let quedo: Aviso | null = null;
+  await almacen.cambiar(aviso.id, (habia) => {
+    const hechos = habia ? cambios(habia) : null;
+    quedo = habia && hechos ? { ...habia, ...hechos } : null;
+    return quedo ?? habia;
+  });
+  return quedo;
 }
 
 /**

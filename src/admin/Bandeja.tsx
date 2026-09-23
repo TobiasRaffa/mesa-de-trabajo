@@ -59,7 +59,10 @@ export function Bandeja({
 
   const [, marcar] = useTransition();
   useEffect(() => {
-    if (sinVer > 0) marcar(() => marcarAvisosVistos());
+    const ids = cualesDarPorVistas(avisos, eranNuevas);
+    if (ids.length > 0) marcar(() => marcarAvisosVistos(ids));
+    // Se vuelve a mirar cuando cambia cuántas hay sin ver, no en cada dibujo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sinVer]);
 
   return (
@@ -103,6 +106,19 @@ export function Bandeja({
       )}
     </section>
   );
+}
+
+/**
+ * Qué avisos da por vistos abrir la bandeja: los que se dibujaron como nuevos.
+ *
+ * **Con los ids, no «todos los míos».** Sin ids, el servidor marcaba lo que
+ * hubiera en el momento de la acción, y un mensaje que entraba entre el dibujo
+ * y la marca quedaba leído sin que nadie lo viera. Y lo que llega después con
+ * la pantalla abierta no se dibuja como nuevo —las nuevas se fijan al abrir—,
+ * así que tampoco se marca: queda sin leer para la próxima vez.
+ */
+export function cualesDarPorVistas(avisos: AvisoMio[], eranNuevas: Set<string>): string[] {
+  return avisos.filter((a) => !a.loVi && eranNuevas.has(a.id)).map((a) => a.id);
 }
 
 /**

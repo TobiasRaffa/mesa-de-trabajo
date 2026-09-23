@@ -10,7 +10,13 @@
 // La cuenta de días vive en el dominio: la necesita también `pieza.ts`, que no
 // puede importar de acá. Se reexporta lo que ya se usaba con este nombre para
 // que nadie tenga que cambiar de puerta.
-import { DIA_EN_MS, diasDeDiferencia, enPalabrasElDiaDe } from "@/dominio/tiempo";
+import {
+  DIA_EN_MS,
+  diaEnBuenosAires,
+  diasDeDiferencia,
+  enPalabrasConAnio,
+  enPalabrasElDiaDe,
+} from "@/dominio/tiempo";
 
 export {
   diaEnBuenosAires,
@@ -90,5 +96,11 @@ export function haceCuanto(iso: string, ahora = new Date()): string {
   const dias = diasDeDiferencia(momento, ahora);
   if (dias <= 1) return "ayer";
   if (dias < 31) return `hace ${dias} días`;
-  return `el ${enPalabrasElDiaDe(momento)}`;
+  // **De otro año, con el año.** Sin él, algo de hace once meses y medio se
+  // leía como una fecha de este año —y a veces de la semana que viene—, justo
+  // en el dato que dice si un cliente dejó de mirar el portal. El año se toma
+  // en Buenos Aires, como el resto de las cuentas de días.
+  const mismoAnio =
+    diaEnBuenosAires(momento).slice(0, 4) === diaEnBuenosAires(ahora).slice(0, 4);
+  return `el ${mismoAnio ? enPalabrasElDiaDe(momento) : enPalabrasConAnio(momento)}`;
 }

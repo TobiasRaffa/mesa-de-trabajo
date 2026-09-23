@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { memoriaDePruebas } = await import("@/lib/almacen/enMemoria");
 const guardado = memoriaDePruebas.ver("recordatorios");
 const avisos: Array<{ clase: string; detalle?: string }> = [];
+// Si `avisar` pudo dejar el aviso anotado. Lo contesta él, porque nunca lanza.
+const avisar = { anota: true };
 
 // El doble del almacén es el compartido: cumple el contrato entero —`cambiar`
 // incluido— así que lo que pasa acá dice algo de lo que va a pasar de verdad.
@@ -12,7 +14,9 @@ vi.mock("@/lib/almacen", async () => (await import("@/lib/almacen/enMemoria")).m
 
 vi.mock("@/lib/avisar", () => ({
   avisar: async (o: { clase: string; detalle?: string }) => {
+    if (!avisar.anota) return false;
     avisos.push(o);
+    return true;
   },
 }));
 
@@ -36,6 +40,7 @@ const donde = { clienteId: "c", cliente: "Cliente", carpetaId: "k", carpeta: "Ca
 beforeEach(() => {
   for (const k of Object.keys(guardado)) delete guardado[k];
   avisos.length = 0;
+  avisar.anota = true;
 });
 
 describe("cuál toca", () => {
@@ -53,6 +58,26 @@ describe("cuál toca", () => {
     expect(recordatorioQueToca(pieza(), new Date(entregada.getTime() + 4.5 * DIA))).toBe(
       "vencio"
     );
+  });
+
+  it("«vencio» recién al día siguiente del vencimiento, como el tablero y el portal", () => {
+    // Entregada el 21/09 a las 10 con 3 días: vence el 24/09 a las 10. A las
+    // 11 de ese día el tablero y el portal dicen «vence hoy»; el aviso de que
+    // se cumplió el plazo mandaba a apurar a un cliente al que le quedaba el
+    // resto del día.
+    const el21 = new Date("2026-09-21T10:00:00-03:00");
+    const conPlazo = pieza({
+      entregadaEl: el21.toISOString(),
+      dias: 3,
+      vence: new Date(el21.getTime() + 3 * DIA),
+    });
+    expect(recordatorioQueToca(conPlazo, new Date("2026-09-24T11:00:00-03:00"))).toBe(
+      "por_vencer"
+    );
+    expect(recordatorioQueToca(conPlazo, new Date("2026-09-24T23:59:00-03:00"))).toBe(
+      "por_vencer"
+    );
+    expect(recordatorioQueToca(conPlazo, new Date("2026-09-25T00:00:00-03:00"))).toBe("vencio");
   });
 
   it("nada si el cliente ya decidió", () => {
@@ -97,6 +122,22 @@ describe("cada uno sale una sola vez", () => {
     expect(await recordarSiHaceFalta(denuevo, donde, new Date(otra.getTime() + 3 * DIA))).toBe(
       "por_vencer"
     );
+  });
+
+  it("si el aviso no se pudo anotar, no queda dado por mandado y se reintenta", async () => {
+    // `avisar` nunca lanza: si el almacén se cae justo cuando se abre el
+    // tablero, la marca quedaba puesta y ese aviso no salía nunca más.
+    avisar.anota = false;
+    expect(
+      await recordarSiHaceFalta(pieza(), donde, new Date(entregada.getTime() + 3 * DIA))
+    ).toBeNull();
+    expect(Object.keys(guardado)).toEqual([]);
+
+    avisar.anota = true;
+    expect(
+      await recordarSiHaceFalta(pieza(), donde, new Date(entregada.getTime() + 3.2 * DIA))
+    ).toBe("por_vencer");
+    expect(avisos.map((a) => a.clase)).toEqual(["por_vencer"]);
   });
 
   it("dice qué pieza", async () => {

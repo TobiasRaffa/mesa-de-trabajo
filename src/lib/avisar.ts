@@ -27,6 +27,7 @@ import {
   actualizarAviso,
   anotarAviso,
   avisoQueContinua,
+  continuaA,
   type ClaseDeAviso,
 } from "@/lib/avisos";
 import { correoConfigurado, mandarCorreo } from "@/lib/correo";
@@ -101,7 +102,10 @@ export async function avisar(opciones: {
   carpeta: string;
   /** El nombre de la pieza, o el resumen. Va adentro del texto. */
   detalle?: string;
-}): Promise<void> {
+}): Promise<boolean> {
+  // **Contesta si el aviso quedó anotado.** Como nunca lanza, quien necesita
+  // saber si salió —los recordatorios, que si no lo dan por mandado para
+  // siempre— no tenía otra forma de enterarse.
   const { clase, clienteId, cliente, carpetaId, carpeta, detalle } = opciones;
 
   try {
@@ -114,25 +118,41 @@ export async function avisar(opciones: {
       // Los mensajes van por cliente —la conversación no es de una carpeta—;
       // lo que se decide pieza por pieza, por carpeta: aprobar en «Banners» y
       // aprobar en «Stories» son dos novedades y nombran carpetas distintas.
-      const anterior = await avisoQueContinua({
+      const nuevo = {
         clase,
         clienteId,
         carpetaId: clase === "escribio" ? undefined : carpetaId,
-      });
-      if (anterior) {
-        const veces = (anterior.veces ?? 1) + 1;
-        const piezas = detalle ? [...(anterior.piezas ?? []), detalle] : anterior.piezas;
-        await actualizarAviso(anterior, {
-          veces,
-          piezas,
-          cuando: new Date().toISOString(),
-          texto:
-            clase === "escribio"
-              ? `Escribió ${veces} mensajes en la conversación.`
-              : juntadas(clase, carpeta, veces, piezas),
-        });
-        return;
-      }
+      };
+      const anterior = await avisoQueContinua(nuevo);
+      // **La cuenta sale de lo guardado, no de lo que se leyó recién.** Tres
+      // mensajes a la vez leían el mismo aviso, le sumaban uno cada uno a su
+      // copia y guardaban «2 mensajes» donde había 4. Y si alguien lo vio entre
+      // la lectura y la escritura, ya no se suma: lo nuevo va en otro aviso,
+      // en lugar de esconderse adentro de uno que figura como leído.
+      const sumado =
+        anterior &&
+        (await actualizarAviso(anterior, (habia) => {
+          const ahora = new Date();
+          if (!continuaA(habia, nuevo, ahora)) return null;
+          // **Se cuentan piezas, no toques.** Pedir cambios, descartar y volver
+          // a pedir sobre la misma pieza decía «2 piezas: la v2 de a y la v2
+          // de a». Si la pieza ya está, lo único que cambia es la hora.
+          if (clase !== "escribio" && detalle && habia.piezas?.includes(detalle)) {
+            return { cuando: ahora.toISOString() };
+          }
+          const veces = (habia.veces ?? 1) + 1;
+          const piezas = detalle ? [...(habia.piezas ?? []), detalle] : habia.piezas;
+          return {
+            veces,
+            piezas,
+            cuando: ahora.toISOString(),
+            texto:
+              clase === "escribio"
+                ? `Escribió ${veces} mensajes en la conversación.`
+                : juntadas(clase, carpeta, veces, piezas),
+          };
+        }));
+      if (sumado) return true;
     }
 
     // **Sin el nombre del cliente adentro.** Iba cosido al principio de cada
@@ -193,8 +213,10 @@ export async function avisar(opciones: {
       detalleDelCorreo:
         estado.estado === "fallo" && conCorreo.length > 0 ? estado.motivo : undefined,
     });
+    return true;
   } catch {
     // Que fallar en avisar no tumbe lo que el cliente acaba de hacer.
+    return false;
   }
 }
 

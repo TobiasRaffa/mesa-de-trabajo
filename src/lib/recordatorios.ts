@@ -17,7 +17,7 @@
 import { coleccion } from "@/lib/almacen";
 import { avisar } from "@/lib/avisar";
 import type { ClaseDeAviso } from "@/lib/avisos";
-import { calcularAviso } from "@/lib/fechas";
+import { calcularAviso, medianocheDeHoy } from "@/lib/fechas";
 
 type Recordatorio = { cuando: string };
 
@@ -66,7 +66,11 @@ export function recordatorioQueToca(
   const entregada = new Date(pieza.entregadaEl);
   if (Number.isNaN(entregada.getTime())) return null;
 
-  if (pieza.vence.getTime() <= ahora.getTime()) return "vencio";
+  // **Vencido es desde el día siguiente, contado en Buenos Aires.** Comparaba
+  // instantes: el aviso de que se cumplió el plazo salía a la hora exacta de
+  // la entrega, mientras el tablero y el portal todavía decían «vence hoy», y
+  // la agencia salía a apurar a un cliente al que le quedaba el resto del día.
+  if (pieza.vence.getTime() < medianocheDeHoy(ahora).getTime()) return "vencio";
   if (calcularAviso(entregada, pieza.dias).getTime() <= ahora.getTime()) return "por_vencer";
   return null;
 }
@@ -108,14 +112,14 @@ export async function recordarSiHaceFalta(
     });
     if (!loPuseYo) return null;
 
-    try {
-      await avisar({ clase, ...donde, detalle: pieza.detalle });
-    } catch (e) {
-      // **Si no salió, la marca se borra.** Anotarlo antes de mandarlo lo
-      // dejaba dado por enviado para siempre —la clave ya estaba tomada— y el
-      // aviso de que algo venció no se volvía a intentar nunca.
+    // **Si no quedó anotado, la marca se borra.** Anotarlo antes de mandarlo
+    // lo dejaba dado por enviado para siempre —la clave ya estaba tomada— y el
+    // aviso de que algo venció no se volvía a intentar nunca. Se mira lo que
+    // contesta `avisar` y no si lanzó: `avisar` nunca lanza, así que un
+    // `catch` acá no corría jamás.
+    if (!(await avisar({ clase, ...donde, detalle: pieza.detalle }))) {
       await almacen.borrar(id).catch(() => undefined);
-      throw e;
+      return null;
     }
     return clase;
   } catch {
