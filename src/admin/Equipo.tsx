@@ -512,10 +512,21 @@ function comoSeLee(alcance: Persona["clientes"], clientes: ClienteParaElegir[]):
   if (alcance === "todos") return "todos";
   if (alcance.length === 0) return "ninguno";
 
-  const nombres = alcance.map((id) => clientes.find((c) => c.id === id)?.nombre ?? id);
-  return nombres.length <= 3
-    ? nombres.join(", ")
-    : `${nombres.slice(0, 3).join(", ")} y ${nombres.length - 3} más`;
+  // **Un cliente que ya no existe no se muestra por su identificador.** Se
+  // leía «Clientes: 1PiLqYLMry9…», que no le dice nada a nadie; y si era el
+  // único, la persona no llega a ningún cliente y eso es lo que hay que ver.
+  const nombres = alcance
+    .map((id) => clientes.find((c) => c.id === id)?.nombre)
+    .filter((n): n is string => Boolean(n));
+  const perdidos = alcance.length - nombres.length;
+  const yaNo = perdidos === 1 ? "uno que ya no existe" : `${perdidos} que ya no existen`;
+  if (nombres.length === 0) return `ninguno (${perdidos === 1 ? "el que tenía" : "los que tenía"} ya no existe${perdidos === 1 ? "" : "n"})`;
+
+  const lista =
+    nombres.length <= 3
+      ? nombres.join(", ")
+      : `${nombres.slice(0, 3).join(", ")} y ${nombres.length - 3} más`;
+  return perdidos > 0 ? `${lista}, y ${yaNo}` : lista;
 }
 
 /**
