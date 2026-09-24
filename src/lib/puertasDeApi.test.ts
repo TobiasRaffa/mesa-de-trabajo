@@ -195,3 +195,39 @@ describe("una puerta cerrada para la agencia lo está para todos sus roles", () 
     }
   );
 });
+
+describe("un navegador con las dos galletas", () => {
+  // Alguien del equipo que abre el portal de un cliente con su clave trae la
+  // galleta de gestión y la del portal. Se miraba solo la de la agencia: la
+  // conversación del portal —que no es para la agencia— contestaba «no
+  // encontrado» y el chat aparecía vacío.
+  function conLasDos(rol: Rol, clientes: "todos" | string[] = "todos") {
+    comoAgencia(rol, clientes);
+    entradaDe.mockResolvedValue({ cliente: { id: CLIENTE }, carpeta: undefined });
+    entroAlCliente.mockImplementation(async (id: string) => id === CLIENTE);
+  }
+
+  it("la conversación del portal le contesta como cliente", async () => {
+    conLasDos("admin");
+    expect(await quienPideDe(CLIENTE, GALLETAS, DE_LA_CONVERSACION)).toMatchObject({
+      tipo: "cliente",
+    });
+  });
+
+  it("pero solo la de ese cliente: la otra galleta no abre a otro", async () => {
+    conLasDos("admin");
+    expect(await quienPideDe(OTRO, GALLETAS, DE_LA_CONVERSACION)).toBeNull();
+  });
+
+  it("donde entra la agencia, sigue entrando como agencia", async () => {
+    conLasDos("admin");
+    expect(await quienPideDe(CLIENTE, GALLETAS, DEL_HISTORIAL)).toMatchObject({
+      tipo: "agencia",
+    });
+  });
+
+  it("la agencia que no llega a ese cliente no gana nada: el historial no es del portal", async () => {
+    conLasDos("admin", [OTRO]);
+    expect(await quienPideDe(CLIENTE, GALLETAS, DEL_HISTORIAL)).toBeNull();
+  });
+});

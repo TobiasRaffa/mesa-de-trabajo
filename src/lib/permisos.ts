@@ -282,24 +282,25 @@ export async function archivoAutorizado(
  * respuesta que no sirve para abrir nada, y es la de alguien que escribió una
  * dirección sin haber entrado por ninguna puerta.
  */
-async function quienPide(galletas: Galletas): Promise<QuienPide | null> {
-  // Primero la agencia: es una firma y no toca Drive. Buscar el cliente
-  // recorre sus carpetas, y sería trabajo tirado cuando quien mira es el equipo.
+/** La agencia, si trae su galleta. Es una firma y no toca Drive. */
+async function comoAgencia(galletas: Galletas): Promise<QuienPide | null> {
   const sesion = await quienLleva(galletas.get(GALLETA_DE_GESTION)?.value);
-  if (sesion) {
-    // Las raíces salen del alcance de esa persona. Con `"todos"` son las de
-    // todos los clientes, que es lo que era antes para cualquiera.
-    const administradas = await carpetasAdministradas();
-    return {
-      tipo: "agencia",
-      raices: recortaA(
-        sesion.clientes,
-        administradas.map((id) => ({ id }))
-      ).map((c) => c.id),
-      secciones: sesion.secciones,
-    };
-  }
+  if (!sesion) return null;
+  // Las raíces salen del alcance de esa persona. Con `"todos"` son las de
+  // todos los clientes, que es lo que era antes para cualquiera.
+  const administradas = await carpetasAdministradas();
+  return {
+    tipo: "agencia",
+    raices: recortaA(
+      sesion.clientes,
+      administradas.map((id) => ({ id }))
+    ).map((c) => c.id),
+    secciones: sesion.secciones,
+  };
+}
 
+/** El cliente, si entró por su link. */
+async function comoCliente(galletas: Galletas): Promise<QuienPide | null> {
   // Quien entró por el link de una carpeta ve esa carpeta: su raíz es la
   // carpeta, no el cliente entero.
   const entrada = await entradaDe(galletas);
@@ -357,13 +358,7 @@ export async function quienPideEn(
   galletas: Galletas,
   puerta: Puerta
 ): Promise<QuienPide | null> {
-  const quien = await quienPide(galletas);
-  if (!quien) return null;
-
-  if (quien.tipo === "cliente") return puerta.cliente ? quien : null;
-
-  if (!puerta.agencia) return null;
-  return puerta.agencia.some((s) => quien.secciones.includes(s)) ? quien : null;
+  return quienPasa(galletas, puerta, async () => true);
 }
 
 /**
@@ -380,13 +375,47 @@ export async function quienPideDe(
   galletas: Galletas,
   puerta: Puerta
 ): Promise<QuienPide | null> {
-  const quien = await quienPideEn(galletas, puerta);
-  if (!quien) return null;
+  return quienPasa(galletas, puerta, async (quien) =>
+    quien.tipo === "agencia"
+      ? quien.raices.includes(clienteId)
+      : entroAlCliente(clienteId, galletas)
+  );
+}
 
-  if (quien.tipo === "agencia") {
-    return quien.raices.includes(clienteId) ? quien : null;
+/**
+ * La primera de las dos identidades que pasa por esta puerta.
+ *
+ * **Un navegador puede traer las dos galletas**: alguien del equipo que abre
+ * el portal de un cliente con su clave —para ver lo que ve él— tiene la de
+ * gestión y la del portal. Se miraba solo la de la agencia, y si la ruta no era
+ * para la agencia contestaba «no encontrado» sin probar la otra: la
+ * conversación del portal aparecía vacía, y el sondeo fallaba en silencio cada
+ * pocos segundos. Ahora se prueba cada una con su propia regla, y pasa la
+ * primera que corresponda. Ninguna abre más que antes: cada una se comprueba
+ * entera, igual que si viniera sola.
+ */
+async function quienPasa(
+  galletas: Galletas,
+  puerta: Puerta,
+  alcanza: (quien: QuienPide) => Promise<boolean>
+): Promise<QuienPide | null> {
+  // Primero la agencia: es una firma y no toca Drive. Buscar el cliente
+  // recorre sus carpetas, y sería trabajo tirado cuando quien mira es el equipo.
+  if (puerta.agencia) {
+    const agencia = await comoAgencia(galletas);
+    if (
+      agencia?.tipo === "agencia" &&
+      puerta.agencia.some((s) => agencia.secciones.includes(s)) &&
+      (await alcanza(agencia))
+    ) {
+      return agencia;
+    }
   }
-  return (await entroAlCliente(clienteId, galletas)) ? quien : null;
+  if (puerta.cliente) {
+    const cliente = await comoCliente(galletas);
+    if (cliente && (await alcanza(cliente))) return cliente;
+  }
+  return null;
 }
 
 /**
