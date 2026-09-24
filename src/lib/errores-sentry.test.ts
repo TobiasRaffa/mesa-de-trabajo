@@ -70,10 +70,16 @@ describe("un error del servidor, camino al panel", () => {
       }
     );
 
+    // Con toda la batería corriendo a la vez el envío puede tardar más que el
+    // tope de `flush`: se espera a que llegue, en vez de suponer cuánto tarda.
+    const hasta = Date.now() + 10_000;
+    while (!llegado.some((x) => x.includes("Falló")) && Date.now() < hasta) {
+      await new Promise((listo) => setTimeout(listo, 50));
+    }
     const todo = llegado.join("\n");
     expect(todo, "No llegó nada al receptor").toContain("Falló /t/[token]");
     for (const secreto of ["WAX8PDItj0MWgeIO", "GALLETA-SECRETA", "LLAVE-TAREA", "LLAVE-SUPER-SECRETA"]) {
       expect(todo, `Salió «${secreto}»`).not.toContain(secreto);
     }
-  });
+  }, 20_000);
 });
