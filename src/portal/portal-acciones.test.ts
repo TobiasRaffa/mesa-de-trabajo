@@ -188,3 +188,15 @@ describe("un pedido que vino de Drive y el cliente corrigió en el portal", () =
     expect(cambios.map((c) => c.id)).toEqual(["drive:c1"]);
   });
 });
+
+describe("el aviso al equipo nombra el trabajo, no el archivo", () => {
+  it("«aprobó la v1 de listo», no «la v1 de listo.jpeg» ni «la v2 de V2_…»", async () => {
+    const { avisar } = await import("@/lib/avisar");
+    vi.mocked(avisar).mockClear();
+    const r = await moverPieza(CARPETA, PIEZA, { tipo: "aprobar", por: "Lu" });
+    expect(r.ok).toBe(true);
+    const detalle = vi.mocked(avisar).mock.calls.at(-1)?.[0].detalle ?? "";
+    expect(detalle).toMatch(/^la v1 de listo\b/);
+    expect(detalle).not.toContain(".jpeg");
+  });
+});

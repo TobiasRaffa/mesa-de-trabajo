@@ -219,7 +219,7 @@ type LaQueMira = {
    *  archivo, así que su identificador no sirve para ir a buscarlo. */
   archivoActual: string;
   /**
-   * Cómo se llama y qué número de vuelta es, **según el archivo**.
+   * Cómo se llama el trabajo y qué número de vuelta es **según el archivo**.
    *
    * No según la ronda. Se calculaba como «ronda + 1», y eso vale solo mientras
    * las dos cosas coincidan: el cliente miraba «V5_stickers.jpeg» y el aviso
@@ -232,7 +232,7 @@ type LaQueMira = {
 };
 
 function laQueMira<T extends { name: string; id: string }>(
-  pieza: { versiones: Array<{ numero: number; archivo: T }> },
+  pieza: { titulo: string; versiones: Array<{ numero: number; archivo: T }> },
   /** Lo que se le entregó. Sin nada, la última que hay. */
   entregado: { versionEntregada?: number; archivoEntregado?: string } = {}
 ): LaQueMira {
@@ -246,7 +246,11 @@ function laQueMira<T extends { name: string; id: string }>(
   const ultima = lista[lista.length - 1];
   return {
     archivoActual: ultima.archivo.id,
-    nombre: ultima.archivo.name,
+    // **El nombre del trabajo, no el del archivo.** Con el del archivo el
+    // aviso decía «pidió cambios en la v6 de V6_stickers.jpeg»: la vuelta dos
+    // veces, y con la extensión. El número ya sale del archivo; el nombre es
+    // el mismo que usan el tablero y los recordatorios, «la v6 de stickers».
+    nombre: pieza.titulo,
     version: ultima.numero,
   };
 }
