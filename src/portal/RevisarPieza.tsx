@@ -43,7 +43,7 @@ import { urlDeMiniatura } from "@/lib/miniaturas";
 import { Miniatura } from "@/ui/Miniatura";
 import type { VersionDePieza } from "@/portal/datos/cliente";
 import type { Cambio } from "@/lib/piezas";
-import { enPalabrasElDiaDe } from "@/dominio/tiempo";
+import { cuandoSePublica, enPalabrasElDiaDe } from "@/dominio/tiempo";
 
 // El tipo vive en `lib/piezas` porque también lo usa el servidor: es lo que se
 // guarda, no solo lo que se dibuja.
@@ -73,8 +73,9 @@ type Props = {
   onIr: (paso: -1 | 1) => void;
   onCerrar: () => void;
   onEvento: (evento: Evento) => void;
-  onAgregarCambio: (texto: string) => void;
-  onEditarCambio: (id: string, texto: string) => void;
+  /** Devuelven la promesa del guardado, para poder esperarla antes de enviar. */
+  onAgregarCambio: (texto: string) => void | Promise<unknown>;
+  onEditarCambio: (id: string, texto: string) => void | Promise<unknown>;
   onBorrarCambio: (id: string) => void;
   onEnviarEsta: () => void;
   onAmpliar: (laminas: Lamina[]) => void;
@@ -109,7 +110,6 @@ export function RevisarPieza({
   firma = null,
   onCambiarFirma,
 }: Props) {
-  const marco = useTrampaDeFoco<HTMLDivElement>(onCerrar);
   const [comparando, setComparando] = useState(false);
 
   // Qué se está escribiendo: el id de un cambio existente, "nuevo", o nada.
@@ -163,21 +163,44 @@ export function RevisarPieza({
     }
   }
 
-  function guardarLoEscrito() {
+  async function guardarLoEscrito() {
     const texto = borrador.trim();
-    if (texto) {
-      if (escribiendo === "nuevo") onAgregarCambio(texto);
-      else if (escribiendo) onEditarCambio(escribiendo, texto);
-    }
+    const cual = escribiendo;
     setEscribiendo(null);
     setBorrador("");
+    if (!texto || !cual) return;
+    await (cual === "nuevo" ? onAgregarCambio(texto) : onEditarCambio(cual, texto));
   }
+
+  /**
+   * **Lo escrito no se pierde por irse sin tocar «Guardar».** Cerrar la
+   * ventana, pasar a otra pieza o tocar «Enviar revisión» con un cambio a
+   * medio escribir lo tiraba sin avisar: el cliente creía haber pedido algo
+   * que nunca llegó. Se guarda como un pedido más —sin mandarlo—, y se puede
+   * borrar como cualquier otro. Descartar sigue siendo «Cancelar».
+   */
+  const cerrar = () => {
+    void guardarLoEscrito();
+    onCerrar();
+  };
+  const ir = (paso: -1 | 1) => {
+    void guardarLoEscrito();
+    onIr(paso);
+  };
+  async function enviarConLoEscrito() {
+    // Se espera el guardado: enviar antes de que llegue mandaría la revisión
+    // sin el último pedido, que es justo lo que se estaba escribiendo.
+    await guardarLoEscrito();
+    onEnviarEsta();
+  }
+
+  const marco = useTrampaDeFoco<HTMLDivElement>(cerrar);
 
   return (
     // Tocar el fondo cierra, como en toda ventana de la aplicación. `<Fondo>`
     // se ocupa de que solo cierre el fondo mismo y no un toque adentro.
     <Fondo
-      onCerrar={onCerrar}
+      onCerrar={cerrar}
       className="z-40 flex items-stretch justify-center sm:items-center sm:p-6"
     >
       <div
@@ -194,11 +217,11 @@ export function RevisarPieza({
           rotulo={
             <>
               Pieza {posicion.actual} de {posicion.total}
-              {pieza.publicaEl && ` · sale el ${enPalabrasElDiaDe(pieza.publicaEl)}`}
+              {pieza.publicaEl && ` · ${cuandoSePublica(pieza.publicaEl)}`}
             </>
           }
           titulo={pieza.nombre}
-          onCerrar={onCerrar}
+          onCerrar={cerrar}
           controles={
             <>
               <span className="mr-1.5 hidden rounded-full bg-white/15 px-3 py-1.5 font-mono text-micro font-bold uppercase tracking-wider sm:block">
@@ -216,10 +239,10 @@ export function RevisarPieza({
                   hay que acertarle a la cruz. */}
               {posicion.total > 1 && (
                 <>
-                  <ControlDeVentana onClick={() => onIr(-1)} aria-label="Pieza anterior">
+                  <ControlDeVentana onClick={() => ir(-1)} aria-label="Pieza anterior">
                     <IconoFlecha className="rotate-180" />
                   </ControlDeVentana>
-                  <ControlDeVentana onClick={() => onIr(1)} aria-label="Pieza siguiente">
+                  <ControlDeVentana onClick={() => ir(1)} aria-label="Pieza siguiente">
                     <IconoFlecha />
                   </ControlDeVentana>
                 </>
@@ -472,7 +495,7 @@ export function RevisarPieza({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             {pendiente && (
               <>
-                <Boton variante="sutil" tamano="chico" onClick={onCerrar}>
+                <Boton variante="sutil" tamano="chico" onClick={cerrar}>
                   Dejar esta para después
                 </Boton>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -586,8 +609,8 @@ export function RevisarPieza({
                 </Boton>
                 <Boton
                   variante="principal"
-                  onClick={onEnviarEsta}
-                  disabled={pieza.cambios.length === 0}
+                  onClick={enviarConLoEscrito}
+                  disabled={pieza.cambios.length === 0 && !borrador.trim()}
                 >
                   <IconoEnviar />
                   Enviar revisión

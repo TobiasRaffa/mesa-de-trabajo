@@ -48,7 +48,7 @@ import { Miniatura } from "@/ui/Miniatura";
 import { Marca, NOMBRE_DE_LA_AGENCIA } from "@/ui/Marca";
 import type { CarpetaDeTrabajo, PortalDeCliente } from "@/portal/datos/cliente";
 import { RevisarPieza, type PiezaAbierta } from "@/portal/RevisarPieza";
-import { enPalabrasElDiaDe, enPalabrasElMes } from "@/dominio/tiempo";
+import { cuandoSePublica, enPalabrasElMes } from "@/dominio/tiempo";
 
 type EnPantalla = PiezaAbierta;
 
@@ -1060,7 +1060,7 @@ function Revision({
                             anteriores— ya lo dice el número de la pastilla. */}
                         {pieza.publicaEl && (
                           <span className="text-micro font-semibold uppercase tracking-wider text-apagado">
-                            sale el {enPalabrasElDiaDe(pieza.publicaEl)}
+                            {cuandoSePublica(pieza.publicaEl)}
                           </span>
                         )}
                         {pieza.enviada && (

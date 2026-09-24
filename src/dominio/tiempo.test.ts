@@ -85,3 +85,19 @@ describe("los días se cuentan por calendario", () => {
     ).toBe(2);
   });
 });
+
+describe("cuándo se publica", () => {
+  // Mediodía en Buenos Aires del 24 de septiembre.
+  const ahora = new Date("2026-09-24T15:00:00Z");
+  it("en futuro, en pasado, u hoy", async () => {
+    const { cuandoSePublica } = await import("@/dominio/tiempo");
+    expect(cuandoSePublica("2026-10-03", ahora)).toBe("se publica el 3 oct");
+    expect(cuandoSePublica("2026-09-03", ahora)).toBe("se publicó el 3 sept");
+    expect(cuandoSePublica("2026-09-24", ahora)).toBe("se publica hoy");
+  });
+  it("con el día en hora de Buenos Aires, aunque llegue como momento", async () => {
+    const { cuandoSePublica } = await import("@/dominio/tiempo");
+    // 01:00 UTC del 25 son las 22 del 24 en Buenos Aires: es hoy.
+    expect(cuandoSePublica(new Date("2026-09-25T01:00:00Z"), ahora)).toBe("se publica hoy");
+  });
+});

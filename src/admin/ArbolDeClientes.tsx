@@ -53,7 +53,7 @@ import { Estado } from "@/ui/Estado";
 import { laTenemosNosotros, sigueEnJuego } from "@/dominio/pieza";
 import { coincide } from "@/dominio/texto";
 import { haceCuanto } from "@/lib/fechas";
-import { enPalabrasElDia } from "@/dominio/tiempo";
+import { cuandoSePublica, enPalabrasElDia } from "@/dominio/tiempo";
 import { IconoConfig, IconoDrive, IconoFlecha } from "@/ui/Icono";
 import { MensajesSinLeer } from "@/admin/MensajesSinLeer";
 
@@ -1235,7 +1235,7 @@ function FilaArchivo({
               (laTenemosNosotros(archivo.estado) || !archivo.vence
                 ? `${archivo.diasQueCorren} ${archivo.diasQueCorren === 1 ? "día" : "días"} de revisión · `
                 : `vence el ${enPalabrasElDia(archivo.vence)} · `)}
-            {archivo.publicaEl && `se publica el ${enPalabrasElDia(archivo.publicaEl)} · `}
+            {archivo.publicaEl && `${cuandoSePublica(archivo.publicaEl)} · `}
             {archivo.responsableA}
           </span>
         </div>

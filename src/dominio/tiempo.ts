@@ -170,3 +170,20 @@ export function enPalabrasElDia(dia: string): string {
   if (!a || !m || !d) return dia;
   return SOLO_DIA.format(new Date(Date.UTC(a, m - 1, d, 12)));
 }
+
+/**
+ * Cuándo sale publicada una pieza, dicho según si ya pasó.
+ *
+ * Decía «sale el 3 sept» con la fecha ya pasada, y «Sale» a secas no se
+ * entendía qué salía: es el día en que se publica, el que se pone en el
+ * calendario de la carpeta. Se dice igual en gestión y en el portal.
+ *
+ * `dia` es el día guardado, «AAAA-MM-DD», o el momento ya armado.
+ */
+export function cuandoSePublica(dia: string | Date, ahora = new Date()): string {
+  const suyo = typeof dia === "string" ? dia : diaEnBuenosAires(dia);
+  const hoy = diaEnBuenosAires(ahora);
+  if (suyo === hoy) return "se publica hoy";
+  const enPalabras = enPalabrasElDia(suyo);
+  return suyo < hoy ? `se publicó el ${enPalabras}` : `se publica el ${enPalabras}`;
+}
