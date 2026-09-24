@@ -72,7 +72,7 @@ import {
   EncabezadoDeVentana,
 } from "@/ui/EncabezadoDeVentana";
 import { Fondo } from "@/ui/Fondo";
-import { enPalabrasElDia, enPalabrasElDiaDe } from "@/dominio/tiempo";
+import { enPalabrasElDia, enPalabrasElDiaDe, yaSePublico } from "@/dominio/tiempo";
 import { tonoDeEspera } from "@/ui/tonos";
 import type { NodoArchivo, NodoPendiente } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
@@ -99,8 +99,13 @@ import type { Persona } from "@/lib/equipo";
  */
 const COLUMNAS = "lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-8";
 
-/** Los botones de mirar: se reparten el ancho de la imagen en partes iguales. */
-const DE_LA_IMAGEN = "min-w-0 flex-1 px-3! whitespace-nowrap";
+/**
+ * Los botones de mirar: en computadora se reparten el ancho de la imagen en
+ * partes iguales. En el teléfono no entran tres iguales en 390 píxeles —el
+ * último quedaba cortado afuera de la pantalla—, así que ahí ocupan lo que
+ * necesitan y pasan al renglón de abajo si hace falta.
+ */
+const DE_LA_IMAGEN = "flex-auto px-3! whitespace-nowrap lg:min-w-0 lg:flex-1";
 
 export type TrabajoParaMirar = {
   clienteId: string;
@@ -724,7 +729,9 @@ function Ficha({
           {/* La fecha en que se publica, la que se pone en el calendario de
               la carpeta. Decía «Sale», y no se entendía qué salía. */}
           {p.publicaEl && (
-            <Dato rotulo="Se publica">{enPalabrasElDia(p.publicaEl)}</Dato>
+            <Dato rotulo={yaSePublico(p.publicaEl) ? "Se publicó" : "Se publica"}>
+              {enPalabrasElDia(p.publicaEl)}
+            </Dato>
           )}
         </dl>
 

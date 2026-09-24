@@ -180,6 +180,12 @@ export function enPalabrasElDia(dia: string): string {
  *
  * `dia` es el día guardado, «AAAA-MM-DD», o el momento ya armado.
  */
+/** Si el día de publicación ya pasó. Hoy todavía no. */
+export function yaSePublico(dia: string | Date, ahora = new Date()): boolean {
+  const suyo = typeof dia === "string" ? dia : diaEnBuenosAires(dia);
+  return suyo < diaEnBuenosAires(ahora);
+}
+
 export function cuandoSePublica(dia: string | Date, ahora = new Date()): string {
   const suyo = typeof dia === "string" ? dia : diaEnBuenosAires(dia);
   const hoy = diaEnBuenosAires(ahora);
