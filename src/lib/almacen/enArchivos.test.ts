@@ -58,18 +58,27 @@ describe("dos cosas guardándose a la vez", () => {
     expect(await coleccion.todo()).toEqual({ a: { valor: 1 }, b: { valor: 2 } });
   });
 
-  it("aguanta muchas de golpe", async () => {
-    const cuantas = 25;
-    await Promise.all(
-      Array.from({ length: cuantas }, (_, i) =>
-        coleccion.guardar(`p${i}`, { valor: i })
-      )
-    );
+  it(
+    "aguanta muchas de golpe",
+    async () => {
+      const cuantas = 25;
+      await Promise.all(
+        Array.from({ length: cuantas }, (_, i) =>
+          coleccion.guardar(`p${i}`, { valor: i })
+        )
+      );
 
-    const todo = await coleccion.todo();
-    expect(Object.keys(todo)).toHaveLength(cuantas);
-    expect(todo.p7).toEqual({ valor: 7 });
-  });
+      const todo = await coleccion.todo();
+      expect(Object.keys(todo)).toHaveLength(cuantas);
+      expect(todo.p7).toEqual({ valor: 7 });
+    },
+    // Son veinticinco escrituras en fila, cada una reescribe el archivo entero.
+    // Sola tarda milisegundos; corriendo con toda la batería —un worker por
+    // archivo, decenas a la vez peleando por el disco en Windows— el tope de
+    // cinco segundos se alcanzaba sin que hubiera nada mal en el almacén. Lo que
+    // se prueba es que no se pierda ninguna, no cuánto tarda: se le da aire.
+    20_000
+  );
 
   it("mezcla de guardar, guardarVarios y borrar sin perder nada", async () => {
     await coleccion.guardar("queda", { valor: 0 });

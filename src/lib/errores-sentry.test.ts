@@ -81,5 +81,10 @@ describe("un error del servidor, camino al panel", () => {
     for (const secreto of ["WAX8PDItj0MWgeIO", "GALLETA-SECRETA", "LLAVE-TAREA", "LLAVE-SUPER-SECRETA"]) {
       expect(todo, `Salió «${secreto}»`).not.toContain(secreto);
     }
-  }, 20_000);
+    // Carga el SDK de verdad, lo inicializa, manda por la red y espera a que
+    // llegue. Sola entra en segundos; con toda la batería a la vez —un worker
+    // por archivo peleando por CPU y red— el import y el envío se estiran y el
+    // tope se alcanzaba sin que nada estuviera mal. Se le da aire: lo que se
+    // prueba es qué sale por el cable, no cuánto tarda en salir.
+  }, 45_000);
 });
