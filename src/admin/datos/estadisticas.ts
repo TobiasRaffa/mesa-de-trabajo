@@ -48,19 +48,32 @@ async function juntar(
     (c) => !esCarpetaReservada(c.name)
   );
 
-  for (const carpeta of carpetas) {
-    try {
-      const agrupadas = (await trabajosDeLaCarpeta(carpeta.id)).agrupadas;
-      const conArchivos = conSusArchivos(carpeta.id, agrupadas);
-      const estados = await estadosDe(carpeta.id, conArchivos);
-      agrupadas.forEach((pieza, i) => {
-        salida.push({ vueltas: pieza.versiones.length, estado: estados[conArchivos[i].id] });
-      });
-    } catch {
-      // Una carpeta ilegible no anula la cuenta de las demás.
-    }
-    await juntar(carpeta.id, hondura + 1, salida);
-  }
+  // **En paralelo, no una carpeta por vez.** Cada carpeta es un par de viajes a
+  // Drive de un par de décimas, independientes entre sí; esperarlos en fila
+  // hacía que la cuenta tardara la **suma** de todos —varios segundos en un
+  // cliente con muchas carpetas— cuando puede tardar lo que el más lento. El
+  // orden en `salida` deja de ser el del árbol, pero `contar` solo suma y
+  // promedia: el orden no cambia ningún número. Empujar a un arreglo desde
+  // varias ramas es seguro acá: `push` es sincrónico y no se entrelaza.
+  await Promise.all(
+    carpetas.map((carpeta) =>
+      Promise.all([
+        (async () => {
+          try {
+            const agrupadas = (await trabajosDeLaCarpeta(carpeta.id)).agrupadas;
+            const conArchivos = conSusArchivos(carpeta.id, agrupadas);
+            const estados = await estadosDe(carpeta.id, conArchivos);
+            agrupadas.forEach((pieza, i) => {
+              salida.push({ vueltas: pieza.versiones.length, estado: estados[conArchivos[i].id] });
+            });
+          } catch {
+            // Una carpeta ilegible no anula la cuenta de las demás.
+          }
+        })(),
+        juntar(carpeta.id, hondura + 1, salida),
+      ])
+    )
+  );
 }
 
 /** Puro, para poder probarlo con piezas inventadas. */
