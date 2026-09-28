@@ -189,6 +189,22 @@ describe("un pedido que vino de Drive y el cliente corrigió en el portal", () =
   });
 });
 
+describe("dos cambios con el mismo id", () => {
+  // Lo que llega lo arma el navegador; un reintento o un pedido armado a mano
+  // podía traer dos con el mismo id. Se guardaban los dos, y la cuenta de «cada
+  // cambio es uno» se rompía. Se juntan por id y gana el último texto.
+  it("quedan uno solo, con el último texto", async () => {
+    const r = await guardarCambiosDePieza(CARPETA, PIEZA, [
+      { id: "c1", texto: "primero" },
+      { id: "c1", texto: "segundo" },
+    ]);
+
+    expect(r.ok).toBe(true);
+    const cambios = (guardado[PIEZA] as { cambios: Array<{ id: string; texto: string }> }).cambios;
+    expect(cambios).toEqual([{ id: "c1", texto: "segundo" }]);
+  });
+});
+
 describe("el aviso al equipo nombra el trabajo, no el archivo", () => {
   it("«aprobó la v1 de listo», no «la v1 de listo.jpeg» ni «la v2 de V2_…»", async () => {
     const { avisar } = await import("@/lib/avisar");

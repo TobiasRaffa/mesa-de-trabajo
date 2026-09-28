@@ -396,13 +396,20 @@ export async function guardarCambiosDePieza(
     return { ok: false, motivo: "No pude leer los cambios." };
   }
 
-  const recibidos: Cambio[] = [];
+  // **Un id, un cambio.** Lo que llega viene armado por el navegador, y dos
+  // entradas con el mismo id —por un reintento, o porque alguien arma el pedido
+  // a mano— romperían la cuenta de que cada cambio es uno: se listarían dos
+  // veces, y la lógica que sigue un pedido copiado de Drive por su id ya no
+  // sabría cuál seguir. Se juntan por id y gana el último texto, que es lo que
+  // el cliente dejó escrito.
+  const porId = new Map<string, string>();
   for (const cambio of cambios) {
     const texto = String(cambio?.texto ?? "").trim();
     const id = String(cambio?.id ?? "");
     if (!id || !texto) continue;
-    recibidos.push({ id, texto: texto.slice(0, LARGO_MAXIMO) });
+    porId.set(id, texto.slice(0, LARGO_MAXIMO));
   }
+  const recibidos: Cambio[] = [...porId].map(([id, texto]) => ({ id, texto }));
 
   // Se reescribe sobre el estado que hay ahora, no sobre una foto: si la
   // agencia entregó una vuelta nueva mientras el cliente escribía, la carrera
