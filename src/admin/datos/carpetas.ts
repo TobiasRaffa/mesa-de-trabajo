@@ -63,7 +63,6 @@ export type CarpetaParaFechar = {
   cliente: Cliente;
   carpeta: { id: string; nombre: string; enlaceDrive?: string } & AjustesDeCarpeta;
   piezas: PiezaParaFechar[];
-  historia: PiezaConHistoria[];
 };
 
 /** Todo lo que hace falta para armar el calendario de una carpeta. */
@@ -93,35 +92,15 @@ export async function carpetaParaFechar(
   const identidades = conArchivos.map((p) => p.id);
   // `estadosDe` primero: si una pieza cambió de nombre, ahí se muda su ficha
   // junto con su fecha. Leída en paralelo, la fecha aparecía perdida en esta
-  // pantalla hasta la próxima vez.
-  const guardados = await estadosDe(carpetaId, conArchivos);
+  // pantalla hasta la próxima vez. Se llama por ese efecto —mudar la ficha—
+  // aunque lo leído no se use acá: los estados con sus comentarios los arma
+  // `historiaConComentariosDeCarpeta`, aparte, porque preguntar a Drive por los
+  // comentarios de cada archivo es lo lento y no hace falta para el calendario.
+  await estadosDe(carpetaId, conArchivos);
   const dias = await publicacionesDe(identidades);
-
-  // **Lo que escribieron encima del archivo, en Drive.**
-  //
-  // Pasa de verdad: alguien abre el PDF en Drive y comenta ahí, señalando un
-  // pedazo del diseño. Lo que escribió el cliente pasa a su lista de cambios
-  // pedidos, con la hoja adelante; lo que escribió el equipo no, porque no es
-  // un pedido del cliente. De eso se ocupa `comentariosDelCliente`, y lo hace
-  // ahí y no acá **porque el portal tiene que ver exactamente lo mismo**.
-  const { estados, sinCopiar } = await conLosComentariosDelCliente(
-    agrupadas.map((pieza, i) => ({
-      id: identidades[i],
-      // Todas las versiones, no solo la última: lo que el cliente escribió
-      // encima de la V1 no puede desaparecer porque se subió la V2.
-      archivos: pieza.versiones.map((v) => ({ id: v.archivo.id, version: v.numero })),
-    })),
-    guardados
-  );
 
   return {
     cliente,
-    historia: agrupadas.map((pieza, i) => ({
-      ...estados[identidades[i]],
-      id: identidades[i],
-      nombre: pieza.titulo,
-      comentarios: sinCopiar[identidades[i]] ?? [],
-    })),
     carpeta: {
       id: carpetaId,
       nombre: datos.name,
@@ -140,6 +119,54 @@ export async function carpetaParaFechar(
       };
     }),
   };
+}
+
+/**
+ * La historia de cada pieza con lo que el cliente escribió en Drive.
+ *
+ * **Va aparte de `carpetaParaFechar` porque es la parte lenta.** Pregunta a
+ * Drive por los comentarios de cada archivo de cada pieza —una vuelta por
+ * archivo—, y eso es lo que hacía esperar a la pantalla entera antes de dibujar
+ * nada. Separada, el calendario aparece primero y esto llega detrás, y la
+ * ventana del tablero —que solo quiere la historia— deja de calcular el
+ * calendario y las fechas que después tiraba.
+ *
+ * Copiar lo del cliente a su lista de cambios queda del lado de
+ * `comentariosDelCliente`, igual que antes, **porque el portal tiene que ver
+ * exactamente lo mismo**. Nunca rompe por un tropiezo de Drive: una pieza que
+ * no se pudo leer queda como estaba.
+ */
+export async function historiaConComentariosDeCarpeta(
+  clienteId: string,
+  carpetaId: string
+): Promise<PiezaConHistoria[]> {
+  // La carpeta tiene que ser de este cliente: esto también se pide desde la
+  // ventana del tablero y desde una parte de la pantalla que se dibuja sola.
+  if (!(await esCarpetaDeMiCliente(clienteId, carpetaId))) {
+    throw new Error("Esa carpeta no es de este cliente.");
+  }
+
+  const { agrupadas } = await trabajosDeLaCarpeta(carpetaId);
+  const conArchivos = conSusArchivos(carpetaId, agrupadas);
+  const identidades = conArchivos.map((p) => p.id);
+  const guardados = await estadosDe(carpetaId, conArchivos);
+
+  const { estados, sinCopiar } = await conLosComentariosDelCliente(
+    agrupadas.map((pieza, i) => ({
+      id: identidades[i],
+      // Todas las versiones, no solo la última: lo que el cliente escribió
+      // encima de la V1 no puede desaparecer porque se subió la V2.
+      archivos: pieza.versiones.map((v) => ({ id: v.archivo.id, version: v.numero })),
+    })),
+    guardados
+  );
+
+  return agrupadas.map((pieza, i) => ({
+    ...estados[identidades[i]],
+    id: identidades[i],
+    nombre: pieza.titulo,
+    comentarios: sinCopiar[identidades[i]] ?? [],
+  }));
 }
 
 // ---------------------------------------------------------------------------

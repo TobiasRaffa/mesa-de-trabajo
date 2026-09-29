@@ -11,8 +11,9 @@
 // mira la vista, así que lo único que cambia con «lista» es que el cliente no
 // las ve todavía, y eso es lo que dice el cartel.
 
+import { Suspense } from "react";
 import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
-import { carpetaParaFechar } from "@/admin/datos/carpetas";
+import { carpetaParaFechar, historiaConComentariosDeCarpeta } from "@/admin/datos/carpetas";
 import { ArmarCalendario } from "@/admin/ArmarCalendario";
 import { HistoriaDePiezas } from "@/admin/HistoriaDePiezas";
 import { ErrorDeDrive } from "@/admin/ErrorDeDrive";
@@ -78,7 +79,53 @@ export default async function Carpeta({
         />
       )}
 
-      <HistoriaDePiezas piezas={datos.historia} />
+      {/*
+        La historia con los comentarios de Drive llega **detrás** del
+        calendario: es una vuelta a Drive por cada archivo de cada pieza, y
+        antes hacía esperar la pantalla entera antes de dibujar nada. Ahora el
+        calendario —que es lo que se vino a usar— aparece de una, y esto se
+        rellena solo cuando Drive contesta.
+      */}
+      <Suspense fallback={<HistorialCargando />}>
+        <Historial clienteId={clienteId} carpetaId={carpetaId} />
+      </Suspense>
     </main>
+  );
+}
+
+async function Historial({
+  clienteId,
+  carpetaId,
+}: {
+  clienteId: string;
+  carpetaId: string;
+}) {
+  let piezas;
+  try {
+    piezas = await historiaConComentariosDeCarpeta(clienteId, carpetaId);
+  } catch {
+    // Un tropiezo leyendo los comentarios no puede tumbar la pantalla: el
+    // calendario ya se dibujó y sigue sirviendo. Se avisa acá y se recarga.
+    return (
+      <section className="mt-12">
+        <h2 className="text-titulo font-extrabold tracking-tight">Qué pasó con cada pieza</h2>
+        <p className="mt-5 text-normal text-apagado">
+          No pude leer el historial en Drive. Recargá la página para reintentar.
+        </p>
+      </section>
+    );
+  }
+  return <HistoriaDePiezas piezas={piezas} />;
+}
+
+/** El mismo encabezado que la historia, para que la pantalla no salte al llegar. */
+function HistorialCargando() {
+  return (
+    <section className="mt-12" aria-busy="true">
+      <h2 className="text-titulo font-extrabold tracking-tight">Qué pasó con cada pieza</h2>
+      <p role="status" className="mt-5 text-normal text-apagado">
+        Leyendo de Drive…
+      </p>
+    </section>
   );
 }

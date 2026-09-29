@@ -113,7 +113,7 @@ import {
   heredadoDelCliente,
   type Contenido,
 } from "@/admin/datos/arbol";
-import { carpetaParaFechar } from "@/admin/datos/carpetas";
+import { historiaConComentariosDeCarpeta } from "@/admin/datos/carpetas";
 import type { PiezaConHistoria } from "@/admin/HistoriaDePiezas";
 import { marcarVistos } from "@/lib/avisos";
 import {
@@ -1561,7 +1561,7 @@ export async function historiaDeCarpeta(
   if (!cliente) return { ok: false, motivo: "Esa carpeta no es de ningún cliente." };
 
   try {
-    const { historia } = await carpetaParaFechar(cliente.id, carpetaId);
+    const historia = await historiaConComentariosDeCarpeta(cliente.id, carpetaId);
     return { ok: true, piezas: historia };
   } catch {
     return { ok: false, motivo: "No pude leer la carpeta en Drive." };
