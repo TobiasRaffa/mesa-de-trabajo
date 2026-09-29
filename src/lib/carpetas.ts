@@ -14,8 +14,15 @@ import { clientesHabilitados, type Cliente } from "@/lib/clientes";
 import { metadatosArchivo, subcarpetasDe } from "@/lib/google";
 import { esCarpetaDeFacturas, escondidosEntre } from "@/lib/ajustes";
 
-/** Cuánto se recuerda la lista antes de volver a preguntarle a Drive. */
-const RECUERDO_MS = 60 * 1000;
+/**
+ * Cuánto se recuerda la lista antes de volver a preguntarle a Drive.
+ *
+ * Los mismos dos minutos que la memoria de listados de `google.ts`: es la otra
+ * mitad del mapa de qué carpeta es de qué cliente, y tenerlas en desacuerdo
+ * —una fresca y otra vieja— no gana nada. Una carpeta de trabajo nueva creada
+ * afuera, en Drive, puede tardar hasta ese tanto en aparecer.
+ */
+const RECUERDO_MS = 2 * 60 * 1000;
 
 /**
  * Hasta cuántos escalones debajo del cliente se reconoce una carpeta.

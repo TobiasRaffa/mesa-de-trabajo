@@ -147,17 +147,20 @@ async function aDrive(
  * preguntaba a Google exactamente lo mismo tres veces. Con esto, la segunda
  * vez es instantánea.
  *
- * **Medio minuto, y por qué ese número.** Es el equilibrio entre dos cosas que
+ * **Dos minutos, y por qué ese número.** Es el equilibrio entre dos cosas que
  * se contradicen: que moverse por la aplicación sea inmediato, y que un
- * archivo recién subido a Drive aparezca sin tener que esperar. Medio minuto
- * cubre el ir y venir entre pantallas —que es lo que pasa todo el tiempo— y no
- * llega a ser una espera cuando alguien sube algo y va a buscarlo.
+ * archivo recién subido a Drive aparezca sin tener que esperar. Empezó en medio
+ * minuto; se subió a dos porque cada viaje a Drive es de un par de décimas y
+ * repetirlos era lo que hacía que abrir una carpeta o pasar de pantalla se
+ * sintiera lento. Dos minutos cubren de sobra el ir y venir de una sesión de
+ * trabajo, y el precio es que un archivo subido **afuera**, directo en Drive,
+ * puede tardar hasta ese tanto en aparecer.
  *
  * Lo que la aplicación misma cambia en Drive no espera: `moverArchivo` borra
- * esta memoria. Lo único que puede tardar hasta medio minuto es lo que se hizo
+ * esta memoria. Lo único que puede tardar hasta dos minutos es lo que se hizo
  * **afuera**, en Drive, que es donde no podemos enterarnos.
  */
-const RECUERDO_MS = 30 * 1000;
+const RECUERDO_MS = 2 * 60 * 1000;
 
 const recordado = new Map<string, { valor: Promise<unknown>; vence: number }>();
 
