@@ -29,9 +29,6 @@ export default async function Probar() {
           <h1 className="text-titulo font-extrabold tracking-tight">
             No hay ningún cliente todavía
           </h1>
-          <p className="mt-3 text-normal text-tinta-suave">
-            Compartile una carpeta al robot desde Drive y va a aparecer solo.
-          </p>
         </div>
       </div>
     );

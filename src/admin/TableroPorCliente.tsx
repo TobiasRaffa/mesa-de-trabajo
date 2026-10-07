@@ -92,7 +92,6 @@ const CANCHAS: Record<
       // finales», en Drive, a mano —así lo define `yaSeEntrego`— y eso no lo
       // enunciaba ninguna pantalla: quedaban trabajos acumulados en una
       // columna verde que nadie sabía que había que vaciar.
-      queFalta: "Mové el archivo aprobado a «Entregas finales» para cerrarlo.",
     },
   };
 
@@ -268,8 +267,7 @@ export function TableroPorCliente({
       */}
       {carpetas.length === 0 && (
         <p className="mt-6 border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-normal text-espera">
-          Todavía no hay trabajos. Aparecen solos cuando subís archivos a una
-          carpeta adentro de la carpeta de un cliente, en Drive.
+          Todavía no hay trabajos.
         </p>
       )}
 

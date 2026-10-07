@@ -19,7 +19,7 @@ import type { ReactNode } from "react";
  * fuera el mismo componente, arrancaba y terminaba en otro lugar según a dónde
  * se entrara. Igual quiere decir igual: se aplica esto en el `<main>` de todas.
  */
-export const PANTALLA = "mx-auto w-full max-w-6xl px-6 py-10";
+export const PANTALLA = "mx-auto w-full max-w-6xl px-6 py-7";
 
 export function EncabezadoDePagina({
   volver,
@@ -39,7 +39,7 @@ export function EncabezadoDePagina({
   acciones?: ReactNode;
 }) {
   return (
-    <header className="border-b-2 border-tinta pb-6">
+    <header className="border-b-2 border-tinta pb-4">
       {volver && (
         <Link
           href={volver.href}

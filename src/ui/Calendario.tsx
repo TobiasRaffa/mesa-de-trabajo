@@ -124,8 +124,7 @@ export function Calendario({ modo, mes, piezas, onAbrir }: Props) {
         <p className="mt-4 border-l-4 border-espera-borde bg-espera-tenue px-4 py-2 text-menudo font-semibold text-espera">
           {fuera === 1
             ? "Hay una pieza que sale fuera de este mes."
-            : `Hay ${fuera} piezas que salen fuera de este mes.`}{" "}
-          Están en la vista de lista.
+            : `Hay ${fuera} piezas que salen fuera de este mes.`}
         </p>
       )}
     </section>

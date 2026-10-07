@@ -118,16 +118,9 @@ export function Portal({ datos }: { datos: PortalDeCliente }) {
             otro lado lee que no subimos nada cuando en realidad está todo
             subido y falta que alguien lo entregue.
           */}
-          <p className="mt-3 text-normal text-tinta-suave">
-            Cuando la agencia te entregue algo, aparece acá.
-          </p>
           {/* Sin carpetas no hay conversación que abrir —el hilo cuelga de
               una carpeta— así que lo único honesto es decir por dónde
               preguntar. */}
-          <p className="mt-6 text-menudo text-apagado">
-            Si esperabas ver algo acá, escribile al equipo por donde le
-            escribís siempre.
-          </p>
         </div>
       </div>
     );
@@ -527,22 +520,22 @@ function Revision({
   const grupos = [
     {
       clave: "vos",
-      titulo: "En tu cancha",
-      explica: "Esperan tu decisión.",
+      titulo: "Para revisar",
+      explica: "",
       tono: "bg-lima text-tinta",
       piezas: enTuCancha,
     },
     {
       clave: "equipo",
-      titulo: "Con el equipo",
-      explica: "Ya las tiene la agencia. No hay nada que hacer de tu lado.",
+      titulo: "En proceso",
+      explica: "",
       tono: "bg-hueco text-tinta-suave",
       piezas: conElEquipo,
     },
     {
       clave: "aprobadas",
       titulo: "Aprobadas",
-      explica: "Van a salir tal cual están.",
+      explica: "",
       tono: "bg-hueco text-tinta-suave",
       piezas: aprobadas,
     },
@@ -648,7 +641,7 @@ function Revision({
         <div>
           {/* Más chico en el teléfono: el nombre de un cliente largo se comía
               dos renglones de tipografía enorme antes de llegar al trabajo. */}
-          <h1 className="text-titulo font-extrabold leading-none tracking-tighter lg:text-grande">
+          <h1 className="text-guia font-extrabold leading-tight tracking-tight lg:text-titulo">
             {datos.cliente.nombre}
           </h1>
           {/* La puerta a la carpeta entera del cliente en Drive. **En el
@@ -661,8 +654,8 @@ function Revision({
               href={datos.cliente.enlaceDrive}
               target="_blank"
               rel="noreferrer noopener"
-              className="mt-3 hidden min-h-toque items-center gap-2 rounded-full border-2 border-lienzo/35 px-5
-                         text-menudo font-bold tracking-tight text-lienzo transition-colors hover:bg-lienzo/10
+              className="mt-2 hidden min-h-8 items-center gap-1.5 rounded-full border border-lienzo/35 px-3
+                         text-micro font-bold tracking-tight text-lienzo/85 transition-colors hover:bg-lienzo/10
                          lg:inline-flex"
             >
               <IconoDrive />
@@ -762,23 +755,21 @@ function Revision({
               entre él y los tres botones se comían casi un tercio de la
               pantalla antes de mostrar una sola pieza. */}
           <p
-            className={`mb-2 hidden rounded-campo px-4 py-3 lg:block ${
-              enTuCancha.length > 0 ? "bg-lima text-tinta" : "bg-lienzo/10 text-lienzo/70"
+            className={`mb-2 hidden items-baseline gap-2 border-l-4 py-1 pl-3 lg:flex ${
+              enTuCancha.length > 0 ? "border-lima text-lienzo" : "border-lienzo/20 text-lienzo/60"
             }`}
           >
             {enTuCancha.length > 0 ? (
               <>
-                <span className="cifras text-titulo font-extrabold leading-none">
+                <span className="cifras text-guia font-extrabold leading-none">
                   {enTuCancha.length}
                 </span>{" "}
-                <span className="text-menudo font-bold">
-                  {enTuCancha.length === 1
-                    ? "pieza espera tu decisión"
-                    : "piezas esperan tu decisión"}
+                <span className="text-menudo font-semibold">
+                  {enTuCancha.length === 1 ? "pieza para revisar" : "piezas para revisar"}
                 </span>
               </>
             ) : (
-              <span className="text-menudo font-semibold">Nada pendiente de tu lado.</span>
+              <span className="text-menudo font-semibold">Nada pendiente</span>
             )}
           </p>
         {/* **Aparece cuando hay algo para mandar, y si no, no está.** Estaba
@@ -871,14 +862,12 @@ function Revision({
         {/* Lo que espera al cliente, arriba de lo que tiene que mirar. En
             pantalla grande vive en la columna de la izquierda. */}
         {enTuCancha.length > 0 && (
-          <p className="mb-5 rounded-campo bg-lima px-4 py-3 text-tinta lg:hidden">
-            <span className="cifras text-titulo font-extrabold leading-none">
+          <p className="mb-4 flex items-baseline gap-2 border-l-4 border-lima py-1 pl-3 text-tinta lg:hidden">
+            <span className="cifras text-guia font-extrabold leading-none">
               {enTuCancha.length}
-            </span>{" "}
-            <span className="text-menudo font-bold">
-              {enTuCancha.length === 1
-                ? "pieza espera tu decisión"
-                : "piezas esperan tu decisión"}
+            </span>
+            <span className="text-menudo font-semibold">
+              {enTuCancha.length === 1 ? "pieza para revisar" : "piezas para revisar"}
             </span>
           </p>
         )}
@@ -892,12 +881,12 @@ function Revision({
             parte de lo que se dice de la carpeta, así que va al lado del
             nombre. La raya separa lo que describe la carpeta de lo que hay
             adentro, igual que en las pantallas de gestión. */}
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-b-2 border-tinta pb-6">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-b-2 border-tinta pb-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
             {/* Más chico en el teléfono, por la misma razón que el nombre del
                 cliente: cada renglón de tipografía enorme acá abajo es una
                 pieza menos que se ve al abrir el link. */}
-            <h2 className="min-w-0 text-titulo font-extrabold leading-none tracking-tighter lg:text-grande">
+            <h2 className="min-w-0 text-guia font-extrabold leading-tight tracking-tight lg:text-titulo">
               {carpeta.nombre}
             </h2>
             {carpeta.enlaceDrive && (
@@ -905,8 +894,8 @@ function Revision({
                 href={carpeta.enlaceDrive}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex min-h-toque items-center gap-2 rounded-full border-2 border-tinta px-5
-                           text-menudo font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-tinta/40 px-3
+                           text-micro font-bold tracking-tight text-tinta transition-colors hover:bg-hueco"
               >
                 <IconoDrive />
                 Ver carpeta en Drive
@@ -916,7 +905,7 @@ function Revision({
 
           <div className="min-w-44">
             <p className="flex items-baseline gap-2">
-              <span className="cifras text-titulo font-extrabold leading-none tracking-tighter">
+              <span className="cifras text-guia font-extrabold leading-none tracking-tight">
                 {resueltas}
               </span>
               <span className="text-normal font-semibold text-apagado">
@@ -1287,9 +1276,6 @@ function Firma({
         }}
         className="flex flex-col gap-3"
       >
-        <p className="text-normal text-tinta-suave">
-          Queda anotado que la aprobó el cliente. Si querés, con tu nombre.
-        </p>
         <label className="flex flex-col gap-1.5">
           <span className="text-micro font-extrabold uppercase tracking-widest text-apagado">
             Quién aprueba
@@ -1300,7 +1286,6 @@ function Firma({
             maxLength={60}
             autoFocus
             autoComplete="name"
-            placeholder="Tu nombre (opcional)"
             className="min-h-toque w-full border-2 border-tinta bg-lienzo px-4 text-normal
                        placeholder:text-apagado focus:border-acento focus:outline-none
                        focus:ring-4 focus:ring-acento-tenue"
@@ -1491,11 +1476,6 @@ function Confirmacion({
           </section>
         )}
 
-        <p className="text-menudo text-apagado">
-          {soloUna
-            ? "El equipo recibe solo esta pieza y empieza a trabajarla. El resto sigue esperándote."
-            : "El equipo recibe la devolución y empieza a trabajar sobre los cambios."}
-        </p>
       </div>
     </Ventana>
   );

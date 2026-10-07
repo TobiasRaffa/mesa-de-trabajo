@@ -51,8 +51,7 @@ export function ConfiguracionDeArchivo({
       */}
       {archivo.estado === "en_curso" && archivo.version <= archivo.ronda && (
         <p className="border-l-4 border-espera-borde bg-espera-tenue px-3 py-2 text-menudo text-espera">
-          El cliente devolvió esta pieza con cambios y todavía no hay una vuelta
-          nueva en Drive. Si la entregás así, le llega el mismo archivo.
+          Sin vuelta nueva en Drive.
         </p>
       )}
 

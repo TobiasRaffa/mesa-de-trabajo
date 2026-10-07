@@ -85,9 +85,6 @@ export function Ampliada({ laminas, onCerrar }: Props) {
         ))}
       </div>
 
-      <p className="pt-4 text-center text-menudo text-white/60">
-        Tocá fuera de {dos ? "las imágenes" : "la imagen"} para volver
-      </p>
     </div>
   );
 }

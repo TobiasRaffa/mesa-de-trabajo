@@ -19,10 +19,6 @@ export default function NoExiste() {
       <h1 className="mt-8 text-grande font-extrabold leading-none tracking-tighter">
         Esta dirección no existe
       </h1>
-      <p className="mt-3 text-normal text-tinta-suave">
-        Si sos cliente, entrá por el link que te pasó el equipo. Si sos del
-        equipo, por el acceso de siempre.
-      </p>
     </main>
   );
 }

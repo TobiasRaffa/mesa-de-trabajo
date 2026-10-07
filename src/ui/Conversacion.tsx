@@ -308,11 +308,7 @@ export function Conversacion({
           )}
 
           {mensajes.length === 0 ? (
-            error ? null : (
-              <p className="py-10 text-center text-normal text-apagado">
-                Todavía no hablaron por acá.
-              </p>
-            )
+            null
           ) : (
             <ul className="flex flex-col">
               {mensajes.map((mensaje, i) => {
@@ -371,9 +367,6 @@ export function Conversacion({
               // así que además se marca cuál es el campo que manda.
               autoFocus
               data-enfocar
-              placeholder={
-                yo === "cliente" ? "Escribile al equipo…" : "Escribile al cliente…"
-              }
               className="max-h-40 min-h-toque w-full resize-none rounded-campo border border-linea bg-lienzo
                          px-3 py-2.5 text-normal transition-colors placeholder:text-apagado
                          focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"

@@ -51,8 +51,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="es-AR" className={`${archivo.variable} ${mono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col">{children}</body>
+    <html
+      lang="es-AR"
+      className={`${archivo.variable} ${mono.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
+      {/* Algunas extensiones del navegador (antivirus, traductores) le agregan
+          atributos a <html> y <body> antes de que cargue React. No es un
+          error de la aplicación: se silencia ese aviso en estas dos etiquetas. */}
+      <body className="flex min-h-full flex-col" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

@@ -20,6 +20,15 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { Logo, Marca } from "@/ui/Marca";
+import {
+  IconoCampana,
+  IconoClientes,
+  IconoDiagnostico,
+  IconoEquipo,
+  IconoFactura,
+  IconoMensaje,
+  IconoTablero,
+} from "@/ui/Icono";
 import { usePathname } from "next/navigation";
 import { salir } from "@/app/(admin)/gestion/entrar/acciones";
 import {
@@ -47,6 +56,16 @@ const ARRIBA: readonly Seccion[] = ["tablero", "clientes", "conversaciones", "no
  * tiene.
  */
 const ABAJO: readonly Seccion[] = ["facturas", "admin", "diagnostico"];
+
+const ICONO_DE: Record<Seccion, (p: { className?: string }) => React.ReactNode> = {
+  tablero: IconoTablero,
+  clientes: IconoClientes,
+  conversaciones: IconoMensaje,
+  notificaciones: IconoCampana,
+  facturas: IconoFactura,
+  admin: IconoEquipo,
+  diagnostico: IconoDiagnostico,
+};
 
 export function BarraLateral({
   quien,
@@ -185,7 +204,9 @@ function Secciones({
           —«Notificacion…»— y había que arrastrar una fila para descubrir que
           había algo más. Cuatro palabras cortas entran en dos renglones. */}
       <ul className="flex flex-wrap gap-2 lg:flex-col lg:flex-nowrap lg:gap-0">
-        {cuales.map((seccion) => (
+        {cuales.map((seccion) => {
+          const Icono = ICONO_DE[seccion];
+          return (
           <li key={seccion} className="shrink-0 lg:shrink">
             <Link
               href={RUTA_DE[seccion]}
@@ -202,6 +223,7 @@ function Secciones({
                               : "border-transparent text-lienzo/70 hover:bg-lienzo/5 hover:text-lienzo"
                           }`}
             >
+              <Icono className="mr-2 lg:mr-3" />
               {NOMBRE_DE_SECCION[seccion]}
               {seccion === "notificaciones" && sinLeer > 0 && (
                 <span className="cifras ml-2 rounded-full bg-lima px-1.5 text-micro font-extrabold leading-5 text-tinta">
@@ -211,7 +233,8 @@ function Secciones({
               <Yendo />
             </Link>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </nav>
   );

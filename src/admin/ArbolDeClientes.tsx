@@ -617,7 +617,7 @@ function FilaCliente({
               cifras para enterarse de que no pasa nada. Solo se escribe la
               resta cuando hay algo escondido, que es cuando importa. */}
           {apagado
-            ? "El robot ve su carpeta, pero el portal no la muestra."
+            ? "Oculto"
             : cliente.carpetasVisibles === cliente.carpetas
               ? `${cliente.carpetas} ${cliente.carpetas === 1 ? "carpeta" : "carpetas"}`
               : `${cliente.carpetasVisibles} de ${cliente.carpetas} ${
@@ -896,11 +896,7 @@ function FilaCarpeta({
             // aparecía descrita como la de entregas finales: la carpeta que el
             // cliente no ve nunca, explicada como el lugar donde se sube lo
             // terminado para que la vea.
-            carpeta.deFacturas ? (
-              "Las facturas del cliente. El cliente no las ve nunca."
-            ) : (
-              "Acá sube el equipo el archivo final, ya terminado."
-            )
+            null
           ) : (
             <>
               {carpeta.subcarpetas > 0 && (
@@ -1083,11 +1079,6 @@ function ConfiguracionDeReservada({
           fila de al lado: se tocaba el engranaje esperando algo que
           configurar y salía el mismo botón de nuevo. Lo que hacía falta era
           la frase que explica por qué acá no hay nada que configurar. */}
-      <p className="text-menudo text-apagado">
-        {carpeta.deFacturas
-          ? "Es de la agencia: el cliente no la ve nunca, y por eso no hay nada que configurar."
-          : "Acá va lo terminado. Lo único que se decide es si el cliente la ve."}
-      </p>
     </div>
   );
 }

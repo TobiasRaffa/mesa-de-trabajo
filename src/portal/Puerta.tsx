@@ -46,9 +46,6 @@ export function Puerta({ token }: { token: string }) {
               «café otoño», que es el nombre de un cliente real de la agencia:
               cualquier otro cliente que abría su puerta lo leía. Y un
               placeholder con forma de clave se confunde con la clave. */}
-          <p className="text-menudo text-tinta-suave">
-            Es la palabra que te pasó el equipo junto con este link.
-          </p>
 
           {estado && !estado.ok && (
             <p
@@ -64,11 +61,6 @@ export function Puerta({ token }: { token: string }) {
             {esperando ? "Un segundo…" : "Entrar"}
           </Boton>
         </form>
-
-        <p className="mt-6 text-menudo text-apagado">
-          Si no la tenés o no te la acordás, pedísela al equipo por donde le escribís
-          siempre.
-        </p>
       </div>
     </div>
   );

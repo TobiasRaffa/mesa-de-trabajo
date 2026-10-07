@@ -39,9 +39,6 @@ export default async function Entrega({ params }: PageProps<"/t/[token]">) {
           <h1 className="text-titulo font-extrabold tracking-tight">
             Este link no está disponible
           </h1>
-          <p className="mt-3 text-normal text-tinta-suave">
-            Puede que haya cambiado. Pedile uno nuevo a la agencia.
-          </p>
         </div>
       </div>
     );
@@ -75,16 +72,9 @@ export default async function Entrega({ params }: PageProps<"/t/[token]">) {
           <h1 className="text-titulo font-extrabold tracking-tight">
             No pudimos abrir la carpeta
           </h1>
-          <p className="mt-3 text-normal text-tinta-suave">
-            Es un problema nuestro, no tuyo. Avisale al equipo y lo resuelven; tu
-            trabajo no se perdió.
-          </p>
           {process.env.NODE_ENV !== "production" && (
             <p className="mt-4 border-l-4 border-alerta bg-alerta-tenue px-4 py-3 font-mono text-menudo text-alerta">
               {error instanceof Error ? error.message : "Error desconocido"}
-              <span className="mt-2 block font-sans opacity-70">
-                Esto solo se ve mientras se trabaja en la aplicación.
-              </span>
             </p>
           )}
         </div>

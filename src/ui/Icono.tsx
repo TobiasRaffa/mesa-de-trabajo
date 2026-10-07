@@ -129,3 +129,37 @@ export const IconoConfig = (p: Props) => (
     <path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.9-1.5-1.9-3.3-2.3.9a7.6 7.6 0 0 0-2.6-1.5L14.2 2h-3.8l-.3 2.4a7.6 7.6 0 0 0-2.6 1.5l-2.3-.9-1.9 3.3 1.9 1.5a7.6 7.6 0 0 0 0 3l-1.9 1.5 1.9 3.3 2.3-.9a7.6 7.6 0 0 0 2.6 1.5l.3 2.4h3.8l.3-2.4a7.6 7.6 0 0 0 2.6-1.5l2.3.9 1.9-3.3-1.9-1.5z" />
   </Trazo>
 );
+
+export const IconoTablero = (p: Props) => (
+  <Trazo {...p}>
+    <rect x="3.5" y="4" width="7" height="16" rx="1.5" />
+    <rect x="13.5" y="4" width="7" height="9" rx="1.5" />
+  </Trazo>
+);
+
+export const IconoClientes = (p: Props) => (
+  <Trazo {...p}>
+    <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h9A1.5 1.5 0 0 1 21 10v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5v-11z" />
+  </Trazo>
+);
+
+export const IconoFactura = (p: Props) => (
+  <Trazo {...p}>
+    <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" />
+    <path d="M9 8h6M9 12h6" />
+  </Trazo>
+);
+
+export const IconoEquipo = (p: Props) => (
+  <Trazo {...p}>
+    <circle cx="9" cy="8.5" r="3.5" />
+    <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+    <path d="M16 5.2a3.5 3.5 0 0 1 0 6.6M18.5 20a6.5 6.5 0 0 0-3-5.5" />
+  </Trazo>
+);
+
+export const IconoDiagnostico = (p: Props) => (
+  <Trazo {...p}>
+    <path d="M3 12h4l2.5-6 5 12 2.5-6h4" />
+  </Trazo>
+);

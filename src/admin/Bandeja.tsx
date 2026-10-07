@@ -31,7 +31,6 @@ import type { AvisoMio } from "@/lib/avisos";
 
 export function Bandeja({
   avisos,
-  correoConfigurado,
   yo,
 }: {
   avisos: AvisoMio[];
@@ -67,11 +66,6 @@ export function Bandeja({
 
   return (
     <section>
-      {!correoConfigurado && (
-        <p className="mt-6 border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-menudo font-semibold text-espera">
-          Sin correo configurado: los avisos quedan solo acá.
-        </p>
-      )}
 
       {avisos.length === 0 ? (
         <p className="mt-8 text-normal text-apagado">Todavía no pasó nada.</p>

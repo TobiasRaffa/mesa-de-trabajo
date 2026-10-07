@@ -98,10 +98,7 @@ export function AvisoDeEntrega({
         ) : (
           // Sin teléfono no se ofrece un botón que no va a funcionar: se dice
           // dónde se carga, que es lo único útil en ese momento.
-          <p className="self-center text-micro text-apagado">
-            Cargá el teléfono del cliente en su configuración y este mensaje sale de
-            acá por WhatsApp.
-          </p>
+          null
         )}
 
         <button

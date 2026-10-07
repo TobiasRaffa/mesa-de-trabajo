@@ -20,8 +20,6 @@ import { TITULO } from "@/admin/estilos";
 export function Visibilidad({
   ids,
   visible,
-  /** «carpeta» o «archivo»: cambia lo que se advierte, no lo que hace. */
-  que,
   alGuardar,
 }: {
   /** Uno para una carpeta; todas sus vueltas para una pieza. */
@@ -66,11 +64,6 @@ export function Visibilidad({
         />
       </div>
 
-      {!visible && que === "carpeta" && (
-        <p className="mt-2 text-menudo text-apagado">
-          Tampoco ve nada de lo que tenga adentro, por hondo que esté.
-        </p>
-      )}
 
       {error && <p className="mt-2 text-menudo font-semibold text-alerta">{error}</p>}
     </section>

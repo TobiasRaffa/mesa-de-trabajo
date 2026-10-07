@@ -252,7 +252,7 @@ export function RevisarPieza({
         />
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="grid gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-10">
+          <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-6 lg:p-5">
 
             {/* La pieza, medida contra la pantalla y no contra su proporción. */}
             <div className="flex flex-col gap-3">
@@ -269,7 +269,7 @@ export function RevisarPieza({
                   onClick={ampliarLoQueSeVe}
                   aria-label={`Ver ${pieza.nombre} en grande`}
                   className="relative grid h-[38vh] w-full place-items-center overflow-hidden
-                             border border-linea bg-lienzo sm:h-[46vh] lg:h-[58vh]"
+                             border border-linea bg-lienzo sm:h-[42vh] lg:h-[calc(100dvh-15rem)]"
                 >
                   <Miniatura
                     src={srcGrande}
@@ -345,7 +345,7 @@ export function RevisarPieza({
 
               {!pieza.enviada && pieza.estado === "final" && (
                 <p className="bg-acento-tenue px-4 py-3 text-normal font-semibold text-acento">
-                  Aprobada. Va a salir tal cual está.
+                  Aprobada.
                 </p>
               )}
 
@@ -457,19 +457,13 @@ export function RevisarPieza({
                     )}
                   </ol>
 
-                  {pieza.cambios.length === 0 && escribiendo === null && (
-                    <p className="text-menudo text-apagado">
-                      Todavía no anotaste ningún cambio.
-                    </p>
-                  )}
 
                 </div>
               )}
 
               {pieza.estado === "extra_pedida" && (
                 <p className="border-l-4 border-espera-borde bg-espera-tenue px-4 py-3 text-normal font-semibold text-espera">
-                  Le pedimos al equipo una revisión adicional. Te avisamos cuando la
-                  habiliten.
+                  Revisión adicional pedida.
                 </p>
               )}
             </div>
@@ -555,9 +549,6 @@ export function RevisarPieza({
                       {/* En un renglón y no en un `title`: en el teléfono no
                           existe, y es justo la frase que contesta «¿y ahora
                           qué pasa?». */}
-                      <span className="text-micro text-apagado">
-                        Se lo pedimos al equipo; te avisamos cuando la habiliten.
-                      </span>
                     </span>
                   )}
                   {/* Con el nombre ya sabido, aprobar es un toque y queda
@@ -684,7 +675,6 @@ function CampoDeCambio({
         maxLength={LARGO_MAXIMO}
         rows={3}
         autoFocus
-        placeholder="Una cosa por vez: «el sol pisa la bajada», «la fecha tiene que decir 12/3»…"
         className="w-full resize-y border border-linea bg-lienzo p-3 text-normal
                    transition-colors placeholder:text-apagado
                    focus:border-acento focus:outline-none focus:ring-4 focus:ring-acento-tenue"

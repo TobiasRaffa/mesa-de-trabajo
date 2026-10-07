@@ -108,9 +108,9 @@
   --text-normal--line-height: 1.55;
   --text-guia: 1.0625rem;
   --text-guia--line-height: 1.45;
-  --text-titulo: 1.5rem;
+  --text-titulo: 1.1875rem;
   --text-titulo--line-height: 1.15;
-  --text-grande: 2rem;
+  --text-grande: 1.5rem;
   --text-grande--line-height: 1.05;
 
   /* La altura mínima para que un dedo acierte sin pensar. */
@@ -148,7 +148,7 @@ body {
 @layer base {
   h1,
   h2 {
-    font-stretch: 112%;
+    font-stretch: 100%;
     text-transform: uppercase;
     letter-spacing: -0.01em;
     overflow-wrap: anywhere;
