@@ -12,6 +12,7 @@ import type { NodoCarpeta } from "@/admin/datos/arbol";
 import type { Persona } from "@/lib/equipo";
 
 import { BOTON, TITULO } from "@/admin/estilos";
+import { CALENDARIO_ACTIVO } from "@/dominio/agencia";
 
 /**
  * Dos botones que dicen qué está pasando, no qué va a pasar.
@@ -101,19 +102,21 @@ export function ConfiguracionDeCarpeta({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* -------------------------- Lo ve el cliente --------------------- */}
-      <Visibilidad
-        ids={[carpeta.id]}
-        visible={carpeta.visible}
-        que="carpeta"
-        alGuardar={alGuardar}
-      />
+    <div className="flex flex-col divide-y divide-linea">
+      {/* Cada opción es un renglón: el nombre a la izquierda y el control a la
+          derecha. Apiladas una debajo de otra —título, control, título,
+          control— el panel ocupaba el doble de alto para lo mismo. */}
+      <div className="py-2.5 first:pt-0">
+        <Visibilidad
+          ids={[carpeta.id]}
+          visible={carpeta.visible}
+          que="carpeta"
+          alGuardar={alGuardar}
+        />
+      </div>
 
-      {/* ------------------------------ Calendario ----------------------- */}
-      <section>
-        <h4 className={TITULO}>Verlo como calendario</h4>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
+      {CALENDARIO_ACTIVO && (
+        <Renglon titulo="Verlo como calendario">
           <form action={guardar}>
             <SiONo
               activo={carpeta.vista === "calendario"}
@@ -129,64 +132,57 @@ export function ConfiguracionDeCarpeta({
               }
             />
           </form>
-        </div>
-      </section>
+        </Renglon>
+      )}
 
-      {/* ---------------------------- Quién lo lleva --------------------- */}
-      <section>
-        <h4 className={TITULO}>Quién lo lleva</h4>
-        <div className="mt-2">
-          <Responsable
-            nivel="carpeta"
-            id={carpeta.id}
-            quien={carpeta.responsableQueCorre}
-            equipo={equipo}
-            alGuardar={alGuardar}
-          />
-        </div>
-      </section>
+      <Renglon titulo="Quién lo lleva">
+        <Responsable
+          nivel="carpeta"
+          id={carpeta.id}
+          quien={carpeta.responsableQueCorre}
+          equipo={equipo}
+          alGuardar={alGuardar}
+        />
+      </Renglon>
 
-      {/* -------------------------- Tiempo de revisión ------------------- */}
-      <section>
-        <h4 className={TITULO}>Tiempo de revisión</h4>
-        <div className="mt-2">
-          <DiasDeRevision
-            nivel="carpeta"
-            id={carpeta.id}
-            dias={carpeta.diasQueCorren}
-            alGuardar={alGuardar}
-          />
-        </div>
-      </section>
+      <Renglon titulo="Tiempo de revisión">
+        <DiasDeRevision
+          nivel="carpeta"
+          id={carpeta.id}
+          dias={carpeta.diasQueCorren}
+          alGuardar={alGuardar}
+        />
+      </Renglon>
 
-      {/* ------------------------- El link de la carpeta ----------------- */}
       {!oculta && (
-        <section>
-          <h4 className={TITULO}>Link de esta carpeta sola</h4>
-          <div className="mt-2">
-            {token ? (
-              <LinkParaCompartir token={token} etiqueta="Solo esta carpeta" />
-            ) : (
-              <button
-                type="button"
-                onClick={pedirLink}
-                disabled={pidiendo}
-                className={BOTON}
-              >
-                {pidiendo ? "Generando…" : "Generar el link"}
-              </button>
-            )}
-          </div>
-        </section>
+        <Renglon titulo="Link de esta carpeta">
+          {token ? (
+            <LinkParaCompartir token={token} etiqueta="Solo esta carpeta" />
+          ) : (
+            <button type="button" onClick={pedirLink} disabled={pidiendo} className={BOTON}>
+              {pidiendo ? "Generando…" : "Generar el link"}
+            </button>
+          )}
+        </Renglon>
       )}
 
       {[estado]
         .filter((r) => r && !r.ok)
         .map((r, i) => (
-          <p key={i} aria-live="polite" className="text-menudo font-semibold text-alerta">
+          <p key={i} aria-live="polite" className="py-2 text-menudo font-semibold text-alerta">
             {r && !r.ok ? r.motivo : ""}
           </p>
         ))}
     </div>
+  );
+}
+
+/** Un renglón del panel: el nombre de la opción a la izquierda, el control a la derecha. */
+function Renglon({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5">
+      <h4 className={TITULO}>{titulo}</h4>
+      <div className="flex min-w-0 justify-end">{children}</div>
+    </section>
   );
 }

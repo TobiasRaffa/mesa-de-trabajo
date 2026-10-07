@@ -19,25 +19,20 @@ export function RarezasDeNombres({
     <>
       {entregadoPerdido && (
         <p className={clase}>
-          El archivo que se le entregó al cliente ya no está en este trabajo: se renombró,
-          se movió o se borró en Drive. El cliente está viendo la vuelta anterior que quede.
-          Si lo renombraste, volvé a entregar.
+          El archivo entregado ya no está en este trabajo.
         </p>
       )}
       {vueltaRepetida && (
         <p className={clase}>
           {vueltaRepetida.nombres.map((n) => `«${n}»`).join(" y ")} dicen ser la misma vuelta,
-          la V{vueltaRepetida.numero}. La aplicación toma «{vueltaRepetida.tomada}». Si no es
-          esa, renombrá o sacá la otra.
+          la V{vueltaRepetida.numero}.
         </p>
       )}
       {saltoDeVuelta && (
         <p className={clase}>
           {saltoDeVuelta.desde === null
             ? `«${saltoDeVuelta.nombre}» se leyó como la vuelta ${saltoDeVuelta.hasta}, y no hay anteriores.`
-            : `Después de la V${saltoDeVuelta.desde} viene «${saltoDeVuelta.nombre}», que se leyó como la vuelta ${saltoDeVuelta.hasta}.`}{" "}
-          Si ese número es parte del nombre y no una vuelta, separá la V del número (por
-          ejemplo «V-{saltoDeVuelta.hasta}»). Si borraron las vueltas del medio, ignoralo.
+            : `Después de la V${saltoDeVuelta.desde} viene «${saltoDeVuelta.nombre}», que se leyó como la vuelta ${saltoDeVuelta.hasta}.`}
         </p>
       )}
     </>

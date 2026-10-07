@@ -65,10 +65,6 @@ export function VueltaSinAsignar({
         <span className="text-micro text-apagado">v{pendiente.numero}</span>
       </div>
 
-      <p className="mt-2 text-menudo text-alerta">
-        Dice ser la V{pendiente.numero} de un trabajo. Hasta que digas de cuál, no se
-        entrega y el cliente no la ve.
-      </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <label className="sr-only" htmlFor={`destino-${pendiente.id}`}>
           De qué trabajo es

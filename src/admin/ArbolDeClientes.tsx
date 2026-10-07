@@ -27,6 +27,7 @@
 // cosa. Se probaron y tapaban lo importante: en una lista, lo que hay que leer
 // son los nombres y los estados, no un párrafo al lado de cada control.
 
+import { CALENDARIO_ACTIVO } from "@/dominio/agencia";
 import {
   createContext,
   useCallback,
@@ -435,7 +436,7 @@ export function ArbolDeClientes({
             type="search"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar cliente, carpeta o archivo"
+            placeholder="Buscar"
             aria-label="Buscar en el árbol"
             className="min-h-toque w-full max-w-sm border-2 border-tinta bg-lienzo px-3 text-normal
                        placeholder:text-apagado focus:border-acento focus:outline-none"
@@ -882,7 +883,7 @@ function FilaCarpeta({
               Oculta
             </span>
           )}
-          {carpeta.vista === "calendario" && !oculta && !carpeta.reservada && (
+          {CALENDARIO_ACTIVO && carpeta.vista === "calendario" && !oculta && !carpeta.reservada && (
             <span className="bg-acento-tenue px-2 py-0.5 text-micro font-extrabold uppercase tracking-wider text-acento">
               Calendario
             </span>
@@ -1234,17 +1235,12 @@ function FilaArchivo({
         {/* La explicación de la alerta, cuando la hay. */}
         {archivo.comparteNombre && (
           <p className="mt-1 text-micro text-alerta">
-            Hay otro trabajo en esta carpeta que también se llama «{archivo.nombre}», en
-            otro formato. Si son el mismo, abrí el trabajo y tocá «Es el mismo trabajo:
-            unirlos».
+            Hay otro trabajo que se llama «{archivo.nombre}».
           </p>
         )}
         {archivo.vueltaAtrasada && (
           <p className="mt-1 text-micro text-alerta">
-            Lo último que se tocó en Drive fue «{archivo.vueltaAtrasada.subida}», pero la
-            vuelta que se muestra y se entrega es «{archivo.vueltaAtrasada.actual}», que
-            tiene un número más alto. Si la nueva es la buena, renombrala con un número
-            mayor.
+            Se subió «{archivo.vueltaAtrasada.subida}» pero se muestra «{archivo.vueltaAtrasada.actual}».
           </p>
         )}
         <RarezasDeNombres archivo={archivo} clase="mt-1 text-micro text-alerta" />

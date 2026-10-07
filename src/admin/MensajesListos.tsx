@@ -82,9 +82,6 @@ export function MensajesListos({
               >
                 <span className="min-w-0">
                   <span className="block font-bold tracking-tight">{plantilla.titulo}</span>
-                  <span className="mt-0.5 block text-menudo text-apagado">
-                    {plantilla.cuando}
-                  </span>
                 </span>
                 <span aria-hidden="true" className="shrink-0 text-apagado">
                   {activa ? "−" : "+"}

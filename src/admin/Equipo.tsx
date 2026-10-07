@@ -143,7 +143,7 @@ export function FilaDePersona({
             {/* **Sin correo no entra nunca**, así que no es un dato que falte:
                 es una cuenta que no se puede usar. Se lee en rojo. */}
             {persona.correo || (
-              <span className="font-semibold text-alerta">sin correo: no puede entrar</span>
+              <span className="font-semibold text-alerta">sin correo</span>
             )}
             {persona.enDrive && ` · en Drive: ${persona.enDrive}`}
             {persona.avisaDeTodo && " · recibe todos los avisos"}
@@ -165,7 +165,7 @@ export function FilaDePersona({
             </p>
           )}
           {suyas.length === 0 && (
-            <p className={`${MARCA} text-alerta`}>sin ninguna sección: entra y no ve nada</p>
+            <p className={`${MARCA} text-alerta`}>sin secciones</p>
           )}
 
           {/* **Todavía no eligió contraseña.** Existe en la lista, se le asigna
@@ -174,7 +174,7 @@ export function FilaDePersona({
               cuenta quedó abierta sin que la reclame su dueña. */}
           {!tieneClave && (
             <p className={`${MARCA} text-espera`}>
-              todavía no entró: elige su contraseña la primera vez
+              todavía no entró
             </p>
           )}
           {!tieneClave && <CodigoDeAlta persona={persona} codigo={codigoDeAlta} />}
@@ -233,7 +233,6 @@ export function FilaDePersona({
           <input
             name="enDrive"
             defaultValue={persona.enDrive ?? ""}
-            placeholder="cómo aparece en Drive"
             aria-label="Cómo aparece en Drive"
             className={CAMPO}
           />
@@ -364,9 +363,6 @@ function ElegirClientes({
             className="h-4 w-4 accent-[var(--color-acento)]"
           />
           Todos
-          <span className="font-normal text-apagado">
-            — también los que se den de alta más adelante
-          </span>
         </label>
 
         <label className="mt-1 flex items-center gap-2 text-menudo font-semibold">
@@ -444,11 +440,6 @@ function CamposDeAcceso({
             ))}
           </select>
         </label>
-        {rol === ROL_PERSONALIZADO && (
-          <span className="text-menudo text-apagado">
-            Se tilda una por una, y es solo de esta persona.
-          </span>
-        )}
       </div>
 
       <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
@@ -551,7 +542,7 @@ function Contrasena({
   if (!tieneClave) {
     return (
       <span className="text-menudo font-semibold text-espera">
-        todavía no eligió su contraseña
+        sin contraseña
       </span>
     );
   }
@@ -604,7 +595,7 @@ function CodigoDeAlta({ persona, codigo }: { persona: Persona; codigo: string | 
         {/* Se dicta o se pega en un chat: seleccionarlo a mano en una fila
             apretada es de las cosas que más se erran. */}
         <Copiar texto={codigo} />
-        <span className="text-apagado">lo escribe con su correo la primera vez</span>
+        <span className="text-apagado">código de alta</span>
       </p>
     );
   }
@@ -612,7 +603,7 @@ function CodigoDeAlta({ persona, codigo }: { persona: Persona; codigo: string | 
   return (
     <form action={generar} className="mt-1 flex flex-wrap items-center gap-2 text-menudo">
       <input type="hidden" name="id" value={persona.id} />
-      <span className="text-apagado">Sin código de alta: no puede elegir su contraseña.</span>
+      <span className="text-apagado">Sin código de alta</span>
       <button
         type="submit"
         disabled={generando}
@@ -655,13 +646,7 @@ export function SumarPersona({ clientes }: { clientes: ClienteParaElegir[] }) {
 
   return (
     <section className="mt-8 border-t-2 border-tinta pt-6">
-      <p className="text-menudo text-apagado">
-        Su nombre, su correo y qué rol tiene. Al darla de alta aparece su código
-        de alta en la lista: se lo pasás, y con el correo y ese código elige su
-        contraseña la primera vez que entra. No la sabe nadie más.
-      </p>
-
-      <form onSubmit={sinVaciar(sumar)} className="mt-3 flex flex-col gap-3">
+      <form onSubmit={sinVaciar(sumar)} className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* **El nombre se escribe acá.** Se sacaba del correo y se
               corregía después; con eso la lista mostraba «nari» hasta que
@@ -705,11 +690,7 @@ export function SumarPersona({ clientes }: { clientes: ClienteParaElegir[] }) {
         {rol === ROL_PERSONALIZADO && (
           <fieldset className="border-l-4 border-acento bg-acento-tenue/30 py-3 pl-4 pr-3">
             <legend className="sr-only">Secciones a las que entra</legend>
-            <p className="text-menudo font-semibold">
-              A qué partes entra. Es solo para esta persona: se cambia después
-              desde su fila.
-            </p>
-            <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
+            <ul className="grid gap-1.5 sm:grid-cols-2">
               {SECCIONES.map((seccion) => (
                 <li key={seccion}>
                   <label className="flex items-start gap-2 text-menudo">

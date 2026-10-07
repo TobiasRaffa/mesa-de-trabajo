@@ -375,8 +375,7 @@ export function ResumenDeTrabajo({
                 equivocada con el encabezado correcto es peor que una que avisa. */}
             {noEstaLaPedida && (
               <p className="px-5 py-4 text-normal text-alerta">
-                No encontré esa pieza en esta carpeta. Puede que la hayan movido o
-                renombrado en Drive.
+                No encontré esa pieza en esta carpeta.
               </p>
             )}
 
@@ -522,8 +521,7 @@ export function ResumenDeTrabajo({
                     pieza.versionEntregada
                   ) && (
                     <span className="text-menudo text-apagado">
-                      Para entregar falta subir a Drive una vuelta más alta que la v
-                      {pieza.versionEntregada ?? pieza.version}.
+                      Falta una vuelta nueva
                     </span>
                   )}
 
@@ -643,10 +641,7 @@ function Ficha({
 
         {p.vueltaAtrasada && (
           <p className="border-l-4 border-alerta bg-alerta-tenue px-3 py-2 text-menudo font-semibold text-alerta">
-            Lo último que se tocó en Drive fue «{p.vueltaAtrasada.subida}», pero la
-            vuelta que se muestra y se entrega es «{p.vueltaAtrasada.actual}», que tiene
-            un número más alto. Si la nueva es la primera, renombrala con un número
-            mayor. Si solo la renombraste, ignoralo.
+            Se subió «{p.vueltaAtrasada.subida}» pero se muestra «{p.vueltaAtrasada.actual}».
           </p>
         )}
 

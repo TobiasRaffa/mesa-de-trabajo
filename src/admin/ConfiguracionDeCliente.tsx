@@ -21,6 +21,7 @@ import type { ClienteEnGestion } from "@/admin/datos/carpetas";
 import type { Persona } from "@/lib/equipo";
 
 import { TITULO } from "@/admin/estilos";
+import { Interruptor } from "@/ui/Interruptor";
 
 export function ConfiguracionDeCliente({
   cliente,
@@ -42,71 +43,55 @@ export function ConfiguracionDeCliente({
     if (estado?.ok || estadoLink?.ok || estadoDrive?.ok || estadoTel?.ok) alGuardar();
   }, [estado, estadoLink, estadoDrive, estadoTel, alGuardar]);
 
+  /** Manda un sí o un no a la acción de servidor, como lo mandaba el formulario. */
+  function poner(accion: (datos: FormData) => void, campo: string, si: boolean) {
+    const datos = new FormData();
+    datos.set("clienteId", cliente.id);
+    datos.set(campo, si ? "si" : "no");
+    startTransition(() => accion(datos));
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* -------------------------------- El link ------------------------ */}
+    <div className="flex flex-col divide-y divide-linea">
       {!apagado && (
-        <section>
-          <h4 className={TITULO}>Link del portal</h4>
-          <div className="mt-2">
-            <LinkParaCompartir
-              token={cliente.token}
-              etiqueta="Todo el cliente"
-              alRenovar={
-                <form action={renovar} className="shrink-0">
-                  <input type="hidden" name="clienteId" value={cliente.id} />
-                  <button
-                    type="submit"
-                    disabled={renovando}
-                    title="El link viejo deja de funcionar en el acto"
-                    className="px-2 py-1.5 text-micro font-extrabold uppercase tracking-wider
-                               text-apagado underline underline-offset-2 transition-colors
-                               hover:text-alerta disabled:opacity-40"
-                  >
-                    Cambiar
-                  </button>
-                </form>
-              }
-            />
-          </div>
-        </section>
+        <Renglon titulo="Link del portal">
+          <LinkParaCompartir
+            token={cliente.token}
+            etiqueta="Todo el cliente"
+            alRenovar={
+              <form action={renovar} className="shrink-0">
+                <input type="hidden" name="clienteId" value={cliente.id} />
+                <button
+                  type="submit"
+                  disabled={renovando}
+                  title="El link viejo deja de funcionar en el acto"
+                  className="px-2 py-1.5 text-micro font-extrabold uppercase tracking-wider
+                             text-apagado underline underline-offset-2 transition-colors
+                             hover:text-alerta disabled:opacity-40"
+                >
+                  Cambiar
+                </button>
+              </form>
+            }
+          />
+        </Renglon>
       )}
 
-      {/* ---------------------------- Quién lo lleva --------------------- */}
-      <section>
-        <h4 className={TITULO}>Quién lo lleva</h4>
-        <div className="mt-2">
-          <Responsable
-            nivel="cliente"
-            id={cliente.id}
-            quien={cliente.responsable}
-            equipo={equipo}
-            alGuardar={alGuardar}
-          />
-        </div>
-      </section>
+      <Renglon titulo="Quién lo lleva">
+        <Responsable
+          nivel="cliente"
+          id={cliente.id}
+          quien={cliente.responsable}
+          equipo={equipo}
+          alGuardar={alGuardar}
+        />
+      </Renglon>
 
-      {/* -------------------------- Tiempo de revisión ------------------- */}
-      <section>
-        <h4 className={TITULO}>Tiempo de revisión</h4>
-        <div className="mt-2">
-          <DiasDeRevision
-            nivel="cliente"
-            id={cliente.id}
-            dias={cliente.dias}
-            alGuardar={alGuardar}
-          />
-        </div>
-      </section>
+      <Renglon titulo="Tiempo de revisión">
+        <DiasDeRevision nivel="cliente" id={cliente.id} dias={cliente.dias} alGuardar={alGuardar} />
+      </Renglon>
 
-      {/* ------------------------------ El teléfono ---------------------- */}
-      <section>
-        <h4 className={TITULO}>Teléfono del cliente</h4>
-        <p className="mt-1 text-menudo text-apagado">
-          Para el mensaje de entrega: con esto, al entregar un trabajo aparece un
-          botón que abre WhatsApp con el aviso ya escrito. La aplicación no manda
-          nada sola; el mensaje lo mandás vos.
-        </p>
+      <Renglon titulo="Teléfono">
         {/* **Se manda a mano y no con `action`.** React vacía todo formulario
             que se manda con `action`, salga bien o mal: con un error, el
             teléfono que se estaba corrigiendo volvía al viejo debajo del
@@ -117,119 +102,63 @@ export function ConfiguracionDeCliente({
             const datos = new FormData(e.currentTarget);
             startTransition(() => guardarTel(datos));
           }}
-          className="mt-2 flex flex-wrap gap-2"
+          className="flex gap-2"
         >
           <input type="hidden" name="clienteId" value={cliente.id} />
           <input
             type="tel"
             name="telefono"
             defaultValue={cliente.telefono}
-            placeholder="+54 9 11 5555-5555"
             aria-label="Teléfono del cliente"
-            className="min-w-52 flex-1 border-2 border-linea bg-lienzo px-3 py-2 text-normal
-                       placeholder:text-apagado focus:border-acento focus:outline-none"
+            className="h-8 w-44 border border-linea bg-lienzo px-2 text-menudo
+                       focus:border-acento focus:outline-none"
           />
           <button
             type="submit"
             disabled={guardandoTel}
-            className="rounded-full min-h-toque border-2 border-tinta px-4 text-normal font-bold
+            className="h-8 rounded-full border-2 border-tinta px-3 text-menudo font-bold
                        tracking-tight text-tinta transition-colors hover:bg-hueco disabled:opacity-40"
           >
-            {guardandoTel ? "Guardando…" : "Guardar"}
+            {guardandoTel ? "…" : "Guardar"}
           </button>
         </form>
-        {estadoTel && !estadoTel.ok && (
-          <p aria-live="polite" className="mt-2 text-menudo font-semibold text-alerta">
-            {estadoTel.motivo}
-          </p>
-        )}
-      </section>
+      </Renglon>
 
-      {/* ---------------------------- Links a Drive ---------------------- */}
-      <section>
-        <h4 className={TITULO}>¿Le compartiste la carpeta en Drive?</h4>
-        <p className="mt-1 text-menudo text-apagado">
-          El portal no lo necesita: ve y descarga por nuestro servidor. Esto es
-          para mostrarle además los links a Drive, y solo sirve si le compartiste
-          la carpeta desde Google. Si no, el link lo lleva a una pantalla
-          pidiéndole un permiso que no tiene.
-        </p>
-        <form action={verDrive} className="mt-2 flex">
-          <input type="hidden" name="clienteId" value={cliente.id} />
-          <button
-            type="submit"
-            name="verEnDrive"
-            value="si"
-            disabled={cambiandoDrive}
-            aria-pressed={cliente.verEnDrive}
-            className={`rounded-l-full h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
-                        transition-colors disabled:opacity-40 ${
-                          cliente.verEnDrive
-                            ? "bg-tinta text-lienzo"
-                            : "text-tinta hover:bg-hueco"
-                        }`}
-          >
-            Sí
-          </button>
-          <button
-            type="submit"
-            name="verEnDrive"
-            value="no"
-            disabled={cambiandoDrive}
-            aria-pressed={!cliente.verEnDrive}
-            className={`rounded-r-full h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
-                        tracking-tight transition-colors disabled:opacity-40 ${
-                          cliente.verEnDrive
-                            ? "text-tinta hover:bg-hueco"
-                            : "bg-tinta text-lienzo"
-                        }`}
-          >
-            No
-          </button>
-        </form>
-      </section>
+      <Renglon titulo="Mostrar links a Drive">
+        <Interruptor
+          encendido={cliente.verEnDrive}
+          deshabilitado={cambiandoDrive}
+          onCambiar={(si) => poner(verDrive, "verEnDrive", si)}
+          etiqueta="Mostrar links a Drive"
+        />
+      </Renglon>
 
-      {/* ------------------------------- El acceso ----------------------- */}
-      <section>
-        <h4 className={TITULO}>Acceso al portal</h4>
-        <form action={guardar} className="mt-2 flex">
-          <input type="hidden" name="clienteId" value={cliente.id} />
-          <button
-            type="submit"
-            name="habilitado"
-            value="si"
-            disabled={esperando}
-            aria-pressed={!apagado}
-            className={`rounded-l-full h-8 border-2 border-tinta px-4 text-menudo font-bold tracking-tight
-                        transition-colors disabled:opacity-40 ${
-                          apagado ? "text-tinta hover:bg-hueco" : "bg-tinta text-lienzo"
-                        }`}
-          >
-            Sí
-          </button>
-          <button
-            type="submit"
-            name="habilitado"
-            value="no"
-            disabled={esperando}
-            aria-pressed={apagado}
-            className={`rounded-r-full h-8 border-2 border-l-0 border-tinta px-4 text-menudo font-bold
-                        tracking-tight transition-colors disabled:opacity-40 ${
-                          apagado ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
-                        }`}
-          >
-            No
-          </button>
-        </form>
-      </section>
+      <Renglon titulo="Acceso al portal">
+        <Interruptor
+          encendido={!apagado}
+          deshabilitado={esperando}
+          onCambiar={(si) => poner(guardar, "habilitado", si)}
+          etiqueta="Acceso al portal"
+        />
+      </Renglon>
 
-      {[estado, estadoLink, estadoDrive]
+      {[estado, estadoLink, estadoDrive, estadoTel]
         .filter((r) => r && !r.ok)
         .map((r, i) => (
-          <p key={i} aria-live="polite" className="text-menudo font-semibold text-alerta">
+          <p key={i} aria-live="polite" className="py-2 text-menudo font-semibold text-alerta">
             {r && !r.ok ? r.motivo : ""}
           </p>
         ))}
     </div>
+  );
+}
+
+/** Un renglón del panel: el nombre de la opción a la izquierda, el control a la derecha. */
+function Renglon({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2.5 first:pt-0">
+      <h4 className={TITULO}>{titulo}</h4>
+      <div className="flex min-w-0 justify-end">{children}</div>
+    </section>
   );
 }

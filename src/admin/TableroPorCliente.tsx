@@ -338,8 +338,8 @@ function Columna({
         una columna es cuánto hay ahí, y cuánto hay son trabajos.
       */}
       <div className={`flex items-baseline justify-between gap-3 ${trabajos === 0 ? "opacity-45" : ""}`}>
-        <h2 className="text-guia font-extrabold tracking-tight [font-stretch:100%]">{titulo}</h2>
-        <span className="cifras text-titulo font-extrabold leading-none tracking-tighter text-apagado">
+        <h2 className="text-menudo font-extrabold tracking-wide">{titulo}</h2>
+        <span className="cifras text-guia font-extrabold leading-none text-apagado">
           {trabajos}
         </span>
       </div>

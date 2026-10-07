@@ -83,9 +83,6 @@ function ConMiCorreo({ volver }: { volver: string }) {
 
   return (
     <Marco titulo="Entrar">
-      <p className="mt-3 text-normal text-tinta-suave">
-        Con tu correo. Lo que hagas queda firmado con tu nombre.
-      </p>
 
       <form action={mandar} className="mt-8 flex flex-col gap-4">
         <input type="hidden" name="volver" value={volver} />
@@ -150,12 +147,6 @@ function Estreno({ correo, volver }: { correo: string; volver: string }) {
 
   return (
     <Marco titulo="Primera vez">
-      <p className="mt-3 text-normal text-tinta-suave">
-        Elegí tu contraseña. No la sabe nadie más, ni quien te dio de alta: si
-        alguna vez la perdés, se reinicia y elegís otra. Hace falta el{" "}
-        <span className="font-bold">código de alta</span> que te pasó quien te
-        dio de alta.
-      </p>
 
       <p className="mt-6 border-t border-linea pt-4 font-bold tracking-tight">
         {correo}
@@ -175,7 +166,6 @@ function Estreno({ correo, volver }: { correo: string; volver: string }) {
             autoFocus
             minLength={2}
             maxLength={60}
-            placeholder="Con este nombre queda firmado lo que hagas"
             className={CAMPO}
           />
         </label>
@@ -190,7 +180,6 @@ function Estreno({ correo, volver }: { correo: string; volver: string }) {
             autoCapitalize="characters"
             spellCheck={false}
             required
-            placeholder="ABCD-EFGH"
             className={`${CAMPO} cifras uppercase tracking-widest`}
           />
         </label>
@@ -203,7 +192,6 @@ function Estreno({ correo, volver }: { correo: string; volver: string }) {
             autoComplete="new-password"
             minLength={LARGO_MINIMO_DE_CLAVE}
             required
-            placeholder={`${LARGO_MINIMO_DE_CLAVE} caracteres o más`}
             className={CAMPO}
           />
         </label>
@@ -241,11 +229,6 @@ function Arranque({ volver, alCorreo }: { volver: string; alCorreo: () => void }
 
   return (
     <Marco titulo="Primera vez">
-      <p className="mt-3 text-normal text-tinta-suave">
-        Todavía nadie del equipo tiene contraseña. Entrá con la clave del equipo y
-        dá de alta a la primera persona en <span className="font-bold">Admin → El equipo</span>.
-        Desde que haya una, cada una entra con la suya.
-      </p>
 
       <form action={mandar} className="mt-8 flex flex-col gap-4">
         <input type="hidden" name="volver" value={volver} />

@@ -269,7 +269,7 @@ export function RevisarPieza({
                   onClick={ampliarLoQueSeVe}
                   aria-label={`Ver ${pieza.nombre} en grande`}
                   className="relative grid h-[38vh] w-full place-items-center overflow-hidden
-                             border border-linea bg-lienzo sm:h-[42vh] lg:h-[calc(100dvh-15rem)]"
+                             border border-linea bg-lienzo sm:h-[42vh] lg:h-[calc(88dvh-15rem)]"
                 >
                   <Miniatura
                     src={srcGrande}

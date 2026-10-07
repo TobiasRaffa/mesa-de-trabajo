@@ -35,8 +35,7 @@ export function ClavesDeClientes({ clientes }: { clientes: ClienteConClave[] }) 
   if (clientes.length === 0) {
     return (
       <p className="mt-6 text-normal text-apagado">
-        Todavía no hay ningún cliente. Aparecen solos cuando le compartís su
-        carpeta de Drive al robot.
+        Todavía no hay ningún cliente.
       </p>
     );
   }
@@ -120,7 +119,7 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
             con `ETIQUETA` —gris menudo en mayúsculas—, el mismo estilo que usa
             «heredado» para un detalle sin consecuencia. */}
         {!cliente.tieneClave && (
-          <span className={`${ETIQUETA} text-alerta`}>sin clave: no entra nadie</span>
+          <span className={`${ETIQUETA} text-alerta`}>sin clave</span>
         )}
 
         {estadoTag?.ok && (
@@ -215,11 +214,6 @@ function UnaClave({ cliente }: { cliente: ClienteConClave }) {
         </form>
       )}
 
-      {modo === "cambiar" && (
-        <p className="text-menudo text-apagado">
-          Quien tenga la clave vieja deja de entrar. Avisale al cliente antes.
-        </p>
-      )}
 
       {fallo && (
         <p aria-live="polite" className="text-menudo font-semibold text-alerta">

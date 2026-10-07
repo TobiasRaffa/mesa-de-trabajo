@@ -18,6 +18,7 @@
 // cuántas quedan, qué se puede enviar. Dos copias del mismo número es la forma
 // segura de que un día no coincidan.
 
+import { CALENDARIO_ACTIVO } from "@/dominio/agencia";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Evento, Pieza } from "@/dominio/pieza";
 import { Ampliada, type Lamina } from "@/ui/Ampliada";
@@ -572,7 +573,8 @@ function Revision({
 
   // El calendario existe solo si la agencia marcó esta carpeta como calendario.
   // Si no la marcó, hay lista y nada más.
-  const hayCalendario = carpeta.vista === "calendario" && conFecha.length > 0;
+  const hayCalendario =
+    CALENDARIO_ACTIVO && carpeta.vista === "calendario" && conFecha.length > 0;
 
   /**
    * En qué mes arranca el calendario.

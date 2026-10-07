@@ -44,15 +44,12 @@ export default async function Facturas() {
     <main className={PANTALLA}>
       <EncabezadoDePagina
         titulo="Facturas"
-        bajada="Lo que hay en la carpeta «Facturas» de cada cliente, en Drive. El cliente no las ve."
       />
 
       {conAlgo.length === 0 ? (
         <div className="mt-8">
           <p className="text-normal text-apagado">
-            Todavía no hay ninguna factura. Aparecen solas cuando subís archivos
-            a una carpeta llamada «Facturas» adentro de la carpeta de un
-            cliente.
+            Todavía no hay ninguna factura.
           </p>
           {/* Sin esto, la pantalla decía que falta algo y no daba a dónde ir a
               hacerlo: la carpeta se crea en Drive, no acá. */}

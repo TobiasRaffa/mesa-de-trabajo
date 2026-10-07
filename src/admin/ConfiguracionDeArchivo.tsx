@@ -164,9 +164,7 @@ function AccionesDeAgencia({
 
       {esperaExtra ? (
         <>
-          <p className="mt-1 text-menudo text-apagado">
-            El cliente se quedó sin rondas y pidió una más. Está esperando.
-          </p>
+          <p className="mt-1 text-menudo font-semibold text-espera">Pidió una revisión más</p>
           <Boton
             disabled={yendo}
             onClick={() => hacer(() => habilitarExtraDePieza(carpetaId, archivo.id))}
@@ -178,10 +176,6 @@ function AccionesDeAgencia({
         </>
       ) : (
         <>
-          <p className="mt-1 text-menudo text-apagado">
-            Reabrirla se la devuelve al cliente para que la mire de nuevo, y saca
-            el archivo de «Entregas finales».
-          </p>
           <Boton
             variante="contorno"
             disabled={yendo}

@@ -159,9 +159,6 @@ export function ConfigurarPieza({
                   </li>
                 ))}
               </ol>
-              <p className="mt-2 text-micro text-apagado">
-                La última es la que se muestra y la que se entrega.
-              </p>
             </Plegable>
 
             {pieza && pieza.historia.length > 0 && (

@@ -104,12 +104,6 @@ export default async function Admin() {
         titulo="Claves de los clientes"
         resumen={resumenDeClaves}
       >
-        <p className="mt-1 text-menudo text-apagado">
-          Es la palabra que el cliente escribe después de abrir su link. Se la
-          pasás por donde le escribís siempre, nunca dentro del mismo mensaje que
-          el link: si van juntos, alcanza con que ese mensaje se reenvíe.
-          Para verla o cambiarla hace falta volver a escribir tu contraseña.
-        </p>
         {/* Solo se manda **si tiene** clave, no cuál. El texto lo pide la
             pantalla aparte, con la contraseña del equipo. */}
         <ClavesDeClientes
@@ -128,13 +122,6 @@ export default async function Admin() {
         titulo="El equipo"
         resumen={resumenDelEquipo}
       >
-        <p className="mt-1 text-menudo text-apagado">
-          Esta lista es la lista de usuarios: quien está acá con un correo y un
-          rol puede entrar, y quien no está no entra. La contraseña la elige cada
-          una la primera vez, con el <strong>código de alta</strong> que figura
-          en su fila: pasáselo por donde le hablás siempre, nunca por el mismo
-          canal que el link de la aplicación.
-        </p>
 
         {/* **Nombradas, y con el botón al lado.** Decía «están marcadas en la
             lista» y mandaba a entrar a «Editar»: dos clics por persona para

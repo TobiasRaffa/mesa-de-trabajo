@@ -11,6 +11,7 @@
 // mira la vista, así que lo único que cambia con «lista» es que el cliente no
 // las ve todavía, y eso es lo que dice el cartel.
 
+import { CALENDARIO_ACTIVO } from "@/dominio/agencia";
 import { Suspense } from "react";
 import { EncabezadoDePagina, PANTALLA } from "@/admin/EncabezadoDePagina";
 import { carpetaParaFechar, historiaConComentariosDeCarpeta } from "@/admin/datos/carpetas";
@@ -48,7 +49,6 @@ export default async function Carpeta({
     return <ErrorDeDrive error={error} titulo="La carpeta" />;
   }
 
-  const enCalendario = datos.carpeta.vista === "calendario";
   const volver =
     (typeof desde === "string" ? DESDE[desde] : undefined) ?? {
       href: `/gestion/cliente/${clienteId}`,
@@ -59,15 +59,7 @@ export default async function Carpeta({
     <main className={PANTALLA}>
       <EncabezadoDePagina volver={volver} titulo={datos.carpeta.nombre} />
 
-      {!enCalendario && (
-        <p className="mt-8 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal text-espera">
-          Esta carpeta está marcada como <strong>lista</strong>, así que el cliente no ve
-          un calendario. Las fechas que pongas acá quedan guardadas igual; para que las
-          vea, pasala a calendario desde la configuración de esta carpeta, en Clientes.
-        </p>
-      )}
-
-      {datos.piezas.length === 0 ? (
+      {!CALENDARIO_ACTIVO ? null : datos.piezas.length === 0 ? (
         <p className="mt-8 border-l-4 border-espera-borde bg-espera-tenue px-5 py-4 text-normal text-espera">
           No hay archivos en esta carpeta todavía.
         </p>
@@ -110,7 +102,7 @@ async function Historial({
       <section className="mt-12">
         <h2 className="text-titulo font-extrabold tracking-tight">Qué pasó con cada pieza</h2>
         <p className="mt-5 text-normal text-apagado">
-          No pude leer el historial en Drive. Recargá la página para reintentar.
+          No pude leer el historial.
         </p>
       </section>
     );

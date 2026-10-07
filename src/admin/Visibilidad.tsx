@@ -7,15 +7,14 @@
 // alternativa era escribir uno para carpetas y otro para archivos, y ya
 // sabemos cómo termina: se arregla uno y el otro queda raro.
 //
-// Dice «Sí» y «No» y no «Ocultar», porque un botón que nombra la acción
-// contraria obliga a deducir el estado actual. Acá el estado se lee sin pensar.
-//
-// Apagar algo apaga todo lo que tiene adentro, y eso se avisa antes de que
-// alguien se pregunte por qué desapareció media carpeta del portal.
+// Es un interruptor y no dos botones «Sí» y «No»: con los dos botones, el
+// elegido iba pintado de negro, y negro se leía como «botón», no como «esto es
+// lo que está puesto». Verde a la derecha es sí; gris a la izquierda es no.
 
 import { useState, useTransition } from "react";
 import { cambiarVisibilidad } from "@/app/(admin)/gestion/acciones";
 import { TITULO } from "@/admin/estilos";
+import { Interruptor } from "@/ui/Interruptor";
 
 export function Visibilidad({
   ids,
@@ -46,55 +45,16 @@ export function Visibilidad({
 
   return (
     <section>
-      <h4 className={TITULO}>Lo ve el cliente</h4>
-
-      <div className="mt-2 flex w-fit overflow-hidden rounded-full border-2 border-tinta">
-        <Boton
-          texto="Sí"
-          activo={visible}
-          esperando={guardando}
-          onTocar={() => poner(true)}
-        />
-        <Boton
-          texto="No"
-          activo={!visible}
-          esperando={guardando}
-          primero={false}
-          onTocar={() => poner(false)}
+      <div className="flex items-center justify-between gap-4">
+        <h4 className={TITULO}>Lo ve el cliente</h4>
+        <Interruptor
+          encendido={visible}
+          deshabilitado={guardando}
+          onCambiar={poner}
+          etiqueta="Lo ve el cliente"
         />
       </div>
-
-
       {error && <p className="mt-2 text-menudo font-semibold text-alerta">{error}</p>}
     </section>
-  );
-}
-
-function Boton({
-  texto,
-  activo,
-  esperando,
-  primero = true,
-  onTocar,
-}: {
-  texto: string;
-  activo: boolean;
-  esperando: boolean;
-  primero?: boolean;
-  onTocar: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onTocar}
-      disabled={esperando}
-      aria-pressed={activo}
-      className={`h-8 px-4 text-menudo font-bold tracking-tight transition-colors
-                  disabled:opacity-40 ${primero ? "" : "border-l-2 border-tinta"} ${
-                    activo ? "bg-tinta text-lienzo" : "text-tinta hover:bg-hueco"
-                  }`}
-    >
-      {texto}
-    </button>
   );
 }

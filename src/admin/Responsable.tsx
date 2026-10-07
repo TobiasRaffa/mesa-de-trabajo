@@ -77,7 +77,7 @@ export function Responsable({
       ) : null}
 
       {equipo.length === 0 && (
-        <span className="text-menudo text-espera">Cargá gente en «Equipo».</span>
+        <span className="text-menudo text-espera">Sin equipo cargado</span>
       )}
 
       {error && <span className="text-menudo font-semibold text-alerta">{error}</span>}
