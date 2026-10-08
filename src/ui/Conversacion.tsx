@@ -346,6 +346,7 @@ export function Conversacion({
           {firma}
           <div className="flex items-end gap-2">
             <textarea
+              aria-label="Mensaje"
               ref={campo}
               value={texto}
               onChange={(e) => {

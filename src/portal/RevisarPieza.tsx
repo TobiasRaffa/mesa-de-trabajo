@@ -670,6 +670,7 @@ function CampoDeCambio({
           silencio, así que quien pegaba un brief largo guardaba las primeras
           dos carillas y no se enteraba de que había perdido el resto. */}
       <textarea
+        aria-label="Cambio"
         value={valor}
         onChange={(e) => onEscribir(e.target.value)}
         maxLength={LARGO_MAXIMO}
