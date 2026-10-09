@@ -14,6 +14,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { seccionDeLaRuta } from "@/dominio/roles";
 import { ENTRADA } from "@/proxy";
+import { RESTABLECER } from "@/lib/restablecer";
 
 const RAIZ = process.cwd();
 const FUENTE = path.join(RAIZ, "src");
@@ -442,7 +443,7 @@ describe("las puertas", () => {
             .join("/");
         return ruta;
       })
-      .filter((ruta) => ruta !== ENTRADA && seccionDeLaRuta(ruta) === null);
+      .filter((ruta) => ruta !== ENTRADA && ruta !== RESTABLECER && seccionDeLaRuta(ruta) === null);
 
     expect(
       sinSeccion,
@@ -593,7 +594,7 @@ describe("las puertas", () => {
       "Apareció una acción nueva en la pantalla de entrar, que es la única que " +
         "se abre sin sesión. Si de verdad va ahí, sumala a esta lista y dejá " +
         "escrito por qué puede llamarla alguien que no entró."
-    ).toEqual(["entrar", "olvide", "salir"]);
+    ).toEqual(["entrar", "olvide", "restablecer", "salir"]);
   });
 
   it("ninguna pantalla de gestión queda fuera del alcance de la puerta", () => {

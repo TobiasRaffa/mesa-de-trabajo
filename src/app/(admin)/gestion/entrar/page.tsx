@@ -5,7 +5,7 @@
 
 import { seccionDeLaRuta } from "@/dominio/roles";
 import { Entrar } from "@/admin/Entrar";
-import { hayAlguienConClave } from "@/lib/claves";
+import { arranqueCerrado } from "@/lib/claves";
 
 // Depende de si alguien ya tiene contraseña, que cambia en cuanto se carga la
 // primera: precalcularla mostraría «primera vez» para siempre.
@@ -27,5 +27,5 @@ export default async function Puerta({
   // venía rebotado del diagnóstico terminaba en Clientes después de entrar.
   const destino = volver && seccionDeLaRuta(volver) !== null ? volver : "/gestion";
 
-  return <Entrar volver={destino} arrancando={!(await hayAlguienConClave())} />;
+  return <Entrar volver={destino} arrancando={!(await arranqueCerrado())} />;
 }

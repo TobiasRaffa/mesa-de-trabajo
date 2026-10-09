@@ -22,6 +22,9 @@
 import { createHmac } from "node:crypto";
 
 export default async function tareaDiaria() {
+  // El sitio del portal también tiene esta función programada. Sin este corte,
+  // cada mañana se harían dos respaldos y se mandarían dos recordatorios.
+  if (process.env.SOLO_PORTAL === "1") return;
   const clave = process.env.CLAVE_DE_ADMIN?.trim();
   // `URL` la pone Netlify: es la dirección principal del sitio.
   const sitio = process.env.URL;

@@ -1,13 +1,12 @@
 // «Olvidé mi contraseña».
 //
-// **No hay correo de recuperación, y no es una etapa: es la decisión.** Un
-// mail con un link que abre la aplicación sin contraseña es una segunda puerta,
-// con sus propios problemas —el link que queda en la bandeja, el que se
-// reenvía, el que no caduca— y para resolver algo que en una agencia de tres
-// personas se resuelve girando la silla.
+// **El correo de recuperación manda un link que no abre nada por sí solo:**
+// sirve para elegir una contraseña nueva, vence en 30 minutos y se gasta al
+// usarlo (ver `lib/restablecer.ts`). Este registro queda igual, para que quien
+// administra vea a quién no le llega el correo o no puede entrar.
 //
-// Lo que hay es esto: quien no puede entrar deja el pedido acá, y quien
-// administra lo ve en Admin y le **reinicia** la contraseña. Reiniciar no es
+// Lo que hace quien administra: ve el pedido en Admin y, si hace falta, le
+// **reinicia** la contraseña. Reiniciar no es
 // ponerle una nueva —nadie elige la contraseña de otro— sino sacarle la que
 // tenía: la persona vuelve a quedar como recién dada de alta y elige una
 // nueva la próxima vez que entre. Sigue siendo la única que la sabe.

@@ -31,7 +31,7 @@ import {
   leerGalleta,
   SIN_PERSONA,
 } from "@/lib/contrasena";
-import { claveCorrecta, claveDesde, hayAlguienConClave } from "@/lib/claves";
+import { arranqueCerrado, claveCorrecta, claveDesde } from "@/lib/claves";
 import { intentarYFrenar, olvidarErrores, type Limite } from "@/lib/frenos";
 import {
   alcanceDePersona,
@@ -80,7 +80,7 @@ export async function quienLleva(galleta: string | undefined): Promise<Sesion | 
   // arranque no sobrevive al arranque**: en cuanto alguien tiene contraseña,
   // deja de valer aunque el navegador la siga mandando.
   if (id === SIN_PERSONA) {
-    if (await hayAlguienConClave()) return null;
+    if (await arranqueCerrado()) return null;
     return { persona: null, secciones: seccionesDe("admin"), clientes: "todos" };
   }
 

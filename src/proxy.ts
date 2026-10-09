@@ -35,13 +35,33 @@ import type { NextRequest } from "next/server";
 import { GALLETA_DE_GESTION } from "@/lib/contrasena";
 import { dondeEmpieza, seccionDeLaRuta } from "@/dominio/roles";
 import { quienLleva } from "@/lib/sesion";
+import { RESTABLECER } from "@/lib/restablecer";
 
 /** Dónde se entra. Queda afuera de la puerta, o no se podría entrar. */
 export const ENTRADA = "/gestion/entrar";
 
+/**
+ * El sitio del portal se despliega aparte, con `SOLO_PORTAL=1`. Ahí la agencia
+ * no existe: lo que cuelga de `/gestion` y del diagnóstico responde 404 como si
+ * no estuviera, sin ni siquiera ofrecer la puerta de entrada.
+ */
+function esSoloPortal() {
+  return process.env.SOLO_PORTAL === "1";
+}
+
+/** Rutas de API que son solo de la agencia: en el sitio del portal no existen. */
+const API_DE_LA_AGENCIA = ["/api/historial/", "/api/tareas"];
+
 export async function proxy(request: NextRequest) {
   const ruta = request.nextUrl.pathname;
-  if (ruta === ENTRADA) return NextResponse.next();
+  if (API_DE_LA_AGENCIA.some((p) => ruta.startsWith(p))) {
+    return esSoloPortal() ? new NextResponse(null, { status: 404 }) : NextResponse.next();
+  }
+  if (esSoloPortal() && (ruta.startsWith("/gestion") || ruta.startsWith("/diagnostico"))) {
+    return new NextResponse(null, { status: 404 });
+  }
+  // La página de restablecer se abre sin sesión, igual que la entrada.
+  if (ruta === ENTRADA || ruta === RESTABLECER) return NextResponse.next();
 
   const sesion = await quienLleva(request.cookies.get(GALLETA_DE_GESTION)?.value);
   if (!sesion) return aLaPuerta(request);
@@ -89,5 +109,5 @@ function aLaPuerta(request: NextRequest) {
 export const config = {
   // `/gestion` suelto va aparte de `/gestion/:path*` para no depender de si el
   // patrón acepta cero segmentos.
-  matcher: ["/gestion", "/gestion/:path*", "/diagnostico"],
+  matcher: ["/gestion", "/gestion/:path*", "/diagnostico", "/api/historial/:path*", "/api/tareas"],
 };

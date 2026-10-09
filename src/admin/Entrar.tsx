@@ -22,7 +22,7 @@
 // recibe el mismo «no es» que una contraseña equivocada.
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { entrar, olvide } from "@/app/(admin)/gestion/entrar/acciones";
+import { entrar, olvide, restablecer } from "@/app/(admin)/gestion/entrar/acciones";
 import { LARGO_MINIMO_DE_CLAVE } from "@/dominio/claves";
 import { Boton } from "@/ui/Boton";
 import { Marca } from "@/ui/Marca";
@@ -120,10 +120,9 @@ function ConMiCorreo({ volver }: { volver: string }) {
         <Aviso de={estado && !estado.ok ? estado.motivo : null} />
       </form>
 
-      {/* **Olvidé mi contraseña.** No manda ningún correo ni abre ninguna
-          puerta: deja el pedido anotado para que quien administra lo vea y se
-          la reinicie. Después entra eligiendo una nueva, que sigue sabiendo
-          solo ella. */}
+      {/* **Olvidé mi contraseña.** Manda un link de un solo uso al correo, que
+          sirve para elegir una contraseña nueva. El pedido también queda anotado
+          en Admin por si el correo no llega. */}
       {pedido?.ok ? (
         <p className="mt-6 border-l-4 border-acento bg-acento-tenue px-3 py-2 text-menudo font-semibold text-tinta">
           {pedido.motivo}
@@ -261,6 +260,74 @@ function Arranque({ volver, alCorreo }: { volver: string; alCorreo: () => void }
       <Boton variante="contorno" ancho className="mt-8" onClick={alCorreo}>
         Ya me dieron de alta: entrar con mi correo
       </Boton>
+    </Marco>
+  );
+}
+
+/**
+ * Elegir la contraseña nueva desde el link que llegó por correo.
+ *
+ * Solo pide la contraseña y su repetición: el link ya dice quién es. Si el link
+ * no sirve, lo dice y ofrece volver a pedir uno.
+ */
+export function Restablecer({ token }: { token: string }) {
+  const [estado, mandar, yendo] = useActionState(restablecer, null);
+
+  if (!token) {
+    return (
+      <Marco titulo="Restablecer">
+        <p className="mt-6 font-semibold">
+          Este link está incompleto. Abrilo desde el correo que te llegó.
+        </p>
+        <a href="/gestion/entrar" className="mt-6 font-bold underline">
+          Volver a entrar
+        </a>
+      </Marco>
+    );
+  }
+
+  return (
+    <Marco titulo="Contraseña nueva">
+      <form action={mandar} className="mt-8 flex flex-col gap-4">
+        <input type="hidden" name="t" value={token} />
+
+        <label className="flex flex-col gap-1.5">
+          <span className={ETIQUETA}>Tu contraseña nueva</span>
+          <input
+            name="clave"
+            type="password"
+            autoComplete="new-password"
+            autoFocus
+            minLength={LARGO_MINIMO_DE_CLAVE}
+            required
+            className={CAMPO}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className={ETIQUETA}>Repetila</span>
+          <input
+            name="repetida"
+            type="password"
+            autoComplete="new-password"
+            minLength={LARGO_MINIMO_DE_CLAVE}
+            required
+            className={CAMPO}
+          />
+        </label>
+
+        <Boton type="submit" ancho disabled={yendo}>
+          {yendo ? "Guardando…" : "Guardarla y entrar"}
+        </Boton>
+
+        <Aviso de={estado && !estado.ok ? estado.motivo : null} />
+      </form>
+
+      {estado && !estado.ok && estado.motivo.startsWith("Este link ya no sirve") ? (
+        <a href="/gestion/entrar" className="mt-6 font-bold underline">
+          Volver a entrar y pedir otro link
+        </a>
+      ) : null}
     </Marco>
   );
 }

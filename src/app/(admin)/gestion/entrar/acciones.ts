@@ -38,8 +38,8 @@ import {
   valorDeSesion,
 } from "@/lib/contrasena";
 import {
+  arranqueCerrado,
   claveCorrecta,
-  hayAlguienConClave,
   LARGO_MINIMO_DE_CLAVE,
   ponerClave,
   tieneClave,
@@ -55,6 +55,15 @@ import {
 import { dondeEmpieza, seccionDeLaRuta, type Seccion } from "@/dominio/roles";
 import { pedirOtraClave } from "@/lib/olvidos";
 import { frenado, intentarYFrenar, olvidarErrores, type Limite } from "@/lib/frenos";
+import { mandarCorreo } from "@/lib/correo";
+import {
+  crearLinkDeRestablecer,
+  cuerpoDeRestablecer,
+  gastarLinkDeRestablecer,
+  personaDelLink,
+  RESTABLECER,
+} from "@/lib/restablecer";
+import { after } from "next/server";
 
 export type Rechazo = { ok: false; motivo: string };
 
@@ -224,7 +233,7 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   // **El arranque.** Sin nadie con contraseña, la llave del equipo abre para
   // poder dar de alta a la primera persona. Se cierra solo en cuanto alguien
   // tiene la suya: desde ahí, esta llave no abre nada.
-  if (!(await hayAlguienConClave())) {
+  if (!(await arranqueCerrado())) {
     // Se cuenta y se frena en un solo paso, como en los otros caminos, pero
     // contra una cuenta única y no la del correo: acá la clave no depende del
     // correo, así que el freno tampoco puede (ver `FRENO_DE_ARRANQUE`).
@@ -300,14 +309,78 @@ export async function olvide(_previo: unknown, formulario: FormData) {
   }
 
   const persona = await personaPorCorreo(correo);
-  if (persona) await pedirOtraClave(persona.id);
+  if (persona) {
+    // Queda anotado también para Admin: si el correo no llega, quien administra
+    // igual ve que alguien no puede entrar.
+    await pedirOtraClave(persona.id);
+    const token = await crearLinkDeRestablecer(persona.id);
+    const base = (process.env.GESTION_URL || process.env.URL || "").trim().replace(/\/$/, "");
+    const link = `${base}${RESTABLECER}?t=${token}`;
+    // **Después de contestar, y no antes.** Si el envío se esperara acá, quien
+    // tiene cuenta tardaría hasta ocho segundos más que quien no tiene, y esa
+    // diferencia diría qué correos existen.
+    after(() =>
+      mandarCorreo(persona.correo, "Mesa de trabajo · Elegí una contraseña nueva", cuerpoDeRestablecer(link))
+    );
+  }
 
   return {
     ok: true as const,
     motivo:
-      "Listo. Avisale a quien administra la aplicación: le va a aparecer tu " +
-      "pedido en Admin. Cuando te la reinicie, entrás eligiendo una nueva.",
+      "Si ese correo es del equipo, te va a llegar un link para elegir una contraseña " +
+      "nueva. Vence en 30 minutos y sirve una sola vez. Si no llega, avisale a quien " +
+      "administra: también le aparece tu pedido en Admin.",
   };
+}
+
+/**
+ * Elegir la contraseña nueva desde el link del correo.
+ *
+ * **Es la cuarta acción de esta pantalla, y se decidió a propósito.** Va acá y
+ * no en otra carpeta para que siga siendo una sola puerta pública: el link trae
+ * un token de un solo uso y de 30 minutos (ver `lib/restablecer.ts`), y con eso
+ * —y solo con eso— se guarda una contraseña nueva y se abre la sesión.
+ */
+export async function restablecer(_previo: unknown, formulario: FormData) {
+  const token = String(formulario.get("t") ?? "");
+  const clave = String(formulario.get("clave") ?? "");
+  const repetida = String(formulario.get("repetida") ?? "");
+
+  // **Cada intento cuenta, tenga o no un link válido.** Si solo contaran los
+  // links que existen, probar tokens al azar saldría gratis. El freno va por
+  // token: lo que se protege es ese link, no la cuenta de la persona.
+  const quien = `restablecer:${token.slice(0, 16)}`;
+  if (await intentarYFrenar(quien, LIMITE)) {
+    return { ok: false as const, motivo: DEMASIADOS };
+  }
+
+  const personaId = await personaDelLink(token);
+  if (!personaId) {
+    return {
+      ok: false as const,
+      motivo: "Este link ya no sirve: venció o ya se usó. Pedí uno nuevo.",
+    };
+  }
+
+  if (clave.length < LARGO_MINIMO_DE_CLAVE) {
+    return {
+      ok: false as const,
+      motivo: `La contraseña tiene que tener al menos ${LARGO_MINIMO_DE_CLAVE} caracteres.`,
+    };
+  }
+  if (clave !== repetida) {
+    return { ok: false as const, motivo: "Las dos contraseñas no son iguales." };
+  }
+
+  // Guardar la contraseña también corta las sesiones viejas de esa persona (ver
+  // `claveDesde` en `lib/claves.ts`). Después se gasta el link, para que no sirva
+  // ni una segunda vez.
+  await ponerClave(personaId, clave);
+  await gastarLinkDeRestablecer(token);
+  await olvidarErrores(quien);
+  await abrir(personaId);
+  // El proxy manda a la primera sección que le toque a esa persona.
+  redirect("/gestion");
 }
 
 export async function salir() {
