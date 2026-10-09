@@ -67,7 +67,7 @@ sin que nadie los acomode.
 > El robot ya existe y ya está conectado a la aplicación. Su correo es:
 >
 > ```
-> portal@mesa-de-trabajo-508117.iam.gserviceaccount.com
+> <correo-de-la-cuenta-de-servicio>.iam.gserviceaccount.com
 > ```
 >
 > Proyecto de Google Cloud: `mesa-de-trabajo-508117`. La llave está guardada
