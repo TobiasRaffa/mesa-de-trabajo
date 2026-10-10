@@ -220,7 +220,7 @@ mostrar, y que una conversación tenga sus mensajes.
    | `CLAVE_DE_ADMIN`       | no compila                                         |
    | `SECRETO_DE_SESION`    | no compila                                         |
 
-   Las dos opcionales de correo (`RESEND_API_KEY`, `CORREO_DESDE`): sin ellas
+   Las dos opcionales de correo (`GMAIL_USUARIO`, `GMAIL_CLAVE_DE_APLICACION`): sin ellas
    la aplicación funciona igual, los avisos quedan anotados en la bandeja de
    adentro pero no sale ningún correo.
 
@@ -386,7 +386,7 @@ lado a otro: eso sigue sin hacerse solo, a propósito.
 
 ## Lo que todavía no está
 
-- **Nadie mira los avisos por correo todavía.** Sin `RESEND_API_KEY` la
+- **Nadie mira los avisos por correo todavía.** Sin `GMAIL_CLAVE_DE_APLICACION` la
   aplicación funciona igual y los avisos quedan en la bandeja de adentro, pero
   nadie se entera sin abrirla.
 - **Los archivos siguen en Drive.** La aplicación no guarda ninguno: muestra lo

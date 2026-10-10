@@ -108,23 +108,9 @@ describe("la galleta dice quién, y el rol dice qué ve", () => {
   });
 });
 
-describe("la llave del equipo, que abre solo durante el arranque", () => {
-  it("abre con todo mientras nadie tenga contraseña", async () => {
-    const sesion = await quienLleva(valorDeSesion(SIN_PERSONA)!);
-
-    expect(sesion).not.toBeNull();
-    expect(sesion?.persona).toBeNull();
-    expect(sesion?.clientes).toBe("todos");
-    expect(sesion?.secciones).toContain("admin");
-  });
-
-  it("deja de abrir en cuanto alguien tiene la suya", async () => {
+describe("la llave del equipo ya no abre nada", () => {
+  it("una galleta de equipo no da sesión, aunque nadie tenga contraseña", async () => {
     const galleta = valorDeSesion(SIN_PERSONA)!;
-    expect(await quienLleva(galleta)).not.toBeNull();
-
-    await conContrasena("primera@matter.test", "admin");
-
-    // La misma galleta, que el navegador sigue mandando: ya no vale.
     expect(await quienLleva(galleta)).toBeNull();
   });
 });

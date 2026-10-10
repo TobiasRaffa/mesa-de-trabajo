@@ -55,26 +55,10 @@ const almacen = coleccion<string>("claves", esTexto);
 const armar = (sal: Buffer, huella: Buffer, desde: number) =>
   `scrypt$${sal.toString("base64")}$${huella.toString("base64")}$${desde}`;
 
-/**
- * Quedó anotado que el equipo ya tuvo una contraseña, alguna vez.
- *
- * Existe porque `hayAlguienConClave` sola no alcanza: si se borra la última
- * contraseña, vuelve a «nadie tiene», y la llave del equipo abre otra vez. Esta
- * marca no se borra nunca: el arranque es de una sola vez en la vida de la app.
- */
-const marca = coleccion<string>("arranque", esTexto);
-
 export async function ponerClave(personaId: string, clave: string): Promise<void> {
   const sal = randomBytes(16);
   const huella = await derivar(clave, sal, LARGO);
   await almacen.guardar(personaId, armar(sal, huella, Date.now()));
-  await marca.guardar("unico", "cerrado");
-}
-
-/** Si el arranque ya se cerró: alguien tuvo contraseña alguna vez. Es definitivo. */
-export async function arranqueCerrado(): Promise<boolean> {
-  if (await marca.uno("unico")) return true;
-  return hayAlguienConClave();
 }
 
 /**

@@ -31,7 +31,7 @@ import {
   leerGalleta,
   SIN_PERSONA,
 } from "@/lib/contrasena";
-import { arranqueCerrado, claveCorrecta, claveDesde } from "@/lib/claves";
+import { claveCorrecta, claveDesde } from "@/lib/claves";
 import { intentarYFrenar, olvidarErrores, type Limite } from "@/lib/frenos";
 import {
   alcanceDePersona,
@@ -76,13 +76,10 @@ export async function quienLleva(galleta: string | undefined): Promise<Sesion | 
   if (!leida) return null;
   const { personaId: id, emitida } = leida;
 
-  // La llave del equipo abre solo mientras dure el arranque. **Una galleta de
-  // arranque no sobrevive al arranque**: en cuanto alguien tiene contraseña,
-  // deja de valer aunque el navegador la siga mandando.
-  if (id === SIN_PERSONA) {
-    if (await arranqueCerrado()) return null;
-    return { persona: null, secciones: seccionesDe("admin"), clientes: "todos" };
-  }
+  // **Ya no existe una sesión sin persona.** Antes la llave del equipo abría una
+  // sesión de admin mientras nadie tuviera contraseña. Una galleta de ese tipo,
+  // si el navegador la sigue mandando, no abre nada.
+  if (id === SIN_PERSONA) return null;
 
   const persona = await personaPorId(id);
   // Se fue del equipo: la galleta que le quedó en el navegador no abre nada.

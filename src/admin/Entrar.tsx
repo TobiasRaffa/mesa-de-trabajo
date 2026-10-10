@@ -35,32 +35,11 @@ const CAMPO =
 const ETIQUETA = "text-micro font-extrabold uppercase tracking-widest text-apagado";
 
 
-export function Entrar({
-  volver,
-  arrancando,
-}: {
+/** Correo, contraseña, entrar. La primera vez, el código de alta y la contraseña nueva. */
+export function Entrar({ volver }: {
   /** A dónde ir después de entrar: de dónde lo echó la puerta. */
   volver: string;
-  /** Nadie del equipo tiene contraseña todavía: entra con la del equipo. */
-  arrancando: boolean;
 }) {
-  // **El arranque no puede tapar al primer alta.** Mientras nadie tenga
-  // contraseña, esta pantalla arranca pidiendo la llave del equipo, que es lo
-  // que hace falta el 99% de las veces que aparece: no hay nadie cargado. Pero
-  // la persona a la que acaban de dar de alta también llega acá con «nadie
-  // tiene contraseña» —la suya es justo la que viene a elegir—, así que tiene
-  // que poder pasarse al camino normal.
-  const [conMiCorreo, setConMiCorreo] = useState(false);
-
-  if (arrancando && !conMiCorreo) {
-    return <Arranque volver={volver} alCorreo={() => setConMiCorreo(true)} />;
-  }
-
-  return <ConMiCorreo volver={volver} />;
-}
-
-/** El camino de todos los días: correo, contraseña, entrar. */
-function ConMiCorreo({ volver }: { volver: string }) {
   const [estado, mandar, yendo] = useActionState(entrar, null);
   const [pedido, pedir, pidiendo] = useActionState(olvide, null);
 
@@ -217,52 +196,6 @@ function Estreno({ correo, volver }: { correo: string; volver: string }) {
   );
 }
 
-/**
- * El arranque: nadie tiene contraseña todavía.
- *
- * Un solo campo, la llave del equipo, para poder entrar a dar de alta a la
- * primera persona. Este camino se cierra solo en cuanto alguien tiene la suya.
- */
-function Arranque({ volver, alCorreo }: { volver: string; alCorreo: () => void }) {
-  const [estado, mandar, yendo] = useActionState(entrar, null);
-
-  return (
-    <Marco titulo="Primera vez">
-
-      <form action={mandar} className="mt-8 flex flex-col gap-4">
-        <input type="hidden" name="volver" value={volver} />
-
-        <label className="flex flex-col gap-1.5">
-          <span className={ETIQUETA}>Clave del equipo</span>
-          <input
-            name="clave"
-            type="password"
-            autoComplete="current-password"
-            autoFocus
-            required
-            className={CAMPO}
-          />
-        </label>
-
-        <Boton type="submit" ancho disabled={yendo}>
-          {yendo ? "Entrando…" : "Entrar"}
-        </Boton>
-
-        <Aviso de={estado && !estado.ok ? estado.motivo : null} />
-      </form>
-
-      {/* **A la vista, no en letra chica al pie.** Esta pantalla aparece
-          mientras nadie del equipo tenga contraseña, y en ese rato la persona
-          que acaban de dar de alta también llega acá: la suya es justo la que
-          viene a elegir. Para ella, el campo de arriba es el equivocado y este
-          es el camino, así que tiene que leerse como un camino y no como una
-          nota al pie. */}
-      <Boton variante="contorno" ancho className="mt-8" onClick={alCorreo}>
-        Ya me dieron de alta: entrar con mi correo
-      </Boton>
-    </Marco>
-  );
-}
 
 /**
  * Elegir la contraseña nueva desde el link que llegó por correo.

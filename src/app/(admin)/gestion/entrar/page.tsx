@@ -5,11 +5,6 @@
 
 import { seccionDeLaRuta } from "@/dominio/roles";
 import { Entrar } from "@/admin/Entrar";
-import { arranqueCerrado } from "@/lib/claves";
-
-// Depende de si alguien ya tiene contraseña, que cambia en cuanto se carga la
-// primera: precalcularla mostraría «primera vez» para siempre.
-export const dynamic = "force-dynamic";
 
 export default async function Puerta({
   searchParams,
@@ -27,5 +22,5 @@ export default async function Puerta({
   // venía rebotado del diagnóstico terminaba en Clientes después de entrar.
   const destino = volver && seccionDeLaRuta(volver) !== null ? volver : "/gestion";
 
-  return <Entrar volver={destino} arrancando={!(await arranqueCerrado())} />;
+  return <Entrar volver={destino} />;
 }

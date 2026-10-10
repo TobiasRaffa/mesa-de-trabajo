@@ -23,22 +23,18 @@
 // está cargado y todavía no entró nunca, y eso es inevitable: es justamente la
 // pantalla que esa persona tiene que poder ver.
 //
-// Y queda el arranque, que se cierra solo: mientras nadie tenga contraseña, la
-// llave del equipo abre para poder cargar a la primera persona. En cuanto
-// alguien tiene la suya, ese camino deja de existir.
+// **No hay clave maestra para entrar.** La primera persona admin se carga
+// directo en la base (un SQL, sin pasar por ninguna pantalla), con su correo y
+// un código de alta. Desde ahí, todo el mundo entra con correo y contraseña.
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
-  contrasenaCorrecta,
   DURACION_DE_SESION,
   GALLETA_DE_GESTION,
-  hayContrasena,
-  SIN_PERSONA,
   valorDeSesion,
 } from "@/lib/contrasena";
 import {
-  arranqueCerrado,
   claveCorrecta,
   LARGO_MINIMO_DE_CLAVE,
   ponerClave,
@@ -86,20 +82,6 @@ const LIMITE: Limite = { tope: 8, espera: 60 * 1000 };
 /** El freno cuenta por correo: probar contra una cuenta no traba a las demás. */
 const paraQuien = (correo: string) => `puerta:${correo || "(sin correo)"}`;
 
-/**
- * El freno del arranque, que **no** cuenta por correo.
- *
- * En el arranque la única contraseña que abre es `CLAVE_DE_ADMIN`, y no depende
- * de qué correo se escriba: cualquiera sirve para llegar hasta ella. Con el
- * freno indexado por correo —como en el resto de la puerta—, rotar el correo en
- * cada intento daba una cuenta nueva cada vez, y eso son intentos ilimitados
- * contra la clave del equipo. Un freno que se saltea cambiando un campo del
- * formulario no frena, y eso es peor que no tenerlo. Acá se cuenta contra una
- * sola cuenta, así que ocho por minuto son ocho por minuto aunque el correo
- * cambie en cada intento.
- */
-const FRENO_DE_ARRANQUE = "arranque";
-
 const NO_ES = "El correo o la contraseña no son.";
 const DEMASIADOS = "Demasiados intentos. Probá en un minuto.";
 
@@ -144,13 +126,6 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   const codigo = String(formulario.get("codigo") ?? "");
   const nombre = String(formulario.get("nombre") ?? "").trim();
   const volver = String(formulario.get("volver") ?? "");
-
-  if (!hayContrasena()) {
-    return {
-      ok: false as const,
-      motivo: "Falta configurar CLAVE_DE_ADMIN. Sin eso no se puede entrar.",
-    };
-  }
 
   const quien = paraQuien(correo);
   if (await frenado(quien, LIMITE)) return { ok: false as const, motivo: DEMASIADOS };
@@ -230,28 +205,6 @@ export async function entrar(_previo: unknown, formulario: FormData) {
     redirect(aDondeVa(volver, seccionesDePersona(persona)));
   }
 
-  // **El arranque.** Sin nadie con contraseña, la llave del equipo abre para
-  // poder dar de alta a la primera persona. Se cierra solo en cuanto alguien
-  // tiene la suya: desde ahí, esta llave no abre nada.
-  if (!(await arranqueCerrado())) {
-    // Se cuenta y se frena en un solo paso, como en los otros caminos, pero
-    // contra una cuenta única y no la del correo: acá la clave no depende del
-    // correo, así que el freno tampoco puede (ver `FRENO_DE_ARRANQUE`).
-    if (await intentarYFrenar(FRENO_DE_ARRANQUE, LIMITE)) {
-      return { ok: false as const, motivo: DEMASIADOS };
-    }
-    if (!contrasenaCorrecta(clave)) {
-      return {
-        ok: false as const,
-        motivo:
-          "Todavía nadie del equipo tiene contraseña. Entrá con la clave del " +
-          "equipo y dá de alta a la primera persona en Admin.",
-      };
-    }
-    await olvidarErrores(FRENO_DE_ARRANQUE);
-    await abrir(SIN_PERSONA);
-    redirect(volver.startsWith("/gestion") ? volver : "/gestion");
-  }
 
   // **Mismo mensaje para «ese correo no existe» y «esa contraseña no es».**
   // Distinguirlos le dice a quien prueba cuáles correos existen, que es la
