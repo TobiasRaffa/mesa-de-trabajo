@@ -47,6 +47,10 @@ export function Entrar({ volver }: {
   // «olvidé mi contraseña» sepa de quién habla sin pedirlo de nuevo.
   const [correo, setCorreo] = useState("");
 
+  // La primera vez no hay contraseña que escribir: este botón lleva directo al
+  // formulario del código de alta, sin tener que inventar una para pasar.
+  const [conCodigo, setConCodigo] = useState(false);
+
   const primeraVez = Boolean(estado && !estado.ok && estado.primeraVez);
 
   // **Al errar, el cursor vuelve solo a la contraseña.** Es el único campo que
@@ -59,6 +63,9 @@ export function Entrar({ volver }: {
   }, [estado]);
 
   if (primeraVez) return <Estreno correo={correo} volver={volver} />;
+  if (conCodigo) {
+    return <Estreno correo={correo} volver={volver} alVolver={() => setConCodigo(false)} />;
+  }
 
   return (
     <Marco titulo="Entrar">
@@ -102,6 +109,15 @@ export function Entrar({ volver }: {
       {/* **Olvidé mi contraseña.** Manda un link de un solo uso al correo, que
           sirve para elegir una contraseña nueva. El pedido también queda anotado
           en Admin por si el correo no llega. */}
+      <Boton
+        variante="contorno"
+        ancho
+        className="mt-6"
+        onClick={() => setConCodigo(true)}
+      >
+        Es mi primera vez: tengo un código de alta
+      </Boton>
+
       {pedido?.ok ? (
         <p className="mt-6 border-l-4 border-acento bg-acento-tenue px-3 py-2 text-menudo font-semibold text-tinta">
           {pedido.motivo}
@@ -120,19 +136,39 @@ export function Entrar({ volver }: {
 }
 
 /** Quien entra por primera vez: elige su contraseña y cómo se llama. */
-function Estreno({ correo, volver }: { correo: string; volver: string }) {
+function Estreno({
+  correo,
+  volver,
+  alVolver,
+}: {
+  correo: string;
+  volver: string;
+  /** Si llegó por el botón «primera vez», puede arrepentirse y volver. */
+  alVolver?: () => void;
+}) {
   const [estado, mandar, yendo] = useActionState(entrar, null);
 
   return (
     <Marco titulo="Primera vez">
-
-      <p className="mt-6 border-t border-linea pt-4 font-bold tracking-tight">
-        {correo}
+      <p className="mt-4 text-menudo text-apagado">
+        Escribí el código de alta que te pasaron y elegí tu contraseña.
       </p>
 
       <form action={mandar} className="mt-6 flex flex-col gap-4">
         <input type="hidden" name="volver" value={volver} />
-        <input type="hidden" name="correo" value={correo} />
+
+        <label className="flex flex-col gap-1.5">
+          <span className={ETIQUETA}>Tu correo</span>
+          <input
+            name="correo"
+            type="email"
+            autoComplete="username"
+            autoFocus={!correo}
+            required
+            defaultValue={correo}
+            className={CAMPO}
+          />
+        </label>
 
         {/* Con este nombre queda firmado todo lo que haga. Viene sacado del
             correo, y acá lo escribe como quiere que la llamen. */}
@@ -141,7 +177,7 @@ function Estreno({ correo, volver }: { correo: string; volver: string }) {
           <input
             name="nombre"
             autoComplete="name"
-            autoFocus
+            autoFocus={Boolean(correo)}
             minLength={2}
             maxLength={60}
             className={CAMPO}
@@ -192,6 +228,12 @@ function Estreno({ correo, volver }: { correo: string; volver: string }) {
 
         <Aviso de={estado && !estado.ok ? estado.motivo : null} />
       </form>
+
+      {alVolver ? (
+        <Boton variante="sutil" tamano="chico" className="mt-6 self-start" onClick={alVolver}>
+          Ya tengo contraseña
+        </Boton>
+      ) : null}
     </Marco>
   );
 }
@@ -267,12 +309,14 @@ export function Restablecer({ token }: { token: string }) {
 
 function Marco({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-12">
-      <Marca />
-      <h1 className="mt-8 text-grande font-extrabold leading-none tracking-tighter">
-        {titulo}
-      </h1>
-      {children}
+    <main className="flex min-h-dvh items-center justify-center bg-papel px-4 py-12">
+      <div className="flex w-full max-w-md flex-col">
+        <Marca />
+        <section className="mt-8 flex flex-col rounded-2xl bg-lienzo p-6 ring-1 ring-linea shadow-[0_24px_48px_-24px_rgba(18,18,18,0.35)] sm:p-8">
+          <h1 className="text-grande font-extrabold leading-none tracking-tighter">{titulo}</h1>
+          {children}
+        </section>
+      </div>
     </main>
   );
 }

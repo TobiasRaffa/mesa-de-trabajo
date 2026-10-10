@@ -18,6 +18,9 @@ export const RESTABLECER = "/gestion/entrar/restablecer";
 /** Cuánto dura el link. Corto a propósito: el correo puede quedar en una bandeja. */
 export const VIGENCIA_MS = 30 * 60 * 1000;
 
+/** Cuánto hay que esperar entre un link y el siguiente para la misma persona. */
+export const ENTRE_LINKS_MS = 2 * 60 * 1000;
+
 export type Pedido = {
   personaId: string;
   /** Hasta cuándo sirve el link, en milisegundos desde 1970. */
@@ -42,14 +45,21 @@ export const huellaDelToken = (token: string) =>
  * Un pedido nuevo reemplaza al anterior de la misma persona: si pidió dos veces,
  * solo sirve el último link que le llegó.
  */
-export async function crearLinkDeRestablecer(personaId: string): Promise<string> {
-  for (const [huella, pedido] of Object.entries(await almacen.todo())) {
-    if (pedido.personaId === personaId) await almacen.borrar(huella);
-  }
+export async function crearLinkDeRestablecer(personaId: string): Promise<string | null> {
+  const ahora = Date.now();
+  const previos = Object.entries(await almacen.todo()).filter(
+    ([, pedido]) => pedido.personaId === personaId
+  );
+  // **Uno cada tanto, no uno por clic.** Sin esto, cualquiera que sepa un correo
+  // del equipo puede apretar «olvidé» sin parar y llenarle la bandeja, o gastar
+  // el cupo diario de envíos de la cuenta de Gmail.
+  const reciente = previos.some(([, p]) => p.vence - VIGENCIA_MS > ahora - ENTRE_LINKS_MS);
+  if (reciente) return null;
+  for (const [huella] of previos) await almacen.borrar(huella);
   const token = randomBytes(32).toString("base64url");
   await almacen.guardar(huellaDelToken(token), {
     personaId,
-    vence: Date.now() + VIGENCIA_MS,
+    vence: ahora + VIGENCIA_MS,
   });
   return token;
 }

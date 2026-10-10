@@ -28,10 +28,11 @@
 // un código de alta. Desde ahí, todo el mundo entra con correo y contraseña.
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   DURACION_DE_SESION,
   GALLETA_DE_GESTION,
+  hayContrasena,
   valorDeSesion,
 } from "@/lib/contrasena";
 import {
@@ -79,10 +80,42 @@ const DURACION = DURACION_DE_SESION;
  */
 const LIMITE: Limite = { tope: 8, espera: 60 * 1000 };
 
+/**
+ * **Además del minuto, la hora.** Ocho por minuto, sin más, son once mil
+ * intentos por día contra una cuenta: alcanza para probar las contraseñas más
+ * comunes. Treinta por hora lo baja a unos setecientos. Quien quedó trabada de
+ * verdad tiene «olvidé mi contraseña», que va por otro contador.
+ */
+const LIMITE_POR_HORA: Limite = { tope: 30, espera: 60 * 60 * 1000 };
+
+async function estaFrenado(quien: string): Promise<boolean> {
+  return (await frenado(quien, LIMITE)) || (await frenado(`hora:${quien}`, LIMITE_POR_HORA));
+}
+
+/** Cuenta el intento en los dos frenos y dice si alguno ya se pasó. */
+async function contarIntento(quien: string): Promise<boolean> {
+  const porMinuto = await intentarYFrenar(quien, LIMITE);
+  const porHora = await intentarYFrenar(`hora:${quien}`, LIMITE_POR_HORA);
+  return porMinuto || porHora;
+}
+
+async function olvidarIntentos(quien: string): Promise<void> {
+  await olvidarErrores(quien);
+  await olvidarErrores(`hora:${quien}`);
+}
+
 /** El freno cuenta por correo: probar contra una cuenta no traba a las demás. */
 const paraQuien = (correo: string) => `puerta:${correo || "(sin correo)"}`;
 
-const NO_ES = "El correo o la contraseña no son.";
+const NO_ES = "El correo o la contraseña son incorrectos.";
+
+/**
+ * La sesión se firma con `CLAVE_DE_ADMIN`. Sin ella no hay cómo abrirla, y
+ * seguir de largo era peor: se guardaba la contraseña y se volvía a la puerta
+ * sin ningún aviso. Se corta antes de tocar nada.
+ */
+const SIN_FIRMA =
+  "El servidor no está configurado para abrir sesiones: falta CLAVE_DE_ADMIN.";
 const DEMASIADOS = "Demasiados intentos. Probá en un minuto.";
 
 const leerCorreo = (formulario: FormData) =>
@@ -120,6 +153,7 @@ function aDondeVa(volver: string, secciones: readonly Seccion[]): string {
 }
 
 export async function entrar(_previo: unknown, formulario: FormData) {
+  if (process.env.SOLO_PORTAL === "1") notFound();
   const correo = leerCorreo(formulario);
   const clave = String(formulario.get("clave") ?? "");
   const repetida = String(formulario.get("repetida") ?? "");
@@ -127,8 +161,10 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   const nombre = String(formulario.get("nombre") ?? "").trim();
   const volver = String(formulario.get("volver") ?? "");
 
+  if (!hayContrasena()) return { ok: false as const, motivo: SIN_FIRMA };
+
   const quien = paraQuien(correo);
-  if (await frenado(quien, LIMITE)) return { ok: false as const, motivo: DEMASIADOS };
+  if (await estaFrenado(quien)) return { ok: false as const, motivo: DEMASIADOS };
 
   const persona = correo ? await personaPorCorreo(correo) : null;
 
@@ -164,7 +200,7 @@ export async function entrar(_previo: unknown, formulario: FormData) {
     // Desde acá es un intento de verdad: se cuenta y se frena en un solo paso,
     // así una ráfaga de pedidos a la vez no se cuela toda entre el chequeo de
     // arriba y el conteo. Ya contado, los errores de abajo no vuelven a sumar.
-    if (await intentarYFrenar(quien, LIMITE)) {
+    if (await contarIntento(quien)) {
       return { ok: false as const, primeraVez: true as const, motivo: DEMASIADOS };
     }
     if (!(await codigoDeAltaCorrecto(persona.id, codigo))) {
@@ -200,7 +236,7 @@ export async function entrar(_previo: unknown, formulario: FormData) {
       await cambiarPersona(persona.id, { nombre });
     }
 
-    await olvidarErrores(quien);
+    await olvidarIntentos(quien);
     await abrir(persona.id);
     redirect(aDondeVa(volver, seccionesDePersona(persona)));
   }
@@ -220,7 +256,7 @@ export async function entrar(_previo: unknown, formulario: FormData) {
   // ya hace `claveCorrecta` cuando la persona existe pero no tiene clave.
   // Se cuenta y se frena en un solo paso, antes de validar: solo `tope` intentos
   // por ventana llegan a comparar la contraseña, aunque lleguen todos juntos.
-  if (await intentarYFrenar(quien, LIMITE)) {
+  if (await contarIntento(quien)) {
     return { ok: false as const, motivo: DEMASIADOS };
   }
 
@@ -233,7 +269,7 @@ export async function entrar(_previo: unknown, formulario: FormData) {
     return { ok: false as const, motivo: NO_ES };
   }
 
-  await olvidarErrores(quien);
+  await olvidarIntentos(quien);
   await abrir(persona.id);
   redirect(aDondeVa(volver, seccionesDePersona(persona)));
 }
@@ -250,6 +286,7 @@ export async function entrar(_previo: unknown, formulario: FormData) {
  * trabajan en la agencia.
  */
 export async function olvide(_previo: unknown, formulario: FormData) {
+  if (process.env.SOLO_PORTAL === "1") notFound();
   const correo = leerCorreo(formulario);
   if (!correo) return { ok: false as const, motivo: "Escribí tu correo." };
 
@@ -257,33 +294,58 @@ export async function olvide(_previo: unknown, formulario: FormData) {
   // el correo— porque si no, esto sería una forma de probar correos sin gastar
   // el freno de la contraseña; y contar y frenar juntos cierra la ventana por
   // la que una ráfaga se colaba entre el chequeo y el conteo.
-  if (await intentarYFrenar(paraQuien(correo), LIMITE)) {
+  // **Su propio contador, no el de la contraseña.** Si compartieran cuenta,
+  // apretar «olvidé» varias veces dejaría a esa persona sin poder entrar.
+  if (await intentarYFrenar(`olvido:${correo}`, LIMITE)) {
     return { ok: false as const, motivo: DEMASIADOS };
   }
 
-  const persona = await personaPorCorreo(correo);
-  if (persona) {
-    // Queda anotado también para Admin: si el correo no llega, quien administra
-    // igual ve que alguien no puede entrar.
-    await pedirOtraClave(persona.id);
-    const token = await crearLinkDeRestablecer(persona.id);
-    const base = (process.env.GESTION_URL || process.env.URL || "").trim().replace(/\/$/, "");
-    const link = `${base}${RESTABLECER}?t=${token}`;
-    // **Después de contestar, y no antes.** Si el envío se esperara acá, quien
-    // tiene cuenta tardaría hasta ocho segundos más que quien no tiene, y esa
-    // diferencia diría qué correos existen.
-    after(() =>
-      mandarCorreo(persona.correo, "Mesa de trabajo · Elegí una contraseña nueva", cuerpoDeRestablecer(link))
-    );
-  }
+  // **Todo lo demás, después de contestar.** Buscar a la persona, anotar el
+  // pedido y armar el link son viajes a la base que un correo inexistente no
+  // haría: si se esperaran acá, el tiempo de respuesta diría qué correos existen.
+  after(() => mandarLinkDeRestablecer(correo));
 
   return {
     ok: true as const,
     motivo:
       "Si ese correo es del equipo, te va a llegar un link para elegir una contraseña " +
-      "nueva. Vence en 30 minutos y sirve una sola vez. Si no llega, avisale a quien " +
-      "administra: también le aparece tu pedido en Admin.",
+      "nueva. Vence en 30 minutos.",
   };
+}
+
+async function mandarLinkDeRestablecer(correo: string): Promise<void> {
+  const persona = await personaPorCorreo(correo);
+  if (!persona) return;
+
+  // Queda anotado también para Admin: si el correo no llega, quien administra
+  // igual ve que alguien no puede entrar.
+  await pedirOtraClave(persona.id);
+
+  // **Solo a quien ya tiene contraseña.** Quien todavía no eligió la suya entra
+  // con su código de alta; un link por correo se lo salteaba, y alcanzaba con
+  // tener acceso a ese buzón para quedarse con la cuenta.
+  if (!(await tieneClave(persona.id))) return;
+
+  // La dirección sale de la configuración, nunca del pedido: armarla con el
+  // `Host` que manda el navegador dejaría a cualquiera elegir a dónde apunta el
+  // link que le llega a otra persona.
+  const base = (process.env.GESTION_URL || process.env.URL || "").trim().replace(/\/$/, "");
+  if (!base) {
+    console.error("[olvide] Falta GESTION_URL: no se puede armar el link.");
+    return;
+  }
+
+  // `null` si ya se mandó uno hace muy poco: apretar «olvidé» muchas veces no
+  // llena la bandeja de nadie.
+  const token = await crearLinkDeRestablecer(persona.id);
+  if (!token) return;
+
+  const r = await mandarCorreo(
+    persona.correo,
+    "Mesa de trabajo · Elegí una contraseña nueva",
+    cuerpoDeRestablecer(`${base}${RESTABLECER}?t=${token}`)
+  );
+  if (r.estado !== "enviado") console.error("[olvide] El correo no salió:", r);
 }
 
 /**
@@ -295,9 +357,12 @@ export async function olvide(_previo: unknown, formulario: FormData) {
  * —y solo con eso— se guarda una contraseña nueva y se abre la sesión.
  */
 export async function restablecer(_previo: unknown, formulario: FormData) {
+  if (process.env.SOLO_PORTAL === "1") notFound();
   const token = String(formulario.get("t") ?? "");
   const clave = String(formulario.get("clave") ?? "");
   const repetida = String(formulario.get("repetida") ?? "");
+
+  if (!hayContrasena()) return { ok: false as const, motivo: SIN_FIRMA };
 
   // **Cada intento cuenta, tenga o no un link válido.** Si solo contaran los
   // links que existen, probar tokens al azar saldría gratis. El freno va por

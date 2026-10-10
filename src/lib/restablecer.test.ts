@@ -16,6 +16,7 @@ const {
   huellaDelToken,
   personaDelLink,
   VIGENCIA_MS,
+  ENTRE_LINKS_MS,
 } = await import("@/lib/restablecer");
 
 beforeEach(() => {
@@ -26,27 +27,27 @@ beforeEach(() => {
 describe("el link de restablecer", () => {
   it("sirve para la persona que lo pidió", async () => {
     const token = await crearLinkDeRestablecer("nari");
-    expect(await personaDelLink(token)).toBe("nari");
+    expect(await personaDelLink(token!)).toBe("nari");
   });
 
   it("en el almacén no queda el token en limpio, solo su huella", async () => {
     const token = await crearLinkDeRestablecer("nari");
-    expect(guardado[huellaDelToken(token)]).toBeDefined();
-    expect(guardado[token]).toBeUndefined();
-    expect(JSON.stringify(guardado)).not.toContain(token);
+    expect(guardado[huellaDelToken(token!)]).toBeDefined();
+    expect(guardado[token!]).toBeUndefined();
+    expect(JSON.stringify(guardado)).not.toContain(token!);
   });
 
   it("después de gastarlo ya no sirve, ni una segunda vez", async () => {
     const token = await crearLinkDeRestablecer("nari");
-    await gastarLinkDeRestablecer(token);
-    expect(await personaDelLink(token)).toBeNull();
+    await gastarLinkDeRestablecer(token!);
+    expect(await personaDelLink(token!)).toBeNull();
   });
 
   it("vence a los treinta minutos", async () => {
     vi.useFakeTimers();
     const token = await crearLinkDeRestablecer("nari");
     vi.setSystemTime(Date.now() + VIGENCIA_MS + 1000);
-    expect(await personaDelLink(token)).toBeNull();
+    expect(await personaDelLink(token!)).toBeNull();
     vi.useRealTimers();
   });
 
@@ -56,16 +57,24 @@ describe("el link de restablecer", () => {
     expect(await personaDelLink("")).toBeNull();
   });
 
-  it("pedir de nuevo deja vivo solo el último link", async () => {
+  it("pedir dos veces seguidas no manda un segundo link", async () => {
     const primero = await crearLinkDeRestablecer("nari");
+    expect(await crearLinkDeRestablecer("nari")).toBeNull();
+    expect(await personaDelLink(primero!)).toBe("nari");
+  });
+
+  it("pasado el rato, pedir de nuevo deja vivo solo el último link", async () => {
+    vi.useFakeTimers();
+    const primero = await crearLinkDeRestablecer("nari");
+    vi.setSystemTime(Date.now() + ENTRE_LINKS_MS + 1000);
     const segundo = await crearLinkDeRestablecer("nari");
-    expect(await personaDelLink(segundo)).toBe("nari");
-    expect(await personaDelLink(primero)).toBeNull();
+    expect(await personaDelLink(segundo!)).toBe("nari");
+    expect(await personaDelLink(primero!)).toBeNull();
   });
 
   it("pedir para otra persona no toca el link de la primera", async () => {
     const deNari = await crearLinkDeRestablecer("nari");
     await crearLinkDeRestablecer("otra");
-    expect(await personaDelLink(deNari)).toBe("nari");
+    expect(await personaDelLink(deNari!)).toBe("nari");
   });
 });

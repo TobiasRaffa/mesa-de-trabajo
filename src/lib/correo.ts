@@ -6,7 +6,7 @@
 //
 // Qué hace falta:
 //
-//   GMAIL_USUARIO              la cuenta que manda, p. ej. mttr.agencia@gmail.com
+//   GMAIL_USUARIO              la cuenta de Gmail que manda los correos
 //   GMAIL_CLAVE_DE_APLICACION  la contraseña de aplicación de 16 letras
 //
 // **Está pensado para no estar configurado.** Sin esas dos variables, esta

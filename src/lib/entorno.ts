@@ -48,8 +48,13 @@ const REQUERIDAS_EN_INTERNET: VariableRequerida[] = [
 export function revisarLoQueInternetExige(): void {
   if (!process.env.NETLIFY) return;
 
+  // **El sitio del portal no lleva la llave de la agencia, a propósito.** Sin
+  // ella, ninguna galleta de gestión puede valer ahí, ni en las rutas de
+  // archivos que también la aceptan.
+  const soloPortal = process.env.SOLO_PORTAL === "1";
   const faltan = REQUERIDAS_EN_INTERNET.filter(
-    ({ nombre }) => !process.env[nombre]?.trim()
+    ({ nombre }) =>
+      !(soloPortal && nombre === "CLAVE_DE_ADMIN") && !process.env[nombre]?.trim()
   );
   if (faltan.length === 0) return;
 
