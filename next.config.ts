@@ -82,6 +82,12 @@ const nextConfig: NextConfig = {
   // aplicación así todos los días hasta que se suba.
   devIndicators: { position: "bottom-right" },
 
+  // **Sin caché de Turbopack al compilar.** Esa caché anota las variables de
+  // entorno que leyó (para saber cuándo recompilar), así que guarda los valores
+  // de las claves. El escáner de secretos de Netlify la revisa y frena el
+  // despliegue. Compilar sin ella tarda unos segundos más, nada más.
+  experimental: { turbopackFileSystemCacheForBuild: false },
+
   // Next anuncia su presencia en cada respuesta. No hace falta.
   poweredByHeader: false,
 
