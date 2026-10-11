@@ -40,6 +40,15 @@ describe("normalizarLlave", () => {
     expect(normalizarLlave(LLAVE_ESCAPADA)).toBe(normalizarLlave(LLAVE_REAL));
   });
 
+  it("acepta la llave copiada tal cual del JSON, con comillas y coma", () => {
+    expect(normalizarLlave(`"${LLAVE_ESCAPADA}\\n",`)).toBe(LLAVE_REAL);
+    expect(normalizarLlave(`"${LLAVE_REAL}"`)).toBe(LLAVE_REAL);
+  });
+
+  it("saca los retornos de carro de Windows", () => {
+    expect(normalizarLlave(LLAVE_REAL.replace(/\n/g, "\r\n"))).toBe(LLAVE_REAL);
+  });
+
   it("saca los espacios de los extremos", () => {
     expect(normalizarLlave(`  ${LLAVE_REAL}\n`)).toBe(LLAVE_REAL);
   });

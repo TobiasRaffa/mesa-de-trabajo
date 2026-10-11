@@ -81,7 +81,17 @@ export function revisarLoQueInternetExige(): void {
  * nada que convertir, así que se hace siempre.
  */
 export function normalizarLlave(bruta: string): string {
-  return bruta.replace(/\\n/g, "\n").trim();
+  // **Tal como sale del JSON de Google, también sirve.** En `.env.local` las
+  // comillas las saca quien lee el archivo; en Netlify no las saca nadie, y una
+  // llave pegada como `"-----BEGIN…\n",` llegaba a Google con comillas y coma, y
+  // Drive dejaba de responder sin un error que lo dijera.
+  return bruta
+    .trim()
+    .replace(/,$/, "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/\\n/g, "\n")
+    .replace(/\r/g, "")
+    .trim();
 }
 
 /**
