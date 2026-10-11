@@ -52,10 +52,40 @@ function esSoloPortal() {
 /** Rutas de API que son solo de la agencia: en el sitio del portal no existen. */
 const API_DE_LA_AGENCIA = ["/api/historial/", "/api/tareas"];
 
+/**
+ * Si el pedido lo mandó una página de otro sitio.
+ *
+ * **Las APIs atienden solo a esta aplicación.** El navegador avisa desde dónde
+ * sale cada pedido (`Sec-Fetch-Site` y `Origin`): si sale de otro sitio, se
+ * rechaza antes de llegar a la ruta. Un pedido sin esas cabeceras —abrir el
+ * link a mano, o la tarea diaria de Netlify— no viene de otra página y pasa;
+ * cada ruta sigue pidiendo su propia sesión o llave igual.
+ *
+ * No hay cabeceras CORS que abran nada: sin `Access-Control-Allow-Origin`, el
+ * navegador ya no le deja a otro sitio leer las respuestas. Esto además corta
+ * el pedido en sí.
+ */
+function deOtroSitio(request: NextRequest): boolean {
+  const sitio = request.headers.get("sec-fetch-site");
+  if (sitio === "cross-site" || sitio === "same-site") return true;
+
+  const origen = request.headers.get("origin");
+  if (!origen) return false;
+  try {
+    return new URL(origen).host !== request.headers.get("host");
+  } catch {
+    return true;
+  }
+}
+
 export async function proxy(request: NextRequest) {
   const ruta = request.nextUrl.pathname;
-  if (API_DE_LA_AGENCIA.some((p) => ruta.startsWith(p))) {
-    return esSoloPortal() ? new NextResponse(null, { status: 404 }) : NextResponse.next();
+  if (ruta.startsWith("/api/")) {
+    if (esSoloPortal() && API_DE_LA_AGENCIA.some((p) => ruta.startsWith(p))) {
+      return new NextResponse(null, { status: 404 });
+    }
+    if (deOtroSitio(request)) return new NextResponse(null, { status: 403 });
+    return NextResponse.next();
   }
   if (esSoloPortal() && (ruta.startsWith("/gestion") || ruta.startsWith("/diagnostico"))) {
     return new NextResponse(null, { status: 404 });
@@ -109,5 +139,5 @@ function aLaPuerta(request: NextRequest) {
 export const config = {
   // `/gestion` suelto va aparte de `/gestion/:path*` para no depender de si el
   // patrón acepta cero segmentos.
-  matcher: ["/gestion", "/gestion/:path*", "/diagnostico", "/api/historial/:path*", "/api/tareas"],
+  matcher: ["/gestion", "/gestion/:path*", "/diagnostico", "/api/:path*"],
 };

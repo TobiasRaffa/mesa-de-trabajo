@@ -218,7 +218,7 @@ ya no depende de nada del otro lado.
 El link es `/t/<token al azar>` y nada más. Sin nombre de cliente ni de
 proyecto adentro.
 
-La tentación es hacerlo legible —`/cafeotono/K7fP2…`— para que se reconozca en
+La tentación es hacerlo legible —`/tagdeejemplo/K7fP2…`— para que se reconozca en
 WhatsApp. Pero como el segundo factor es el tag del cliente, **poner su nombre
 en la dirección es escribir la clave al lado de la cerradura**: quien reciba el
 link reenviado lee el nombre y prueba lo obvio.

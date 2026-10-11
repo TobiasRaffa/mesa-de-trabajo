@@ -4,11 +4,11 @@ import { limpiarEvento, opcionesDeSentry } from "@/lib/errores";
 describe("lo que sale al panel de errores", () => {
   it("no lleva el token del portal en ningún lado", () => {
     const limpio = limpiarEvento({
-      request: { url: "https://mesa.test/t/WAX8PDItj0MWgeIO?x=1" },
-      transaction: "/t/WAX8PDItj0MWgeIO",
-      message: "falló /t/WAX8PDItj0MWgeIO/pieza",
+      request: { url: "https://mesa.test/t/TokenDePrueba016?x=1" },
+      transaction: "/t/TokenDePrueba016",
+      message: "falló /t/TokenDePrueba016/pieza",
     });
-    expect(JSON.stringify(limpio)).not.toContain("WAX8PDItj0MWgeIO");
+    expect(JSON.stringify(limpio)).not.toContain("TokenDePrueba016");
     expect(limpio.transaction).toBe("/t/[token]");
   });
 

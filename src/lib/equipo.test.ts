@@ -32,14 +32,14 @@ beforeEach(() => {
 
 describe("el código nace con el alta", () => {
   it("y queda guardado, pero no en la persona que se devuelve", async () => {
-    const persona = await sumarAlEquipo({ correo: "nari@agencia.com", rol: "diseno" });
+    const persona = await sumarAlEquipo({ correo: "nari@prueba.local", rol: "diseno" });
 
     expect("codigoDeAlta" in persona).toBe(false);
     expect(await codigoDeAltaDe(persona.id)).toMatch(/^[A-Z2-9]{8}$/);
   });
 
   it("no viaja en la lista del equipo ni al buscar una persona", async () => {
-    const { id } = await sumarAlEquipo({ correo: "nari@agencia.com", rol: "diseno" });
+    const { id } = await sumarAlEquipo({ correo: "nari@prueba.local", rol: "diseno" });
 
     for (const p of [...(await elEquipo()), await personaPorId(id)]) {
       expect(p && "codigoDeAlta" in p).toBe(false);
@@ -59,7 +59,7 @@ describe("el código nace con el alta", () => {
 
 describe("se compara como lo escribe una persona", () => {
   it("con guion, en minúscula o con espacios da igual", async () => {
-    const { id } = await sumarAlEquipo({ correo: "nari@agencia.com", rol: "diseno" });
+    const { id } = await sumarAlEquipo({ correo: "nari@prueba.local", rol: "diseno" });
     const codigo = (await codigoDeAltaDe(id))!;
 
     expect(await codigoDeAltaCorrecto(id, codigoLegible(codigo))).toBe(true);
@@ -68,14 +68,14 @@ describe("se compara como lo escribe una persona", () => {
   });
 
   it("otro código no entra, y vacío tampoco", async () => {
-    const { id } = await sumarAlEquipo({ correo: "nari@agencia.com", rol: "diseno" });
+    const { id } = await sumarAlEquipo({ correo: "nari@prueba.local", rol: "diseno" });
 
     expect(await codigoDeAltaCorrecto(id, "ABCDEFGH")).toBe(false);
     expect(await codigoDeAltaCorrecto(id, "")).toBe(false);
   });
 
   it("quien no tiene código no entra con ninguno", async () => {
-    const { id } = await sumarAlEquipo({ correo: "nari@agencia.com", rol: "diseno" });
+    const { id } = await sumarAlEquipo({ correo: "nari@prueba.local", rol: "diseno" });
     await borrarCodigoDeAlta(id);
 
     expect(await codigoDeAltaDe(id)).toBeNull();
@@ -85,7 +85,7 @@ describe("se compara como lo escribe una persona", () => {
 
 describe("el código sobrevive a lo que no lo toca", () => {
   it("editar el nombre no lo borra", async () => {
-    const { id } = await sumarAlEquipo({ correo: "nari@agencia.com", rol: "diseno" });
+    const { id } = await sumarAlEquipo({ correo: "nari@prueba.local", rol: "diseno" });
     const antes = await codigoDeAltaDe(id);
 
     await cambiarPersona(id, { nombre: "Narella" });
@@ -95,7 +95,7 @@ describe("el código sobrevive a lo que no lo toca", () => {
   });
 
   it("renovarlo deja uno distinto y el viejo deja de servir", async () => {
-    const { id } = await sumarAlEquipo({ correo: "nari@agencia.com", rol: "diseno" });
+    const { id } = await sumarAlEquipo({ correo: "nari@prueba.local", rol: "diseno" });
     const viejo = (await codigoDeAltaDe(id))!;
 
     const nuevo = await renovarCodigoDeAlta(id);

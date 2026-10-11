@@ -41,7 +41,7 @@ describe("un error del servidor, camino al panel", () => {
     await register();
 
     function pedirASupabase(llave: string) {
-      throw new Error(`Falló /t/WAX8PDItj0MWgeIO con ${llave.length} letras`);
+      throw new Error(`Falló /t/TokenDePrueba016 con ${llave.length} letras`);
     }
     // Armada en tiempo de ejecución: Sentry manda las líneas de código
     // alrededor del error, y una llave escrita literal en la prueba viajaría
@@ -57,7 +57,7 @@ describe("un error del servidor, camino al panel", () => {
     await onRequestError(
       error,
       {
-        path: "/t/WAX8PDItj0MWgeIO?x=1",
+        path: "/t/TokenDePrueba016?x=1",
         method: "POST",
         headers: { cookie: "mdt_gestion=GALLETA-SECRETA", authorization: "Bearer LLAVE-TAREA" },
       },
@@ -78,7 +78,7 @@ describe("un error del servidor, camino al panel", () => {
     }
     const todo = llegado.join("\n");
     expect(todo, "No llegó nada al receptor").toContain("Falló /t/[token]");
-    for (const secreto of ["WAX8PDItj0MWgeIO", "GALLETA-SECRETA", "LLAVE-TAREA", "LLAVE-SUPER-SECRETA"]) {
+    for (const secreto of ["TokenDePrueba016", "GALLETA-SECRETA", "LLAVE-TAREA", "LLAVE-SUPER-SECRETA"]) {
       expect(todo, `Salió «${secreto}»`).not.toContain(secreto);
     }
     // Carga el SDK de verdad, lo inicializa, manda por la red y espera a que

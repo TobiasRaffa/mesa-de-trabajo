@@ -5,14 +5,14 @@ describe("de quién es un comentario de Drive", () => {
   // De esta pregunta depende que una nota que el diseñador se deja a sí mismo
   // en el PDF no termine en la lista de cambios que pidió el cliente —y
   // contando como una vuelta del presupuesto—.
-  const EQUIPO = ["Narella Rafaelli", "Nari", "nari@estudio.com"];
+  const EQUIPO = ["Persona de Prueba", "Nari", "nari@prueba.local"];
 
   it("lo que escribe alguien del equipo es del equipo", () => {
-    expect(esDelEquipo({ quien: "Narella Rafaelli" }, EQUIPO)).toBe(true);
+    expect(esDelEquipo({ quien: "Persona de Prueba" }, EQUIPO)).toBe(true);
   });
 
   it("lo reconoce por el correo, si Google lo da", () => {
-    expect(esDelEquipo({ quien: "N. R.", correo: "nari@estudio.com" }, EQUIPO)).toBe(true);
+    expect(esDelEquipo({ quien: "N. R.", correo: "nari@prueba.local" }, EQUIPO)).toBe(true);
   });
 
   it("no se traba con mayúsculas ni espacios de más", () => {

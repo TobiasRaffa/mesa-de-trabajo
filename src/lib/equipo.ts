@@ -53,7 +53,7 @@ export type Persona = {
    *
    * Vacío no rompe nada: además de esto se compara contra el nombre y el
    * correo que ya están cargados. Hace falta cuando Google la muestra con otro
-   * nombre —«Narella Rafaelli» donde acá dice «Nari»—, que es cuando el
+   * nombre —«Persona de Prueba» donde acá dice «Nari»—, que es cuando el
    * problema aparece.
    */
   enDrive?: string;
